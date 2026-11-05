@@ -48,10 +48,11 @@ dotnet build Orbivo.sln -c Debug
 dotnet test
 dotnet run --project src/Orbivo.App -- --no-xr      # Desktop-Debug-Viewport ohne Brille
 dotnet run --project src/Orbivo.App -- --no-xr --image tools/testmedia/out/equirect360_mono_4096x2048.png
+dotnet run --project src/Orbivo.App -- --image tools/testmedia/out/equirect360_mono_4096x2048.png   # Testbild in der Brille (Varjo Base muss laufen)
 powershell -NoProfile -ExecutionPolicy Bypass -File native\fetch-native.ps1   # native DLLs laden
 python tools/testmedia/make_testmedia.py            # Testbilder, -videos, Ambisonics-Test
 ```
-FFmpeg- und Steam-Audio-DLLs liegen in `native/win-x64/` (nicht im Git, siehe `native/README.md`) und werden beim Build ins Ausgabeverzeichnis kopiert.
+FFmpeg-, Steam-Audio- und OpenXR-Loader-DLLs liegen in `native/win-x64/` (nicht im Git, siehe `native/README.md`) und werden beim Build ins Ausgabeverzeichnis kopiert.
 Gearbeitet wird auf dem Branch `development`.
 
 ## Was du (Claude) nicht prüfen kannst

@@ -7,7 +7,7 @@ namespace Orbivo.App;
 /// <c>--no-xr</c>: render into a desktop window instead of the headset (debug viewport, from M1).
 /// </param>
 /// <param name="ImagePath">
-/// <c>--image &lt;path&gt;</c>: equirect 360 mono still image for the debug viewport (M1). Relative to the current directory.
+/// <c>--image &lt;path&gt;</c>: equirect 360 mono still image for the headset or the debug viewport. Relative to the current directory.
 /// </param>
 /// <param name="UnknownArguments">Arguments that were not recognized; they are logged as a warning.</param>
 public sealed record StartupOptions(bool NoXr, string? ImagePath, IReadOnlyList<string> UnknownArguments)

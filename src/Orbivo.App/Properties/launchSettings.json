@@ -3,6 +3,11 @@
     "Orbivo": {
       "commandName": "Project"
     },
+    "Orbivo Brille (Testbild)": {
+      "commandName": "Project",
+      "commandLineArgs": "--image tools\\testmedia\\out\\equirect360_mono_4096x2048.png",
+      "workingDirectory": "$(ProjectDir)..\\.."
+    },
     "Orbivo ohne Brille (Testbild)": {
       "commandName": "Project",
       "commandLineArgs": "--no-xr --image tools\\testmedia\\out\\equirect360_mono_4096x2048.png",

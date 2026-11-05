@@ -13,13 +13,14 @@ using Orbivo.Core.Status;
 using Orbivo.Media;
 using Orbivo.Xr.DebugViewport;
 using Orbivo.Xr.Graphics;
+using Orbivo.Xr.OpenXr;
 using Orbivo.Xr.Rendering;
 
 namespace Orbivo.App;
 
 /// <summary>
 /// Composition root: sets up logging, checks native components and shows the main window.
-/// With <c>--no-xr</c> it also starts the desktop preview window that stands in for the headset.
+/// Then it starts the headset output (OpenXR), or with <c>--no-xr</c> the desktop preview window that stands in for it.
 /// </summary>
 public partial class App : Application
 {
@@ -29,6 +30,13 @@ public partial class App : Application
     private MainViewModel? _viewModel;
     private GraphicsDevice? _graphicsDevice;
     private DebugViewportHost? _debugViewport;
+    private XrHost? _xrHost;
+
+#if DEBUG
+    private const bool RequestDebugLayer = true;
+#else
+    private const bool RequestDebugLayer = false;
+#endif
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -59,6 +67,7 @@ public partial class App : Application
         [
             FFmpegRuntime.Initialize(nativeDirectory, _loggerFactory.CreateLogger(typeof(FFmpegRuntime).FullName!)),
             SteamAudioRuntime.Check(nativeDirectory, _loggerFactory.CreateLogger(typeof(SteamAudioRuntime).FullName!)),
+            OpenXrLoader.Check(nativeDirectory, _loggerFactory.CreateLogger(typeof(OpenXrLoader).FullName!)),
         ];
 
         _viewModel = new MainViewModel(options, nativeComponents, logFilePath);
@@ -73,15 +82,16 @@ public partial class App : Application
         {
             StartDebugViewport(options.ImagePath, _viewModel, _loggerFactory, _logger);
         }
-        else if (options.ImagePath is not null)
+        else
         {
-            _logger.LogWarning("{Option} is only used together with {NoXr}.", StartupOptions.ImageOption, StartupOptions.NoXrSwitch);
+            StartHeadset(options.ImagePath, _viewModel, _loggerFactory, _logger);
         }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _viewModel?.StopViewportPolling();
+        _viewModel?.StopStatusPolling();
+        _xrHost?.Dispose();
         _debugViewport?.Dispose();
         _graphicsDevice?.Dispose();
         _logger?.LogInformation("Orbivo exiting with code {ExitCode}.", e.ApplicationExitCode);
@@ -89,16 +99,34 @@ public partial class App : Application
         base.OnExit(e);
     }
 
+    /// <summary>
+    /// Starts the XR render thread. It connects to the runtime on its own and keeps retrying;
+    /// the image is loaded once the device on the GPU of the headset exists.
+    /// </summary>
+    private void StartHeadset(string? imagePath, MainViewModel viewModel, ILoggerFactory loggerFactory, ILogger logger)
+    {
+        _xrHost = new XrHost(loggerFactory, RequestDebugLayer);
+        _xrHost.Start();
+        viewModel.StartXrPolling(_xrHost.GetStatus);
+
+        if (imagePath is not null)
+        {
+            XrHost host = _xrHost;
+            _ = LoadImageWhenDeviceReadyAsync(imagePath, host, viewModel, logger);
+        }
+    }
+
+    private static async Task LoadImageWhenDeviceReadyAsync(string path, XrHost host, MainViewModel viewModel, ILogger logger)
+    {
+        GraphicsDevice device = await host.GraphicsDeviceReady;
+        await LoadImageAsync(path, device, host.ShowImage, viewModel, logger);
+    }
+
     private void StartDebugViewport(string? imagePath, MainViewModel viewModel, ILoggerFactory loggerFactory, ILogger logger)
     {
-#if DEBUG
-        const bool requestDebugLayer = true;
-#else
-        const bool requestDebugLayer = false;
-#endif
         try
         {
-            _graphicsDevice = GraphicsDevice.CreateOnHighPerformanceGpu(loggerFactory.CreateLogger<GraphicsDevice>(), requestDebugLayer);
+            _graphicsDevice = GraphicsDevice.CreateOnHighPerformanceGpu(loggerFactory.CreateLogger<GraphicsDevice>(), RequestDebugLayer);
         }
         catch (Exception exception)
         {
@@ -114,15 +142,18 @@ public partial class App : Application
 
         if (imagePath is not null)
         {
-            _ = LoadImageAsync(imagePath, _graphicsDevice, _debugViewport, viewModel, logger);
+            _ = LoadImageAsync(imagePath, _graphicsDevice, _debugViewport.ShowImage, viewModel, logger);
         }
     }
 
-    /// <summary>Decodes the image and creates the texture on a worker thread, then hands it to the viewport.</summary>
+    /// <summary>
+    /// Decodes the image and creates the texture on a worker thread, then hands it to the render thread
+    /// (headset or preview window) through <paramref name="show"/>.
+    /// </summary>
     private static async Task LoadImageAsync(
         string path,
         GraphicsDevice device,
-        DebugViewportHost viewport,
+        Action<StillImageTexture> show,
         MainViewModel viewModel,
         ILogger logger)
     {
@@ -134,7 +165,7 @@ public partial class App : Application
             (int width, int height) = await Task.Run(() =>
             {
                 Bgra32Image image = StillImageLoader.LoadBgra32(fullPath);
-                viewport.ShowImage(StillImageTexture.Create(device, image));
+                show(StillImageTexture.Create(device, image));
                 return (image.Width, image.Height);
             });
 
@@ -146,7 +177,7 @@ public partial class App : Application
                 stopwatch.ElapsedMilliseconds);
             if (width != 2 * height)
             {
-                logger.LogWarning("Image {Path} is not 2:1; M1 shows every image as equirect 360 mono.", fullPath);
+                logger.LogWarning("Image {Path} is not 2:1; every image is shown as equirect 360 mono until M6.", fullPath);
             }
 
             viewModel.ShowImageLoaded(fileName, width, height);
