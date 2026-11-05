@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Orbivo": {
+      "commandName": "Project"
+    },
+    "Orbivo ohne Brille (Testbild)": {
+      "commandName": "Project",
+      "commandLineArgs": "--no-xr --image tools\\testmedia\\out\\equirect360_mono_4096x2048.png",
+      "workingDirectory": "$(ProjectDir)..\\.."
+    }
+  }
+}
