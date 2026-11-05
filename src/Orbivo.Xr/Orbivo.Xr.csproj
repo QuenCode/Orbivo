@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    OpenXR session, D3D11 device, swapchains, renderer, HLSL shaders, desktop debug viewport (no-xr mode).
+    References Orbivo.Media because the renderer consumes the decoded GPU frames from there.
+  -->
+
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Silk.NET.OpenXR" />
+    <PackageReference Include="Silk.NET.OpenXR.Extensions.KHR" />
+    <PackageReference Include="Vortice.Direct3D11" />
+    <PackageReference Include="Vortice.DXGI" />
+    <PackageReference Include="Vortice.D3DCompiler" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Orbivo.Core\Orbivo.Core.csproj" />
+    <ProjectReference Include="..\Orbivo.Media\Orbivo.Media.csproj" />
+  </ItemGroup>
+
+</Project>

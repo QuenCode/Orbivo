@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WPF operator UI (MVVM) and composition root. -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>Orbivo</AssemblyName>
+    <RootNamespace>Orbivo.App</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Orbivo.Core\Orbivo.Core.csproj" />
+    <ProjectReference Include="..\Orbivo.Media\Orbivo.Media.csproj" />
+    <ProjectReference Include="..\Orbivo.Audio\Orbivo.Audio.csproj" />
+    <ProjectReference Include="..\Orbivo.Xr\Orbivo.Xr.csproj" />
+  </ItemGroup>
+
+  <Import Project="$(OrbivoRepoRoot)build\Native.targets" />
+
+</Project>

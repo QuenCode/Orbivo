@@ -1,0 +1,36 @@
+<Project>
+
+  <!--
+    Copies the native third-party libraries from native/win-x64 into the output directory.
+    Source, versions and checksums: native/README.md.
+    The build stays green when they are missing; the app reports missing libraries at startup.
+    Keep this list in sync with FFmpegRuntime.ExpectedLibraries (Orbivo.Media)
+    and SteamAudioRuntime.LibraryFileName (Orbivo.Audio).
+  -->
+
+  <PropertyGroup>
+    <OrbivoNativeDir>$(OrbivoRepoRoot)native\win-x64\</OrbivoNativeDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <OrbivoNativeLibrary Include="avcodec-63.dll;avformat-63.dll;avutil-61.dll;swresample-7.dll;swscale-10.dll" />
+    <OrbivoNativeLibrary Include="phonon.dll" />
+  </ItemGroup>
+
+  <Target Name="OrbivoIncludeNativeLibraries" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <_OrbivoNativeCandidate Include="@(OrbivoNativeLibrary->'$(OrbivoNativeDir)%(Identity)')" />
+      <_OrbivoNativeFound Include="@(_OrbivoNativeCandidate)" Condition="Exists('%(FullPath)')" />
+      <_OrbivoNativeMissing Include="@(_OrbivoNativeCandidate)" Condition="!Exists('%(FullPath)')" />
+      <None Include="@(_OrbivoNativeFound)"
+            Link="%(Filename)%(Extension)"
+            CopyToOutputDirectory="PreserveNewest"
+            CopyToPublishDirectory="PreserveNewest"
+            Visible="false" />
+    </ItemGroup>
+    <Message Importance="high"
+             Condition="'@(_OrbivoNativeMissing)' != ''"
+             Text="Orbivo: native libraries not found in native\win-x64 (see native\README.md): @(_OrbivoNativeMissing->'%(Filename)%(Extension)', ', ')" />
+  </Target>
+
+</Project>

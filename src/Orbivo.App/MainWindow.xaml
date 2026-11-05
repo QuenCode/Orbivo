@@ -1,0 +1,143 @@
+<Window x:Class="Orbivo.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:Orbivo.App.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
+        Title="{Binding Title}"
+        Width="1280" Height="800" MinWidth="960" MinHeight="600"
+        WindowStartupLocation="CenterScreen">
+
+  <Grid Margin="6">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="2*" MinWidth="320" />
+      <ColumnDefinition Width="3*" MinWidth="420" />
+    </Grid.ColumnDefinitions>
+
+    <!-- Playlist (M4) -->
+    <GroupBox Grid.Row="0" Grid.Column="0" Header="Playlist">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+          <Button Content="Hinzufügen …" IsEnabled="False" />
+          <Button Content="Entfernen" IsEnabled="False" />
+        </StackPanel>
+        <Border BorderBrush="LightGray" BorderThickness="1">
+          <TextBlock Style="{StaticResource PlaceholderText}" Margin="12"
+                     Text="Noch keine Videos. Laden per Datei-Dialog oder Drag &amp; Drop folgt in M4." />
+        </Border>
+      </DockPanel>
+    </GroupBox>
+
+    <Grid Grid.Row="0" Grid.Column="1">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+
+      <!-- Format (M6) -->
+      <GroupBox Grid.Row="0" Header="Format">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+          <Grid.Resources>
+            <Style TargetType="TextBlock">
+              <Setter Property="Margin" Value="0,2,16,2" />
+            </Style>
+          </Grid.Resources>
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="Projektion:" />
+          <TextBlock Grid.Row="0" Grid.Column="1" Text="–" />
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Stereo-Layout:" />
+          <TextBlock Grid.Row="1" Grid.Column="1" Text="–" />
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="Augen tauschen:" />
+          <TextBlock Grid.Row="2" Grid.Column="1" Text="–" />
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="Ausrichtung (Yaw/Pitch/Roll):" />
+          <TextBlock Grid.Row="3" Grid.Column="1" Text="–" />
+          <TextBlock Grid.Row="4" Grid.Column="0" Text="Audio-Modus:" />
+          <TextBlock Grid.Row="4" Grid.Column="1" Text="–" />
+          <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource PlaceholderText}"
+                     Margin="0,8,0,0" Text="Formateinstellungen folgen in M6." />
+        </Grid>
+      </GroupBox>
+
+      <!-- Status (F40/F41, filled from M2 on) -->
+      <GroupBox Grid.Row="1" Header="Status">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <ItemsControl ItemsSource="{Binding StatusEntries}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="{x:Type vm:StatusEntry}">
+                <Grid Margin="0,3">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="18" />
+                    <ColumnDefinition Width="130" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <Ellipse x:Name="Indicator" Grid.Column="0" Width="10" Height="10"
+                           VerticalAlignment="Center" Fill="LightGray" />
+                  <TextBlock Grid.Column="1" Text="{Binding Label}" FontWeight="SemiBold" />
+                  <TextBox Grid.Column="2" Text="{Binding Value, Mode=OneWay}" IsReadOnly="True"
+                           BorderThickness="0" Background="Transparent" TextWrapping="Wrap" />
+                </Grid>
+                <DataTemplate.Triggers>
+                  <DataTrigger Binding="{Binding Level}" Value="{x:Static vm:StatusLevel.Ok}">
+                    <Setter TargetName="Indicator" Property="Fill" Value="ForestGreen" />
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding Level}" Value="{x:Static vm:StatusLevel.Warning}">
+                    <Setter TargetName="Indicator" Property="Fill" Value="Orange" />
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding Level}" Value="{x:Static vm:StatusLevel.Error}">
+                    <Setter TargetName="Indicator" Property="Fill" Value="Firebrick" />
+                  </DataTrigger>
+                </DataTemplate.Triggers>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </GroupBox>
+    </Grid>
+
+    <!-- Transport (M3/M4) -->
+    <GroupBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Header="Wiedergabe">
+      <StackPanel>
+        <DockPanel Margin="0,0,0,8">
+          <TextBlock DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
+                     FontFamily="Consolas" Text="00:00:00.000 / 00:00:00.000" />
+          <Slider IsEnabled="False" VerticalAlignment="Center" />
+        </DockPanel>
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+            <TextBlock Text="Lautstärke" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <Slider Width="140" IsEnabled="False" VerticalAlignment="Center" />
+            <Button Content="Stumm" IsEnabled="False" Margin="8,0,0,0" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal">
+            <Button Content="⏮ Zurück" IsEnabled="False" />
+            <Button Content="▶ Play" IsEnabled="False" />
+            <Button Content="⏸ Pause" IsEnabled="False" />
+            <Button Content="⏹ Stop" IsEnabled="False" />
+            <Button Content="⏭ Weiter" IsEnabled="False" />
+            <Separator Margin="6,0,12,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
+            <Button Content="Schwarzbild" IsEnabled="False" />
+            <Button Content="Fade" IsEnabled="False" />
+            <Button Content="Recenter" IsEnabled="False" />
+          </StackPanel>
+        </DockPanel>
+      </StackPanel>
+    </GroupBox>
+  </Grid>
+</Window>
