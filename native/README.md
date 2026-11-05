@@ -8,7 +8,7 @@ Die nativen DLLs sind **nicht im Git**. Sie gehören nach `native/win-x64/` und 
 powershell -NoProfile -ExecutionPolicy Bypass -File native\fetch-native.ps1
 ```
 
-Das Skript lädt die gepinnten Archive nach `native/_downloads/` (ca. 260 MB), prüft die SHA256-Prüfsummen und entpackt nur die benötigten Dateien. Danach `dotnet build`. Mit `-Force` werden die Archive neu geladen.
+Das Skript lädt die gepinnten Archive nach `native/_downloads/` (ca. 290 MB), prüft die SHA256-Prüfsummen und entpackt nur die benötigten Dateien. Danach `dotnet build`. Mit `-Force` werden die Archive neu geladen.
 
 Ergebnis:
 
@@ -17,10 +17,12 @@ native/win-x64/
   avcodec-63.dll  avformat-63.dll  avutil-61.dll  swresample-7.dll  swscale-10.dll
   avfilter-12.dll  avdevice-63.dll  ffmpeg.exe  ffprobe.exe
   phonon.dll
-  licenses/  FFmpeg-LICENSE.txt  SteamAudio-LICENSE.md  SteamAudio-THIRDPARTY.md
+  openxr_loader.dll
+  openxr-tools/  hello_xr.exe  openxr_runtime_list.exe
+  licenses/  FFmpeg-LICENSE.txt  SteamAudio-LICENSE.md  SteamAudio-THIRDPARTY.md  OpenXR-LICENSE.txt
 ```
 
-**Archive selbst sichern:** Die beiden ZIP-Dateien aus `native/_downloads/` an einem eigenen Ort aufbewahren. GitHub-Releases können verschwinden (siehe Vorhaltezeit unten).
+**Archive selbst sichern:** Die drei ZIP-Dateien aus `native/_downloads/` an einem eigenen Ort aufbewahren. GitHub-Releases können verschwinden (siehe Vorhaltezeit unten).
 
 ## FFmpeg 9.0.2 (LGPL, shared)
 
@@ -70,6 +72,22 @@ native/win-x64/
 
 **Interop:** Die P/Invoke-Deklarationen (ab M7) werden gegen `phonon.h` aus genau dieser Version geschrieben. Die App prüft die Dateiversion beim Start (`SteamAudioRuntime`). Ein Update geht nur zusammen mit einem Abgleich der Header-Änderungen.
 
-## Noch offen
+## OpenXR-Loader 1.1.65
 
-- **OpenXR-Loader** (`openxr_loader.dll`, Khronos OpenXR-SDK, Apache-2.0): wird ab M2 gebraucht. Silk.NET.OpenXR liefert ihn nicht mit. Bezugsquelle und Version werden vor M2 abgestimmt.
+| | |
+|---|---|
+| Quelle | GitHub [KhronosGroup/OpenXR-SDK-Source](https://github.com/KhronosGroup/OpenXR-SDK-Source), Release `release-1.1.65` (16.10.2026) |
+| Datei | `openxr_loader_windows-1.1.65.zip` (32,5 MB) |
+| SHA256 | `859d7de35b7a968112db770b09ed8bddeed3cb16fd8ae070643a857676bea6fd` |
+| Lizenz | Apache-2.0, Text in `licenses/OpenXR-LICENSE.txt` (aus `share/doc/openxr/LICENSE` im Archiv) |
+
+| Datei (aus `x64/bin/`) | Zweck | In der App-Ausgabe |
+|---|---|---|
+| `openxr_loader.dll` (Dateiversion 1.1.65) | Lädt das aktive OpenXR-Runtime (Varjo OpenXR aus Varjo Base). Silk.NET.OpenXR bringt keinen Loader mit | ja |
+| `openxr-tools/hello_xr.exe` | Khronos-Beispiel: prüft die Brille unabhängig von Orbivo (`hello_xr.exe -g D3D11`) | nein |
+| `openxr-tools/openxr_runtime_list.exe` | listet die installierten Runtimes | nein |
+| API-Layer (Validation, API-Dump), Symbole, ARM/UWP/Win32 | – | nein |
+
+Das Runtime selbst gehört nicht zur App. Varjo Base trägt es in der Registry ein (`HKLM\SOFTWARE\Khronos\OpenXR\1`, Wert `ActiveRuntime` = `C:\Program Files\Varjo\varjo-openxr\VarjoOpenXR.json`).
+
+**Update:** Der Loader ist abwärtskompatibel; Orbivo fordert OpenXR 1.0 an. Neue Version: URL und SHA256 in `fetch-native.ps1`, `OpenXrLoader.ExpectedVersion` und diese Datei anpassen.

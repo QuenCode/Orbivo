@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Downloads the pinned native dependencies (FFmpeg LGPL shared build, Steam Audio) into native/win-x64.
+    Downloads the pinned native dependencies (FFmpeg LGPL shared build, Steam Audio, OpenXR loader) into native/win-x64.
 
 .DESCRIPTION
     Versions, URLs and SHA256 checksums are pinned below and documented in native/README.md.
@@ -49,6 +49,17 @@ $packages = @(
             @{ Pattern = '^steamaudio/THIRDPARTY\.md$'; Folder = 'licenses'; Rename = 'SteamAudio-THIRDPARTY.md' }
         )
         Required = @('phonon.dll')
+    }
+    @{
+        Name   = 'OpenXR loader 1.1.65 (Khronos OpenXR-SDK-Source, release-1.1.65)'
+        Url    = 'https://github.com/KhronosGroup/OpenXR-SDK-Source/releases/download/release-1.1.65/openxr_loader_windows-1.1.65.zip'
+        Sha256 = '859d7de35b7a968112db770b09ed8bddeed3cb16fd8ae070643a857676bea6fd'
+        Rules  = @(
+            @{ Pattern = '^x64/bin/openxr_loader\.dll$'; Folder = '' }
+            @{ Pattern = '^x64/bin/(hello_xr|openxr_runtime_list)\.exe$'; Folder = 'openxr-tools' }
+            @{ Pattern = '^share/doc/openxr/LICENSE$'; Folder = 'licenses'; Rename = 'OpenXR-LICENSE.txt' }
+        )
+        Required = @('openxr_loader.dll', 'openxr-tools\hello_xr.exe', 'openxr-tools\openxr_runtime_list.exe')
     }
 )
 
