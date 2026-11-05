@@ -1,0 +1,176 @@
+using Microsoft.Extensions.Logging;
+using Vortice.Direct3D;
+using Vortice.Direct3D11;
+using Vortice.DXGI;
+
+namespace Orbivo.Xr.Graphics;
+
+/// <summary>
+/// The Direct3D 11 device of the player. Renderer and (from M3) FFmpeg share it, so it is multithread protected
+/// (docs/ARCHITECTURE.md, "Datenfluss Video").
+/// </summary>
+/// <remarks>
+/// Resources may be created on any thread. <see cref="ImmediateContext"/> belongs to the render thread.
+/// </remarks>
+public sealed class GraphicsDevice : IDisposable
+{
+    private static readonly FeatureLevel[] SupportedFeatureLevels = [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0];
+
+    private bool _disposed;
+
+    private GraphicsDevice(
+        ID3D11Device device,
+        ID3D11DeviceContext immediateContext,
+        string adapterName,
+        ulong dedicatedVideoMemoryBytes,
+        bool isSoftware,
+        bool debugLayerEnabled)
+    {
+        Device = device;
+        ImmediateContext = immediateContext;
+        AdapterName = adapterName;
+        DedicatedVideoMemoryBytes = dedicatedVideoMemoryBytes;
+        IsSoftware = isSoftware;
+        DebugLayerEnabled = debugLayerEnabled;
+    }
+
+    public ID3D11Device Device { get; }
+
+    /// <summary>Render thread only.</summary>
+    public ID3D11DeviceContext ImmediateContext { get; }
+
+    public string AdapterName { get; }
+
+    public ulong DedicatedVideoMemoryBytes { get; }
+
+    public FeatureLevel FeatureLevel => Device.FeatureLevel;
+
+    /// <summary>True for the WARP software rasterizer (tests).</summary>
+    public bool IsSoftware { get; }
+
+    public bool DebugLayerEnabled { get; }
+
+    /// <summary>
+    /// Creates the device on the most powerful hardware GPU (matters on laptops with an integrated GPU).
+    /// From M2 on, OpenXR prescribes the adapter instead.
+    /// </summary>
+    /// <param name="logger">Receives the device details.</param>
+    /// <param name="requestDebugLayer">Enables the D3D11 debug layer if it is installed (Windows feature "Graphics Tools").</param>
+    public static GraphicsDevice CreateOnHighPerformanceGpu(ILogger logger, bool requestDebugLayer)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+
+        using IDXGIFactory6 factory = DXGI.CreateDXGIFactory2<IDXGIFactory6>(false);
+        using IDXGIAdapter1 adapter = FindHighPerformanceHardwareAdapter(factory)
+            ?? throw new InvalidOperationException("No hardware GPU with Direct3D 11 support was found.");
+
+        // Video support is required for D3D11VA decoding on the shared device (M3).
+        return Create(adapter, DriverType.Unknown, DeviceCreationFlags.VideoSupport, requestDebugLayer, logger);
+    }
+
+    /// <summary>Creates a device on WARP, the software rasterizer that is part of Windows (used by the GPU tests).</summary>
+    public static GraphicsDevice CreateWarp(ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+        return Create(null, DriverType.Warp, DeviceCreationFlags.None, requestDebugLayer: false, logger);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        ImmediateContext.ClearState();
+        ImmediateContext.Flush();
+        ImmediateContext.Dispose();
+        Device.Dispose();
+    }
+
+    private static IDXGIAdapter1? FindHighPerformanceHardwareAdapter(IDXGIFactory6 factory)
+    {
+        for (uint index = 0; ; index++)
+        {
+            if (factory.EnumAdapterByGpuPreference(index, GpuPreference.HighPerformance, out IDXGIAdapter1? adapter).Failure
+                || adapter is null)
+            {
+                return null;
+            }
+
+            if ((adapter.Description1.Flags & AdapterFlags.Software) == 0)
+            {
+                return adapter;
+            }
+
+            adapter.Dispose();
+        }
+    }
+
+    private static GraphicsDevice Create(
+        IDXGIAdapter? adapter,
+        DriverType driverType,
+        DeviceCreationFlags flags,
+        bool requestDebugLayer,
+        ILogger logger)
+    {
+        bool debugLayer = requestDebugLayer && D3D11.SdkLayersAvailable();
+        if (requestDebugLayer && !debugLayer)
+        {
+            logger.LogInformation("D3D11 debug layer requested but not installed (Windows optional feature \"Graphics Tools\").");
+        }
+
+        if (debugLayer)
+        {
+            flags |= DeviceCreationFlags.Debug;
+        }
+
+        D3D11.D3D11CreateDevice(
+            adapter,
+            driverType,
+            flags,
+            SupportedFeatureLevels,
+            out ID3D11Device? device,
+            out FeatureLevel featureLevel,
+            out ID3D11DeviceContext? immediateContext).CheckError();
+
+        if (device is null || immediateContext is null)
+        {
+            throw new InvalidOperationException("D3D11CreateDevice succeeded but returned no device.");
+        }
+
+        try
+        {
+            using (ID3D11Multithread multithread = device.QueryInterface<ID3D11Multithread>())
+            {
+                multithread.SetMultithreadProtected(true);
+            }
+
+            string adapterName;
+            ulong videoMemory;
+            using (IDXGIDevice dxgiDevice = device.QueryInterface<IDXGIDevice>())
+            using (IDXGIAdapter dxgiAdapter = dxgiDevice.GetAdapter())
+            {
+                AdapterDescription description = dxgiAdapter.Description;
+                adapterName = description.Description;
+                videoMemory = description.DedicatedVideoMemory;
+            }
+
+            logger.LogInformation(
+                "Direct3D 11 device created on {Adapter} ({VideoMemoryMiB} MiB dedicated video memory), feature level {FeatureLevel}, flags {Flags}, multithread protected.",
+                adapterName,
+                videoMemory / (1024 * 1024),
+                featureLevel,
+                flags);
+
+            return new GraphicsDevice(device, immediateContext, adapterName, videoMemory, driverType == DriverType.Warp, debugLayer);
+        }
+        catch
+        {
+            immediateContext.Dispose();
+            device.Dispose();
+            throw;
+        }
+    }
+}

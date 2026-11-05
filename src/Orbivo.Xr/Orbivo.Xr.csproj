@@ -23,4 +23,13 @@
     <ProjectReference Include="..\Orbivo.Media\Orbivo.Media.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Compiled at startup with d3dcompiler_47.dll (part of Windows), see docs/DECISIONS.md. -->
+    <EmbeddedResource Include="Shaders\*.hlsl" LogicalName="Orbivo.Xr.Shaders.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Orbivo.Xr.Tests" />
+  </ItemGroup>
+
 </Project>
