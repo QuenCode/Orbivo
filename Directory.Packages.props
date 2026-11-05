@@ -1,0 +1,38 @@
+<Project>
+
+  <!--
+    Central, pinned package versions. New packages only after consultation (see CLAUDE.md).
+    FFmpeg.AutoGen must match the FFmpeg build in native/win-x64 (see native/README.md):
+    9.0.1.1 expects avcodec-63, avformat-63, avutil-61, swresample-7, swscale-10.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup Label="UI">
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <ItemGroup Label="Logging">
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
+  </ItemGroup>
+
+  <ItemGroup Label="XR and graphics">
+    <PackageVersion Include="Silk.NET.OpenXR" Version="2.23.0" />
+    <PackageVersion Include="Silk.NET.OpenXR.Extensions.KHR" Version="2.23.0" />
+    <PackageVersion Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageVersion Include="Vortice.DXGI" Version="3.8.3" />
+    <PackageVersion Include="Vortice.D3DCompiler" Version="3.8.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Media and audio">
+    <PackageVersion Include="FFmpeg.AutoGen" Version="9.0.1.1" />
+    <PackageVersion Include="NAudio.Wasapi" Version="3.3.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests">
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+  </ItemGroup>
+
+</Project>

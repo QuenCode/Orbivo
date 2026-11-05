@@ -1,0 +1,36 @@
+<Project>
+
+  <PropertyGroup Label="Target">
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Language">
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- unsafe is only allowed in Orbivo.Xr, Orbivo.Media and Orbivo.Audio (enabled in their project files). -->
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Warnings">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- New NuGet vulnerability advisories stay visible as warnings instead of breaking the build overnight. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Product">
+    <Product>Orbivo</Product>
+    <Company>Orbivo</Company>
+    <Version>0.1.0</Version>
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Paths">
+    <OrbivoRepoRoot>$(MSBuildThisFileDirectory)</OrbivoRepoRoot>
+  </PropertyGroup>
+
+</Project>
