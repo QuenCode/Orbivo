@@ -61,7 +61,8 @@ Jeweils als `.png` und als `…_hevc_8bit_30fps.mp4`. Dazu `ambix_foa_richtungst
 - **Hinweise, wo VORNE liegt:** auf LINKS „VORNE →“, auf RECHTS „← VORNE“, auf OBEN „↓ VORNE“, auf UNTEN „↑ VORNE“, auf HINTEN „VORNE ist hinter dir“. Damit fallen auch Spiegelungen und Rollfehler auf.
 - **Gitter** alle 15°, dicker bei 0°, ±90°, 180° und am Horizont. Yaw-Beschriftung bei −37,5° Höhe (positiv = links), Pitch-Beschriftung am Meridian vor dem Betrachter.
 - **Auflösungsfeld** unter VORNE: Streifen mit 1, 2 und 4 Pixel Periode (senkrecht und waagerecht) und ein 1-Pixel-Schachbrett, gezeichnet in Quellpixeln. Bleiben die feinsten Streifen sichtbar, kommt die volle Auflösung an.
-- **Nur Stereo:** „LINKES AUGE“ / „RECHTES AUGE“ (mit einem geschlossenen Auge lesbar) und die Tafel **TIEFE** rechts oberhalb von VORNE. Sie hat 1° gekreuzte Disparität und erscheint bei richtiger Zuordnung vor dem Hintergrund (etwa 3,7 m entfernt). Bei vertauschten Augen liegt sie dahinter oder lässt sich kaum fusionieren.
+- **Tafel TIEFE** rechts oberhalb von VORNE. In Mono liegt sie auf der Kugel. In Stereo hat sie 1° gekreuzte Disparität und erscheint bei richtiger Zuordnung vor dem Hintergrund (etwa 3,7 m entfernt). Bei vertauschten Augen liegt sie dahinter oder lässt sich kaum fusionieren.
+- **Nur Stereo:** „LINKES AUGE“ / „RECHTES AUGE“ (mit einem geschlossenen Auge lesbar).
 
 ## Video-Overlays
 

@@ -144,7 +144,13 @@ def _paste_text(canvas: Image.Image, text: str, center: tuple[float, float], hei
                               stroke_width=max(1, size // 12), stroke_fill=(0, 0, 0))
     new_width = max(1, round(tile.width * x_scale))
     tile = tile.resize((new_width, tile.height), Image.LANCZOS)
-    canvas.alpha_composite(tile, (round(center[0] - tile.width / 2), round(center[1] - tile.height / 2)))
+    x0, y0 = round(center[0] - tile.width / 2), round(center[1] - tile.height / 2)
+    canvas.alpha_composite(tile, (x0, y0))
+    # The image wraps around at the back (u = 0 == u = 1): draw the part that falls off one edge on the other.
+    if x0 < 0:
+        canvas.alpha_composite(tile, (x0 + canvas.width, y0))
+    if x0 + tile.width > canvas.width:
+        canvas.alpha_composite(tile, (x0 - canvas.width, y0))
 
 
 def draw_degree_labels(image: np.ndarray) -> np.ndarray:
