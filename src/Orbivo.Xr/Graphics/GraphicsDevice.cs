@@ -1,4 +1,6 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
+using Vortice;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -23,12 +25,14 @@ public sealed class GraphicsDevice : IDisposable
         ID3D11DeviceContext immediateContext,
         string adapterName,
         ulong dedicatedVideoMemoryBytes,
+        ulong adapterLuid,
         bool isSoftware,
         bool debugLayerEnabled)
     {
         Device = device;
         ImmediateContext = immediateContext;
         AdapterName = adapterName;
+        AdapterLuid = adapterLuid;
         DedicatedVideoMemoryBytes = dedicatedVideoMemoryBytes;
         IsSoftware = isSoftware;
         DebugLayerEnabled = debugLayerEnabled;
@@ -43,6 +47,9 @@ public sealed class GraphicsDevice : IDisposable
 
     public ulong DedicatedVideoMemoryBytes { get; }
 
+    /// <summary>Locally unique id of the adapter, in the 64-bit form OpenXR uses (<c>XrGraphicsRequirementsD3D11KHR</c>).</summary>
+    public ulong AdapterLuid { get; }
+
     public FeatureLevel FeatureLevel => Device.FeatureLevel;
 
     /// <summary>True for the WARP software rasterizer (tests).</summary>
@@ -52,7 +59,7 @@ public sealed class GraphicsDevice : IDisposable
 
     /// <summary>
     /// Creates the device on the most powerful hardware GPU (matters on laptops with an integrated GPU).
-    /// From M2 on, OpenXR prescribes the adapter instead.
+    /// Used for the desktop debug viewport; with the headset OpenXR prescribes the adapter (<see cref="CreateOnAdapter"/>).
     /// </summary>
     /// <param name="logger">Receives the device details.</param>
     /// <param name="requestDebugLayer">Enables the D3D11 debug layer if it is installed (Windows feature "Graphics Tools").</param>
@@ -66,6 +73,34 @@ public sealed class GraphicsDevice : IDisposable
 
         // Video support is required for D3D11VA decoding on the shared device (M3).
         return Create(adapter, DriverType.Unknown, DeviceCreationFlags.VideoSupport, requestDebugLayer, logger);
+    }
+
+    /// <summary>
+    /// Creates the device on the adapter the OpenXR runtime requires (the GPU the headset is connected to).
+    /// </summary>
+    /// <param name="adapterLuid">Adapter LUID from <c>xrGetD3D11GraphicsRequirementsKHR</c>.</param>
+    /// <param name="minimumFeatureLevel">Minimum feature level from the same call (a D3D_FEATURE_LEVEL value).</param>
+    /// <param name="logger">Receives the device details.</param>
+    /// <param name="requestDebugLayer">Enables the D3D11 debug layer if it is installed.</param>
+    public static GraphicsDevice CreateOnAdapter(ulong adapterLuid, uint minimumFeatureLevel, ILogger logger, bool requestDebugLayer)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+
+        using IDXGIFactory4 factory = DXGI.CreateDXGIFactory2<IDXGIFactory4>(false);
+        // LUID is { uint LowPart; int HighPart; }, which is exactly the little-endian 64-bit value OpenXR uses.
+        Luid luid = Unsafe.BitCast<ulong, Luid>(adapterLuid);
+        using IDXGIAdapter1 adapter = factory.EnumAdapterByLuid<IDXGIAdapter1>(luid);
+
+        GraphicsDevice device = Create(adapter, DriverType.Unknown, DeviceCreationFlags.VideoSupport, requestDebugLayer, logger);
+        if ((uint)device.FeatureLevel < minimumFeatureLevel)
+        {
+            FeatureLevel actual = device.FeatureLevel;
+            device.Dispose();
+            throw new InvalidOperationException(
+                $"The OpenXR runtime requires feature level 0x{minimumFeatureLevel:X}, but {adapter.Description1.Description} only offers {actual}.");
+        }
+
+        return device;
     }
 
     /// <summary>Creates a device on WARP, the software rasterizer that is part of Windows (used by the GPU tests).</summary>
@@ -149,12 +184,14 @@ public sealed class GraphicsDevice : IDisposable
 
             string adapterName;
             ulong videoMemory;
+            ulong adapterLuid;
             using (IDXGIDevice dxgiDevice = device.QueryInterface<IDXGIDevice>())
             using (IDXGIAdapter dxgiAdapter = dxgiDevice.GetAdapter())
             {
                 AdapterDescription description = dxgiAdapter.Description;
                 adapterName = description.Description;
                 videoMemory = description.DedicatedVideoMemory;
+                adapterLuid = Unsafe.BitCast<Luid, ulong>(description.Luid);
             }
 
             logger.LogInformation(
@@ -164,7 +201,7 @@ public sealed class GraphicsDevice : IDisposable
                 featureLevel,
                 flags);
 
-            return new GraphicsDevice(device, immediateContext, adapterName, videoMemory, driverType == DriverType.Warp, debugLayer);
+            return new GraphicsDevice(device, immediateContext, adapterName, videoMemory, adapterLuid, driverType == DriverType.Warp, debugLayer);
         }
         catch
         {
