@@ -16,6 +16,7 @@ src/
   Orbivo.Media/           # FFmpeg: Demux, Decode (D3D11VA), Metadaten (sv3d/st3d, Kanal-Layout)
   Orbivo.Audio/           # NAudio-Ausgabe, Ringpuffer, AmbisonicsProcessor (Steam Audio), Kanal-Konvertierung
   Orbivo.Xr/              # OpenXR-Session, D3D11-Device, Swapchains, Renderer, HLSL-Shader
+    OpenXr/                    # XrHost (XR-Render-Thread), Instance, Session, Swapchains, Lifecycle, Umrechnungen
     Graphics/                  # D3D11-Device, Shader-Compiler
     Rendering/                 # PanoramaRenderer, IViewSource, Standbild-Textur
     Shaders/                   # *.hlsl, als Ressource eingebettet und beim Start kompiliert
@@ -41,7 +42,7 @@ docs/
 | Video-Decode | dekodiert in GPU-Frames, legt sie in `VideoFrameQueue` (begrenzt, z. B. 6–8 Frames) | ja |
 | Audio-Decode | dekodiert, konvertiert nach float32 planar, schreibt in `AudioRingBuffer` | ja |
 | Audio-Out (WASAPI) | Callback: Ringpuffer → AmbisonicsProcessor → Ausgabe; zählt ausgegebene Samples (Audio-Clock) | **nein** |
-| XR-Render | OpenXR-Frame-Loop, wählt Frame nach Clock, rendert beide Augen, liest Head-Pose | **nein** |
+| XR-Render (`XrHost`) | OpenXR-Frame-Loop, wählt Frame nach Clock, rendert beide Augen, liest Head-Pose. Ohne laufende Session: Verbindungsaufbau und Wiederholung | **nein** im Frame-Loop (wartet nur in `xrWaitFrame`); ohne Session darf er warten |
 | Vorschau-Render (nur `--no-xr`) | Fensternachrichten und Maus, rendert ein Auge ins Vorschaufenster | **nein** (wartet nur auf den Frame-Takt der Swapchain, wie `xrWaitFrame`) |
 
 Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC-Queues, `Volatile`/`Interlocked`). Die aktuelle Kopforientierung wird vom Render-Thread als atomarer Snapshot (Quaternion und Zeitstempel) publiziert und vom Audio-Callback gelesen.
@@ -89,15 +90,16 @@ Alle Formeln stehen in `ProjectionMath.cs` und in `projection.hlsl`. Die Unit-Te
 - **Pause:** Audio-Ausgabe gibt Stille aus und die Clock steht. Die Brille rendert weiter das aktuelle Frame mit Kopf-Tracking.
 
 ## OpenXR-Lebenszyklus
-- Instance → System (HMD) → Session (D3D11-Binding) → Reference Space `LOCAL` → Swapchains je Auge.
-- Session-State-Events sauber behandeln (`READY` → Begin, `STOPPING` → End, `LOSS_PENDING`/`EXITING` → Aufräumen und Reconnect-Versuch mit Backoff).
-- Bei nicht verfügbarer Runtime oder Brille: Status melden, die App läuft weiter (Debug-Viewport möglich).
+- Loader (`openxr_loader.dll`, Khronos) → Instance mit `XR_KHR_D3D11_enable` → System (HMD) → Grafik-Anforderungen (Adapter-LUID) → D3D11-Device auf diesem Adapter (einmal je App-Lauf) → Session (D3D11-Binding) → Reference Space `LOCAL` → Swapchain je Auge (sRGB, empfohlene Größe).
+- Session-State-Events laufen durch `XrSessionLifecycle` (`READY` → Begin, `STOPPING` → End, `LOSS_PENDING`/`EXITING` → Aufräumen und nach 2 s neu verbinden). Beim Beenden der App: `xrRequestExitSession`, höchstens 2 s warten.
+- Fehlt das Runtime (`XR_ERROR_RUNTIME_UNAVAILABLE`) oder die Brille (`XR_ERROR_FORM_FACTOR_UNAVAILABLE`): Status melden, alle 2 s erneut versuchen, die App läuft weiter. Ohne Brille wird nur `xrGetSystem` wiederholt, die Instance bleibt.
+- Pro Frame: `xrWaitFrame` → `xrBeginFrame` → `xrLocateViews` → je Auge Bild holen, rendern, freigeben → `xrEndFrame` mit einem Projection-Layer. Gerendert wird nur mit der Orientierung, im Layer steht die gemessene Pose.
 
 ## `--no-xr` Debug-Modus
 - Statt OpenXR wird ein Auge in ein eigenes Vorschaufenster gerendert (Win32, eigener Render-Thread, Flip-Model-Swapchain mit Frame-Latency-Handle). Das Fenster hat keinen Schließen-Knopf und schließt mit dem Operatorfenster.
 - Maus: Ziehen greift das Bild (Ziehen nach rechts = Blick nach links), Mausrad = vertikales Sichtfeld 30–120° (Start 75°), Pos1 = zurücksetzen.
 - Standbild per `--image <Pfad>` (M1: Equirect 360 Mono). Dekodiert wird mit WIC über WPF in `Orbivo.App`, die Textur entsteht auf einem Worker-Thread und wird dem Render-Thread übergeben.
-- Gleiche Shader und Pipeline, nur andere View/Projection-Quelle (`IViewSource`-Abstraktion: `OpenXrViewSource`, `MouseViewSource`).
+- Gleiche Shader und Pipeline (`PanoramaRenderer`), nur andere View/Projection-Quelle: im Vorschaufenster `MouseViewSource` (`IViewSource`), in der Brille liefert `xrLocateViews` die Ansichten direkt im Frame-Loop (sie hängen an der vorhergesagten Anzeigezeit).
 - Damit lassen sich Decoding, Formate, Sync und UI ohne Brille entwickeln.
 
 ## Sidecar-Format (`<Dateiname mit Endung>.orbivo.json`, z. B. `clip.mp4.orbivo.json`)
