@@ -29,7 +29,7 @@ Neue NuGet-Pakete oder native DLLs **nur nach Rückfrage**. Versionen in `Direct
 2. **Audio-Callback blockiert nie** und allokiert nicht.
 3. Kommunikation UI → Player nur über Befehle (`Channel<PlayerCommand>`); Player → UI nur über Status-Snapshots/Events. Kein direkter Zugriff der UI auf Player-Interna.
 4. **Audio-Clock ist Master-Clock.** Gibt es keinen Ton, übernimmt eine Systemuhr.
-5. Video-Frames bleiben auf der GPU (NV12/P010-Texturen). Keine CPU-Kopie von Videoframes.
+5. Video-Frames bleiben auf der GPU (NV12/P010-Texturen). Keine CPU-Kopie von Videoframes. Einzige Ausnahme: Software-Decoder-Fallback (siehe `docs/DECISIONS.md`).
 6. 360°-Inhalt wird **nur rotatorisch** dargestellt (Kopfposition ignorieren, Inhalt im Unendlichen).
 7. In der Brille wird **nie** UI angezeigt. Nur Video, Schwarzbild oder Fade.
 8. Projektionsmathematik existiert zweimal: HLSL-Shader und C#-Referenz (`ProjectionMath`) mit Unit-Tests. **Beide immer synchron ändern.**
@@ -47,8 +47,11 @@ Neue NuGet-Pakete oder native DLLs **nur nach Rückfrage**. Versionen in `Direct
 dotnet build Orbivo.sln -c Debug
 dotnet test
 dotnet run --project src/Orbivo.App -- --no-xr      # Desktop-Debug-Viewport ohne Brille
+powershell -NoProfile -ExecutionPolicy Bypass -File native\fetch-native.ps1   # native DLLs laden
+python tools/testmedia/make_testmedia.py            # Testbilder, -videos, Ambisonics-Test
 ```
 FFmpeg- und Steam-Audio-DLLs liegen in `native/win-x64/` (nicht im Git, siehe `native/README.md`) und werden beim Build ins Ausgabeverzeichnis kopiert.
+Gearbeitet wird auf dem Branch `development`.
 
 ## Was du (Claude) nicht prüfen kannst
 Du siehst die Brille nicht und hörst den Ton nicht. Deshalb:

@@ -21,7 +21,7 @@ Wiedergabe von 360°/180°-Videos mit räumlichem Ton auf einer Varjo XR-3 für 
 - F10 Projektionen: Equirectangular 360°, Equirectangular 180° (VR180), Cubemap (Layout konfigurierbar), Equi-Angular Cubemap (EAC), Fisheye (Sichtfeld, Mittelpunkt und Radius konfigurierbar)
 - F11 Stereo-Layouts: Mono, Side-by-Side, Top-Bottom, jeweils mit Option „Augen tauschen“
 - F12 Automatische Erkennung über Spherical-Video-Metadaten (`sv3d`/`st3d`), falls vorhanden
-- F13 Manuelle Übersteuerung im UI, die als **Sidecar-Datei** neben dem Video gespeichert wird (`<video>.orbivo.json`) und beim nächsten Laden Vorrang vor den Metadaten hat
+- F13 Manuelle Übersteuerung im UI, die als **Sidecar-Datei** neben dem Video gespeichert wird (`<Dateiname mit Endung>.orbivo.json`, z. B. `clip.mp4.orbivo.json`) und beim nächsten Laden Vorrang vor den Metadaten hat
 - F14 Ausrichtungs-Offset (Yaw/Pitch/Roll) pro Video, ebenfalls im Sidecar
 - F15 Video: mindestens 8K, H.264/HEVC/AV1, 8 und 10 Bit, Farbräume BT.709 und BT.2020 (SDR)
 

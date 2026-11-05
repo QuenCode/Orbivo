@@ -69,7 +69,7 @@ Alle Formeln stehen in `ProjectionMath.cs` und in `projection.hlsl`. Die Unit-Te
 
 ## Audio
 - Der Decoder liefert Audio als float32. Die Kanal-Layout-Erkennung bestimmt den `AudioMode`: `Stereo`, `Surround`, `Ambisonics(order, convention)`, `Binaural`.
-- **Ambisonics:** FuMa wird beim Dekodieren nach AmbiX (ACN/SN3D) konvertiert. Danach Rotation mit der **inversen** Kopforientierung (inkl. Recenter und Video-Yaw-Offset) und binaurales Decoding über Steam Audio (`iplAmbisonicsBinauralEffect` oder Rotation und Decode).
+- **Ambisonics:** FuMa wird beim Dekodieren nach AmbiX (ACN/SN3D) konvertiert. Steam Audio rechnet intern in N3D, daher vor der Verarbeitung SN3D → N3D (`iplAudioBufferConvertAmbisonics`). Danach Rotation mit der **inversen** Kopforientierung (inkl. Recenter und Video-Yaw-Offset) und binaurales Decoding über Steam Audio (`iplAmbisonicsBinauralEffect` oder Rotation und Decode).
 - **Surround:** virtuelle Lautsprecher (Steam Audio `iplBinauralEffect` pro Kanal, oder Ambisonics-Encode und Decode).
 - **Binaural/Stereo:** durchreichen.
 - Koordinatenumrechnung OpenXR ↔ Steam Audio an genau einer Stelle (`AudioCoordinates.cs`), mit Unit-Test.
@@ -92,7 +92,8 @@ Alle Formeln stehen in `ProjectionMath.cs` und in `projection.hlsl`. Die Unit-Te
 - Gleiche Shader und Pipeline, nur andere View/Projection-Quelle (`IViewSource`-Abstraktion: `OpenXrViewSource`, `MouseViewSource`).
 - Damit lassen sich Decoding, Formate, Sync und UI ohne Brille entwickeln.
 
-## Sidecar-Format (`<video>.orbivo.json`)
+## Sidecar-Format (`<Dateiname mit Endung>.orbivo.json`, z. B. `clip.mp4.orbivo.json`)
+Vorzeichen von `orientationOffsetDeg`: wie überall Rechte-Hand-Regel, Yaw positiv = Drehung nach links.
 ```json
 {
   "version": 1,
