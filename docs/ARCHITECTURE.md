@@ -10,18 +10,21 @@ src/
     Commands/                  # PlayerCommand-Records (Play, Pause, Seek, SetFormat, Blackout, Recenter …)
     Playback/                  # PlayerController (Zustandsautomat), PlaybackClock
     Formats/                   # ProjectionType, StereoLayout, AudioMode, VideoFormatSettings, Sidecar-Laden/Speichern
-    Math/                      # ProjectionMath (C#-Referenz der Shader-Mathematik), Quaternion-Helfer
+    Geometry/                  # ProjectionMath (C#-Referenz der Shader-Mathematik), OrientationMath, FovAngles
     Logging/                   # SessionLogger (CSV), EventLog
     Status/                    # PlayerStatus-Snapshot (immutable record)
   Orbivo.Media/           # FFmpeg: Demux, Decode (D3D11VA), Metadaten (sv3d/st3d, Kanal-Layout)
   Orbivo.Audio/           # NAudio-Ausgabe, Ringpuffer, AmbisonicsProcessor (Steam Audio), Kanal-Konvertierung
   Orbivo.Xr/              # OpenXR-Session, D3D11-Device, Swapchains, Renderer, HLSL-Shader
-    Shaders/                   # *.hlsl, zur Buildzeit oder beim Start kompiliert
-    DebugViewport/             # Rendering in ein Win32/WPF-Fenster für --no-xr
+    Graphics/                  # D3D11-Device, Shader-Compiler
+    Rendering/                 # PanoramaRenderer, IViewSource, Standbild-Textur
+    Shaders/                   # *.hlsl, als Ressource eingebettet und beim Start kompiliert
+    DebugViewport/             # Vorschaufenster für --no-xr (eigenes Win32-Fenster, eigener Render-Thread)
   Orbivo.App/             # WPF-Operator-UI (MVVM), Composition Root, Settings
 tests/
   Orbivo.Core.Tests/      # ProjectionMath, Sidecar, Clock/Sync-Logik, Zustandsautomat
   Orbivo.Audio.Tests/     # Ambisonics-Konvertierungen (FuMa→AmbiX), Kanalreihenfolgen
+  Orbivo.Xr.Tests/        # Shader gegen ProjectionMath (WARP), Richtungstest mit dem Testbild, Maus-Steuerung
 tools/
   testmedia/                   # Skripte (ffmpeg + Python) zum Erzeugen von Testvideos und Test-Ambisonics
 native/
@@ -39,6 +42,7 @@ docs/
 | Audio-Decode | dekodiert, konvertiert nach float32 planar, schreibt in `AudioRingBuffer` | ja |
 | Audio-Out (WASAPI) | Callback: Ringpuffer → AmbisonicsProcessor → Ausgabe; zählt ausgegebene Samples (Audio-Clock) | **nein** |
 | XR-Render | OpenXR-Frame-Loop, wählt Frame nach Clock, rendert beide Augen, liest Head-Pose | **nein** |
+| Vorschau-Render (nur `--no-xr`) | Fensternachrichten und Maus, rendert ein Auge ins Vorschaufenster | **nein** (wartet nur auf den Frame-Takt der Swapchain, wie `xrWaitFrame`) |
 
 Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC-Queues, `Volatile`/`Interlocked`). Die aktuelle Kopforientierung wird vom Render-Thread als atomarer Snapshot (Quaternion und Zeitstempel) publiziert und vom Audio-Callback gelesen.
 
@@ -47,11 +51,13 @@ Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC
 2. Der Decoder liefert `AV_PIX_FMT_D3D11`-Frames (Texture-Array und Index).
 3. Pro Frame `CopySubresourceRegion` in eine eigene Ring-Textur (NV12 oder P010). Das entkoppelt vom Decoder-Pool, und das Frame kann sofort freigegeben werden.
 4. Der Shader sampelt Luma-SRV (R8/R16) und Chroma-SRV (R8G8/R16G16) und konvertiert YUV→RGB (Matrix und Range aus dem Stream: BT.709/BT.2020, limited/full).
-5. **Gamma-Falle:** Bei einem `*_SRGB`-Swapchain-Format muss der Shader linearisiert ausgeben. Alternativ nicht-sRGB-Format. Die Entscheidung in `DECISIONS.md` festhalten.
+5. **Gamma-Falle:** Bei einem `*_SRGB`-Swapchain-Format muss der Shader linearisiert ausgeben. Entschieden in M1 (`DECISIONS.md`): durchgehend sRGB-Views, der Shader rechnet und schreibt linear. Ab M3 linearisiert der Shader das Video nach YUV→RGB.
 
 ## Rendering
 - Pro Auge ein Fullscreen-Triangle, kein Kugel-Mesh.
 - Der Pixel-Shader rekonstruiert die Blickrichtung: `dir = normalize(mul(invViewRotProj, ndc))`. Die View-Matrix enthält **nur Rotation** (Kopf-Orientierung × Recenter-Offset × Video-Offset). Projektionsmatrix aus dem asymmetrischen `XrFovf`.
+- Umgesetzt als drei Vektoren statt Matrix (`ViewRayBasis`): `dir = normalize(ndc.x·R + ndc.y·U + C)`. C# berechnet R, U und C, der Shader bekommt sie im Constant Buffer. So teilen C# und HLSL kein Matrix-Layout.
+- Abtastung ohne Mipmaps (`SampleLevel 0`), U wiederholend, V am Rand begrenzt. Dadurch gibt es hinten bei ±180° keine Naht.
 - `dir → (u,v)` je nach `ProjectionType`. Danach Stereo-Layout anwenden (Halbbild je Auge wählen).
 - Außerhalb des gültigen Bereichs (z. B. Rückseite bei VR180, außerhalb des Fisheye-Kreises) wird Schwarz ausgegeben.
 - Fade und Blackout sind ein Multiplikator im Shader. Bei vollem Blackout kann das Video-Sampling entfallen.
@@ -88,7 +94,9 @@ Alle Formeln stehen in `ProjectionMath.cs` und in `projection.hlsl`. Die Unit-Te
 - Bei nicht verfügbarer Runtime oder Brille: Status melden, die App läuft weiter (Debug-Viewport möglich).
 
 ## `--no-xr` Debug-Modus
-- Statt OpenXR wird ein Auge in ein Desktop-Fenster gerendert. Kopfrotation per Maus-Drag, FOV per Mausrad.
+- Statt OpenXR wird ein Auge in ein eigenes Vorschaufenster gerendert (Win32, eigener Render-Thread, Flip-Model-Swapchain mit Frame-Latency-Handle). Das Fenster hat keinen Schließen-Knopf und schließt mit dem Operatorfenster.
+- Maus: Ziehen greift das Bild (Ziehen nach rechts = Blick nach links), Mausrad = vertikales Sichtfeld 30–120° (Start 75°), Pos1 = zurücksetzen.
+- Standbild per `--image <Pfad>` (M1: Equirect 360 Mono). Dekodiert wird mit WIC über WPF in `Orbivo.App`, die Textur entsteht auf einem Worker-Thread und wird dem Render-Thread übergeben.
 - Gleiche Shader und Pipeline, nur andere View/Projection-Quelle (`IViewSource`-Abstraktion: `OpenXrViewSource`, `MouseViewSource`).
 - Damit lassen sich Decoding, Formate, Sync und UI ohne Brille entwickeln.
 

@@ -47,6 +47,7 @@ Neue NuGet-Pakete oder native DLLs **nur nach Rückfrage**. Versionen in `Direct
 dotnet build Orbivo.sln -c Debug
 dotnet test
 dotnet run --project src/Orbivo.App -- --no-xr      # Desktop-Debug-Viewport ohne Brille
+dotnet run --project src/Orbivo.App -- --no-xr --image tools/testmedia/out/equirect360_mono_4096x2048.png
 powershell -NoProfile -ExecutionPolicy Bypass -File native\fetch-native.ps1   # native DLLs laden
 python tools/testmedia/make_testmedia.py            # Testbilder, -videos, Ambisonics-Test
 ```
@@ -56,6 +57,7 @@ Gearbeitet wird auf dem Branch `development`.
 ## Was du (Claude) nicht prüfen kannst
 Du siehst die Brille nicht und hörst den Ton nicht. Deshalb:
 - Alles, was ohne Brille testbar ist, über `--no-xr`-Modus, Unit-Tests und Log-Ausgaben absichern.
+- `Orbivo.Xr.Tests` rendert auf WARP und legt die Ansichten als PNG unter `tests/Orbivo.Xr.Tests/bin/…/rendered-views/` ab. Die kann man sich ansehen.
 - Am Ende jedes Meilensteins eine kurze **Checkliste für den manuellen Test mit Brille** ausgeben (was tun, was sollte man sehen/hören).
 - Bei Unsicherheit über Orientierung oder Vorzeichen (Projektion, Ambisonics-Rotation): Testmaterial aus `tools/testmedia` nutzen und den Menschen gezielt fragen, was er sieht oder hört.
 
