@@ -129,6 +129,63 @@ public sealed class FramePacerTests
         Assert.True(waited < TimeSpan.FromSeconds(4), $"waited {waited}");
     }
 
+    [Fact]
+    public void NewGeneration_HoldsTheCurrentFrameUntilANewOneIsDue()
+    {
+        using var pacer = new FramePacer(6);
+        PublishFrames(pacer, 4, firstPts: 0);
+        Assert.True(pacer.TrySelect(0, out int held, out long heldPts));
+
+        // Seek to 10 s: the queued frames 1 to 3 are outdated.
+        pacer.BeginGeneration();
+        long target = 300 * FrameTicks;
+        Assert.True(pacer.TrySelect(target, out int stillHeld, out long stillHeldPts));
+        Assert.Equal((held, heldPts), (stillHeld, stillHeldPts));
+        Assert.Equal(3, pacer.DiscardedFrames);
+        Assert.Equal(0, pacer.DroppedFrames);
+        Assert.Equal(0, pacer.ReadyCount);
+
+        PublishFrames(pacer, 2, firstPts: target);
+        Assert.True(pacer.TrySelect(target, out _, out long pts));
+        Assert.Equal(target, pts);
+        Assert.Equal(0, pacer.DroppedFrames);
+    }
+
+    [Fact]
+    public void NewGeneration_FreesTheOutdatedSlots()
+    {
+        using var pacer = new FramePacer(4);
+        PublishFrames(pacer, 4, firstPts: 0);
+        Assert.False(pacer.TryAcquireFreeSlot(out _));
+
+        pacer.BeginGeneration();
+        pacer.DiscardStaleFrames();
+
+        int free = 0;
+        while (pacer.TryAcquireFreeSlot(out _))
+        {
+            free++;
+        }
+
+        Assert.Equal(4, free);
+        Assert.Equal(0, pacer.ShownFrames);
+    }
+
+    [Fact]
+    public void NewGeneration_FramesOfTheNewGenerationStay()
+    {
+        using var pacer = new FramePacer(6);
+        PublishFrames(pacer, 2, firstPts: 0);
+        pacer.BeginGeneration();
+        PublishFrames(pacer, 2, firstPts: 100 * FrameTicks);
+
+        pacer.DiscardStaleFrames();
+        Assert.Equal(2, pacer.ReadyCount);
+        Assert.False(pacer.TrySelect(FrameTicks, out _, out _), "old frames must not be shown");
+        Assert.True(pacer.TrySelect(100 * FrameTicks, out _, out long pts));
+        Assert.Equal(100 * FrameTicks, pts);
+    }
+
     private static void PublishFrames(FramePacer pacer, int count, long firstPts)
     {
         for (int i = 0; i < count; i++)

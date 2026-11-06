@@ -9,8 +9,14 @@ namespace Orbivo.Core.Playback;
 /// </summary>
 /// <remarks>
 /// Producer (decode thread): <see cref="TryAcquireFreeSlot"/>, <see cref="WaitForFreeSlot"/>, <see cref="Publish"/>.
-/// Consumer (render thread): <see cref="TrySelect"/>. It never blocks and never allocates (CLAUDE.md rule 1).
+/// Consumer (render thread): <see cref="TrySelect"/> and <see cref="DiscardStaleFrames"/>. They never block and never
+/// allocate (CLAUDE.md rule 1).
 /// The slot returned by <see cref="TrySelect"/> stays reserved for the render thread until a newer frame replaces it.
+/// <para>
+/// Seeking: the producer starts a new generation with <see cref="BeginGeneration"/>. The consumer then frees all queued
+/// frames of older generations without showing them, but keeps showing its current frame until a frame of the new
+/// generation is due. So the headset holds the last picture during a seek instead of going black.
+/// </para>
 /// </remarks>
 public sealed class FramePacer : IDisposable
 {
@@ -26,6 +32,10 @@ public sealed class FramePacer : IDisposable
     // Counters: written by one thread each, read anywhere.
     private long _droppedFrames;
     private long _shownFrames;
+    private long _discardedFrames;
+
+    // Written by the producer, read by the consumer.
+    private int _generation;
 
     public FramePacer(int slotCount)
     {
@@ -50,6 +60,12 @@ public sealed class FramePacer : IDisposable
     /// <summary>Frames that were shown at least once.</summary>
     public long ShownFrames => Volatile.Read(ref _shownFrames);
 
+    /// <summary>Frames of an older generation freed without being shown (seek). Not counted as dropped.</summary>
+    public long DiscardedFrames => Volatile.Read(ref _discardedFrames);
+
+    /// <summary>Generation of the frames the producer publishes now.</summary>
+    public int Generation => Volatile.Read(ref _generation);
+
     /// <summary>Producer: takes a slot to decode into. Returns false if all slots are in use.</summary>
     public bool TryAcquireFreeSlot(out int slot)
     {
@@ -62,10 +78,25 @@ public sealed class FramePacer : IDisposable
         _slotFreed.WaitOne(timeout);
     }
 
+    /// <summary>Producer: wakes <see cref="WaitForFreeSlot"/> early, e.g. because a seek was requested.</summary>
+    public void WakeProducer()
+    {
+        _slotFreed.Set();
+    }
+
+    /// <summary>
+    /// Producer: all frames published so far are outdated (seek). The consumer frees them on its next call;
+    /// frames published from now on belong to the new generation.
+    /// </summary>
+    public void BeginGeneration()
+    {
+        Volatile.Write(ref _generation, _generation + 1);
+    }
+
     /// <summary>Producer: the frame in <paramref name="slot"/> is complete and has presentation time <paramref name="ptsTicks"/>.</summary>
     public void Publish(int slot, long ptsTicks)
     {
-        if (!_ready.TryEnqueue(new QueuedFrame(slot, ptsTicks)))
+        if (!_ready.TryEnqueue(new QueuedFrame(slot, ptsTicks, _generation)))
         {
             // Cannot happen: there are only SlotCount slots and the ready queue holds at least that many.
             throw new InvalidOperationException("Frame queue overflow.");
@@ -80,7 +111,7 @@ public sealed class FramePacer : IDisposable
     /// <returns>False until the first frame is due.</returns>
     public bool TrySelect(long targetTicks, out int slot, out long ptsTicks)
     {
-        bool freed = false;
+        bool freed = DiscardStale();
         while (_ready.TryPeek(out QueuedFrame next) && next.PtsTicks <= targetTicks)
         {
             _ready.TryDequeue(out _);
@@ -121,10 +152,37 @@ public sealed class FramePacer : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Consumer: frees queued frames of older generations without selecting anything. Called instead of
+    /// <see cref="TrySelect"/> while the video is hidden, so a seek in that state does not wait for free slots forever.
+    /// </summary>
+    public void DiscardStaleFrames()
+    {
+        if (DiscardStale())
+        {
+            _slotFreed.Set();
+        }
+    }
+
     public void Dispose()
     {
         _slotFreed.Dispose();
     }
 
-    private readonly record struct QueuedFrame(int Slot, long PtsTicks);
+    private bool DiscardStale()
+    {
+        int generation = Volatile.Read(ref _generation);
+        bool freed = false;
+        while (_ready.TryPeek(out QueuedFrame next) && next.Generation < generation)
+        {
+            _ready.TryDequeue(out _);
+            _free.TryEnqueue(next.Slot);
+            Volatile.Write(ref _discardedFrames, _discardedFrames + 1);
+            freed = true;
+        }
+
+        return freed;
+    }
+
+    private readonly record struct QueuedFrame(int Slot, long PtsTicks, int Generation);
 }

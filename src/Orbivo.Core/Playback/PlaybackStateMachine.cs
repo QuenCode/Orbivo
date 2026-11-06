@@ -51,6 +51,12 @@ public enum PlaybackActions
 
     /// <summary>Show black in the headset.</summary>
     HideVideo = 1 << 7,
+
+    /// <summary>
+    /// Jump to the requested position: hold the clock at the target and let the decoder decode from there.
+    /// The headset keeps the last frame until the new one is ready.
+    /// </summary>
+    SeekMedia = 1 << 8,
 }
 
 /// <summary>
@@ -64,10 +70,18 @@ public sealed class PlaybackStateMachine
     /// <summary>True if Play was pressed while the video was still opening; playback starts as soon as it is ready.</summary>
     public bool PlayPending { get; private set; }
 
+    /// <summary>
+    /// True while a seek runs in <see cref="PlaybackState.Ready"/>, <see cref="PlaybackState.Playing"/> or
+    /// <see cref="PlaybackState.Paused"/>. The clock stands still until <see cref="SeekCompleted"/>.
+    /// A seek while opening is part of opening and does not set this.
+    /// </summary>
+    public bool Seeking { get; private set; }
+
     public PlaybackActions Open()
     {
         State = PlaybackState.Opening;
         PlayPending = false;
+        Seeking = false;
         return PlaybackActions.OpenMedia | PlaybackActions.HideVideo | PlaybackActions.StopClock;
     }
 
@@ -80,10 +94,12 @@ public sealed class PlaybackStateMachine
                 return PlaybackActions.None;
             case PlaybackState.Ready:
                 State = PlaybackState.Playing;
-                return PlaybackActions.StartClock | PlaybackActions.ShowVideo;
+
+                // During a seek the clock starts once the new position is decoded (SeekCompleted).
+                return Seeking ? PlaybackActions.ShowVideo : PlaybackActions.StartClock | PlaybackActions.ShowVideo;
             case PlaybackState.Paused:
                 State = PlaybackState.Playing;
-                return PlaybackActions.ResumeClock;
+                return Seeking ? PlaybackActions.None : PlaybackActions.ResumeClock;
             case PlaybackState.Ended:
                 State = PlaybackState.Opening;
                 PlayPending = true;
@@ -99,7 +115,7 @@ public sealed class PlaybackStateMachine
         {
             case PlaybackState.Playing:
                 State = PlaybackState.Paused;
-                return PlaybackActions.PauseClock;
+                return Seeking ? PlaybackActions.None : PlaybackActions.PauseClock;
             case PlaybackState.Opening:
                 PlayPending = false;
                 return PlaybackActions.None;
@@ -117,6 +133,7 @@ public sealed class PlaybackStateMachine
             case PlaybackState.Ended:
                 State = PlaybackState.Opening;
                 PlayPending = false;
+                Seeking = false;
                 return PlaybackActions.RestartMedia | PlaybackActions.HideVideo | PlaybackActions.StopClock;
             case PlaybackState.Opening:
                 PlayPending = false;
@@ -124,6 +141,42 @@ public sealed class PlaybackStateMachine
             default:
                 return PlaybackActions.None;
         }
+    }
+
+    /// <summary>
+    /// The operator jumps to another position. Ready stays black, Playing and Paused keep their state,
+    /// Ended becomes Paused. While opening, the decoder starts at the target instead of the beginning.
+    /// </summary>
+    public PlaybackActions Seek()
+    {
+        switch (State)
+        {
+            case PlaybackState.Opening:
+                return PlaybackActions.SeekMedia;
+            case PlaybackState.Ready:
+            case PlaybackState.Playing:
+            case PlaybackState.Paused:
+                Seeking = true;
+                return PlaybackActions.SeekMedia;
+            case PlaybackState.Ended:
+                State = PlaybackState.Paused;
+                Seeking = true;
+                return PlaybackActions.SeekMedia;
+            default:
+                return PlaybackActions.None;
+        }
+    }
+
+    /// <summary>The frames at the seek target are decoded.</summary>
+    public PlaybackActions SeekCompleted()
+    {
+        if (!Seeking)
+        {
+            return PlaybackActions.None;
+        }
+
+        Seeking = false;
+        return State == PlaybackState.Playing ? PlaybackActions.ResumeClock : PlaybackActions.None;
     }
 
     /// <summary>The first frames are decoded.</summary>
@@ -148,7 +201,7 @@ public sealed class PlaybackStateMachine
     /// <summary>The last frame has been due for its full duration.</summary>
     public PlaybackActions EndReached()
     {
-        if (State != PlaybackState.Playing)
+        if (State != PlaybackState.Playing || Seeking)
         {
             return PlaybackActions.None;
         }
@@ -167,6 +220,7 @@ public sealed class PlaybackStateMachine
 
         State = PlaybackState.Failed;
         PlayPending = false;
+        Seeking = false;
         return PlaybackActions.HideVideo | PlaybackActions.StopClock;
     }
 }

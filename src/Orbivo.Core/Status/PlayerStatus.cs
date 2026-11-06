@@ -49,6 +49,18 @@ public sealed record PlayerStatus(
     long DroppedFrames,
     string? Error)
 {
+    /// <summary>True while the player jumps to a new position; the headset holds the last frame meanwhile.</summary>
+    public bool Seeking { get; init; }
+
+    /// <summary>True if the current video plays in a loop (F3).</summary>
+    public bool Loop { get; init; }
+
+    /// <summary>Blackout and fade of the headset output (F5).</summary>
+    public OutputLevel Output { get; init; } = OutputLevel.Picture;
+
+    /// <summary>Nominal duration of one frame, <see cref="TimeSpan.Zero"/> if no video is open. For frame steps.</summary>
+    public TimeSpan FrameDuration { get; init; }
+
     public static PlayerStatus Empty { get; } =
         new(PlaybackState.NoMedia, null, TimeSpan.Zero, TimeSpan.Zero, null, 0, 0, 0, 0, null);
 }
