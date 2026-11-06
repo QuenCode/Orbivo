@@ -149,9 +149,9 @@ internal sealed unsafe class XrSession : IDisposable
 
         // The frame is chosen for the moment the headset shows it, not for now (docs/ARCHITECTURE.md, "Synchronisation").
         // Taken even when nothing is rendered, so the decoder keeps pace with the playback clock.
+        long displayTimestamp = _instance.ToStopwatchTimestamp(frameState.PredictedDisplayTime);
         VideoFrame frame = default;
-        bool hasVideoFrame = video is not null
-            && video.TryGetFrame(_instance.ToStopwatchTimestamp(frameState.PredictedDisplayTime), out frame);
+        bool hasVideoFrame = video is not null && video.TryGetFrame(displayTimestamp, out frame);
 
         bool headTracked = false;
         Quaternion head = Quaternion.Identity;
@@ -162,7 +162,8 @@ internal sealed unsafe class XrSession : IDisposable
             if (_hasValidViews)
             {
                 PanoramaSource source = hasVideoFrame ? PanoramaSource.FromVideo(frame) : PanoramaSource.FromImage(image, imageLayout);
-                RenderEyes(renderer, source);
+                // Blackout and fade (F5) also cover the still image; without a player there is nothing to dim.
+                RenderEyes(renderer, source, video?.GetOutputBrightness(displayTimestamp) ?? 1f);
                 layerCount = 1;
                 head = Quaternion.Slerp(
                     XrConversions.ToQuaternion(_views[0].Pose.Orientation),
@@ -261,7 +262,7 @@ internal sealed unsafe class XrSession : IDisposable
         return valid;
     }
 
-    private void RenderEyes(PanoramaRenderer renderer, in PanoramaSource source)
+    private void RenderEyes(PanoramaRenderer renderer, in PanoramaSource source, float brightness)
     {
         for (int eye = 0; eye < XrInstance.EyeCount; eye++)
         {
@@ -270,7 +271,7 @@ internal sealed unsafe class XrSession : IDisposable
 
             XrSwapchain swapchain = _swapchains[eye];
             var target = swapchain.AcquireImage();
-            renderer.Render(_device.ImmediateContext, target, swapchain.Width, swapchain.Height, parameters, (Eye)eye, source);
+            renderer.Render(_device.ImmediateContext, target, swapchain.Width, swapchain.Height, parameters, (Eye)eye, source, brightness);
             swapchain.ReleaseImage();
 
             // The submitted pose is the located one: the compositor reprojects from it. Content is at infinity,

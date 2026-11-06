@@ -36,6 +36,13 @@ public interface IVideoFrameSource
     bool TryGetFrame(long displayTimestamp, out VideoFrame frame);
 
     /// <summary>
+    /// Brightness of the headset output at <paramref name="displayTimestamp"/> for blackout and fade (F5):
+    /// 0 = black, 1 = full picture, as a linear-light factor for the shader. Applies to video and still image.
+    /// Render thread only: never blocks, never allocates.
+    /// </summary>
+    float GetOutputBrightness(long displayTimestamp);
+
+    /// <summary>
     /// The render thread stops rendering for a while (headset session ended). Lets the player free GPU memory
     /// of frames it no longer needs. Render thread only.
     /// </summary>

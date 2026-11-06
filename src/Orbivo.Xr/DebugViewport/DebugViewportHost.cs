@@ -223,10 +223,12 @@ public sealed class DebugViewportHost : IDisposable
 
             // Flip model with one frame of latency: the frame appears with the next vertical blank, close enough to now.
             IVideoFrameSource? video = Volatile.Read(ref _videoSource);
-            PanoramaSource source = video is not null && video.TryGetFrame(Stopwatch.GetTimestamp(), out VideoFrame videoFrame)
+            long displayTimestamp = Stopwatch.GetTimestamp();
+            PanoramaSource source = video is not null && video.TryGetFrame(displayTimestamp, out VideoFrame videoFrame)
                 ? PanoramaSource.FromVideo(videoFrame)
                 : PanoramaSource.FromImage(image, (StereoLayout)Volatile.Read(ref _imageLayout));
-            renderer.Render(_device.ImmediateContext, swapChain.RenderTargetView, swapChain.Width, swapChain.Height, views[0], Eye.Left, source);
+            float brightness = video?.GetOutputBrightness(displayTimestamp) ?? 1f;
+            renderer.Render(_device.ImmediateContext, swapChain.RenderTargetView, swapChain.Width, swapChain.Height, views[0], Eye.Left, source, brightness);
             swapChain.Present();
 
             frame++;

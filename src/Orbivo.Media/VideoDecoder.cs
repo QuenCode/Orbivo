@@ -24,6 +24,12 @@ namespace Orbivo.Media;
 /// Video only until M5: demux and decode share one thread. Other streams are discarded by the demuxer.
 /// Disposing stops the thread and frees FFmpeg; the <see cref="Queue"/> is owned by the caller, because the render
 /// thread may still be showing one of its frames.
+/// <para>
+/// Seeking (<see cref="RequestSeek"/>) runs on the decode thread: it starts a new frame generation in the
+/// <see cref="FramePacer"/>, seeks to the keyframe before the target and decodes forward, dropping frames that end
+/// before the target without copying them. The first published frame is the one shown at the target. After the end of
+/// the file the thread waits for a seek instead of ending.
+/// </para>
 /// </remarks>
 internal sealed unsafe class VideoDecoder : IDisposable
 {
@@ -58,6 +64,19 @@ internal sealed unsafe class VideoDecoder : IDisposable
     private string? _errorMessage;
     private double _decodedFramesPerSecond;
     private VideoStreamInfo _info;
+    private int _activeSeekId;
+    private long _activeSeekTargetTicks;
+    private int _framesInGeneration;
+    private long _generationStartTicks = long.MinValue;
+
+    // Written by the control thread, read by the decode thread. Id 0 = decode from the start after opening.
+    private int _requestedSeekId;
+    private long _requestedSeekTicks;
+
+    // Decode thread only.
+    private bool _inputFinished;
+    private long _skipUntilTicks = long.MinValue;
+    private long _lastSkippedPtsTicks = long.MinValue;
 
     private VideoDecoder(
         string path,
@@ -125,8 +144,50 @@ internal sealed unsafe class VideoDecoder : IDisposable
     /// </summary>
     public double DecodedFramesPerSecond => Volatile.Read(ref _decodedFramesPerSecond);
 
-    /// <summary>True once enough frames are buffered to start playback smoothly (or the video is shorter).</summary>
-    public bool IsPrerolled => EndOfStream || (HasFirstFrame && Queue.Pacer.ReadyCount >= Math.Max(1, Queue.Pacer.SlotCount - 2));
+    /// <summary>
+    /// True once the latest seek (or the start after opening) is handled and enough of its frames are buffered to play
+    /// smoothly, or the file ended. Then <see cref="StartTicks"/> is valid.
+    /// </summary>
+    public bool IsPrerolled
+    {
+        get
+        {
+            // The decode thread resets the generation counters before it publishes the seek id it handles.
+            if (Volatile.Read(ref _activeSeekId) != Volatile.Read(ref _requestedSeekId))
+            {
+                return false;
+            }
+
+            return EndOfStream || Volatile.Read(ref _framesInGeneration) >= PrerollFrames;
+        }
+    }
+
+    /// <summary>
+    /// Media time the clock starts from after opening or seeking: the seek target, or the first frame if that comes later
+    /// (start of the file, gaps in variable frame rate video). Valid once <see cref="IsPrerolled"/>.
+    /// </summary>
+    public long StartTicks
+    {
+        get
+        {
+            long start = Volatile.Read(ref _generationStartTicks);
+            long target = Volatile.Read(ref _activeSeekTargetTicks);
+            return start == long.MinValue ? Math.Max(0, target) : Math.Max(start, target);
+        }
+    }
+
+    private int PrerollFrames => Math.Max(1, Queue.Pacer.SlotCount - 2);
+
+    /// <summary>
+    /// Control thread: decode from <paramref name="targetTicks"/> (media time, like <see cref="FirstPtsTicks"/>) on.
+    /// Replaces a seek that is still running. <see cref="IsPrerolled"/> tells when it is done.
+    /// </summary>
+    public void RequestSeek(long targetTicks)
+    {
+        Volatile.Write(ref _requestedSeekTicks, targetTicks);
+        Interlocked.Increment(ref _requestedSeekId);
+        Queue.Pacer.WakeProducer();
+    }
 
     /// <summary>
     /// Opens <paramref name="path"/> and prepares hardware decoding on <paramref name="device"/>. Throws
@@ -330,16 +391,39 @@ internal sealed unsafe class VideoDecoder : IDisposable
 
     private void DecodeLoop()
     {
-        bool inputFinished = false;
         long windowStart = Stopwatch.GetTimestamp();
         int framesInWindow = 0;
+        Volatile.Write(ref _activeSeekTargetTicks, long.MinValue);
 
         while (!_stopRequested)
         {
+            int requestedSeek = Volatile.Read(ref _requestedSeekId);
+            if (requestedSeek != _activeSeekId)
+            {
+                BeginSeek(requestedSeek);
+                continue;
+            }
+
+            if (EndOfStream)
+            {
+                // Wait for a seek or the end of the decoder; RequestSeek wakes this up.
+                Queue.Pacer.WaitForFreeSlot(SlotWaitTimeout);
+                continue;
+            }
+
             int result = ffmpeg.avcodec_receive_frame(_codec, _frame);
             if (result == 0)
             {
-                if (!DeliverFrame())
+                long pts = PresentationTicks();
+                if (pts + FrameDurationTicks <= _skipUntilTicks)
+                {
+                    // Seeking: this frame ends before the target and is never shown.
+                    _lastSkippedPtsTicks = pts;
+                    ffmpeg.av_frame_unref(_frame);
+                    continue;
+                }
+
+                if (!DeliverFrame(pts))
                 {
                     return;
                 }
@@ -358,9 +442,21 @@ internal sealed unsafe class VideoDecoder : IDisposable
 
             if (result == ffmpeg.AVERROR_EOF)
             {
+                if (Volatile.Read(ref _framesInGeneration) == 0 && _lastSkippedPtsTicks != long.MinValue)
+                {
+                    // The seek target lies after the last frame: show the last frame instead.
+                    _logger.LogInformation(
+                        "Seek target {Target} is after the last frame of {Path}; showing the last frame ({Last}).",
+                        TimeSpan.FromTicks(_skipUntilTicks),
+                        _path,
+                        TimeSpan.FromTicks(_lastSkippedPtsTicks));
+                    SeekStream(_lastSkippedPtsTicks);
+                    continue;
+                }
+
                 Volatile.Write(ref _endOfStream, 1);
                 _logger.LogInformation("Decoded all frames of {Path} (last at {Last}).", _path, TimeSpan.FromTicks(LastPtsTicks));
-                return;
+                continue;
             }
 
             if (result != FFmpegError.TryAgain)
@@ -368,7 +464,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
                 FFmpegError.Check(result, "avcodec_receive_frame");
             }
 
-            if (inputFinished)
+            if (_inputFinished)
             {
                 throw new InvalidOperationException("The decoder wants more input after the end of the file.");
             }
@@ -378,7 +474,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
             {
                 // Drain: the decoder returns the remaining frames, then AVERROR_EOF.
                 FFmpegError.Check(ffmpeg.avcodec_send_packet(_codec, null), "avcodec_send_packet (drain)");
-                inputFinished = true;
+                _inputFinished = true;
                 continue;
             }
 
@@ -397,8 +493,41 @@ internal sealed unsafe class VideoDecoder : IDisposable
         }
     }
 
-    /// <summary>Waits for a free slot, copies the decoded frame into it and publishes it. Returns false when stopping.</summary>
-    private bool DeliverFrame()
+    /// <summary>
+    /// Starts seek <paramref name="seekId"/>: outdates all queued frames, resets the counters of the generation and seeks
+    /// the demuxer. The counters are reset before the id is published, so <see cref="IsPrerolled"/> never sees old values.
+    /// </summary>
+    private void BeginSeek(int seekId)
+    {
+        long target = Math.Max(0, Volatile.Read(ref _requestedSeekTicks));
+        Queue.Pacer.BeginGeneration();
+        Volatile.Write(ref _framesInGeneration, 0);
+        Volatile.Write(ref _generationStartTicks, long.MinValue);
+        Volatile.Write(ref _endOfStream, 0);
+        Volatile.Write(ref _activeSeekTargetTicks, target);
+        _logger.LogInformation("Seek {Id} in {Path} to {Target}.", seekId, _path, TimeSpan.FromTicks(target));
+        SeekStream(target);
+        Volatile.Write(ref _activeSeekId, seekId);
+    }
+
+    /// <summary>Seeks the demuxer to the keyframe at or before <paramref name="targetTicks"/> and skips up to the target.</summary>
+    private void SeekStream(long targetTicks)
+    {
+        long timestamp = ffmpeg.av_rescale_q(targetTicks, MediaTimeBase, _streamTimeBase) + _streamStartPts;
+        FFmpegError.Check(
+            ffmpeg.av_seek_frame(_format, _streamIndex, timestamp, ffmpeg.AVSEEK_FLAG_BACKWARD),
+            "av_seek_frame");
+        ffmpeg.avcodec_flush_buffers(_codec);
+        _inputFinished = false;
+        _skipUntilTicks = targetTicks;
+        _lastSkippedPtsTicks = long.MinValue;
+    }
+
+    /// <summary>
+    /// Waits for a free slot, copies the decoded frame into it and publishes it. Returns false when stopping.
+    /// A seek requested meanwhile drops the frame (returns true without publishing).
+    /// </summary>
+    private bool DeliverFrame(long pts)
     {
         try
         {
@@ -415,6 +544,11 @@ internal sealed unsafe class VideoDecoder : IDisposable
                     return false;
                 }
 
+                if (Volatile.Read(ref _requestedSeekId) != _activeSeekId)
+                {
+                    return true;
+                }
+
                 Queue.Pacer.WaitForFreeSlot(SlotWaitTimeout);
             }
 
@@ -424,14 +558,21 @@ internal sealed unsafe class VideoDecoder : IDisposable
             }
 
             CopyToSlot(slot);
-            long pts = PresentationTicks();
             if (!HasFirstFrame)
             {
                 Volatile.Write(ref _firstPtsTicks, pts);
             }
 
+            if (Volatile.Read(ref _generationStartTicks) == long.MinValue)
+            {
+                Volatile.Write(ref _generationStartTicks, pts);
+            }
+
+            // Skipping ends with the first published frame; later frames are all shown, even after a gap.
+            _skipUntilTicks = long.MinValue;
             Volatile.Write(ref _lastPtsTicks, pts);
             Queue.Pacer.Publish(slot, pts);
+            Volatile.Write(ref _framesInGeneration, _framesInGeneration + 1);
             return true;
         }
         finally

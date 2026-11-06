@@ -15,8 +15,9 @@ public sealed record VideoPlayerOptions(StereoLayout? StereoLayout, int FrameSlo
 
 /// <summary>
 /// The player control thread (docs/ARCHITECTURE.md, "Threads"): reads <see cref="PlayerCommand"/>s from the UI,
-/// drives the <see cref="PlaybackStateMachine"/>, opens and closes decoders, runs the clock and publishes
-/// <see cref="PlayerStatus"/> snapshots. The render thread gets its frames through <see cref="IVideoFrameSource"/>.
+/// drives the <see cref="PlaybackStateMachine"/>, opens and closes decoders, seeks, runs the clock, the loop and the
+/// output fader (blackout and fade, F5), and publishes <see cref="PlayerStatus"/> snapshots. The render thread gets
+/// its frames and the output brightness through <see cref="IVideoFrameSource"/>.
 /// </summary>
 /// <remarks>
 /// Every opened video has its own <see cref="VideoFrameQueue"/>. A new queue is handed to the render thread through
@@ -36,10 +37,13 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     private readonly Thread _thread;
     private readonly SystemPlaybackClock _clock = new();
     private readonly PlaybackStateMachine _machine = new();
+    private readonly OutputFader _fader = new();
     private readonly List<VideoFrameQueue> _retiredQueues = [];
 
     private VideoDecoder? _decoder;
     private string? _filePath;
+    private bool _loop;
+    private TimeSpan _seekPosition;
     private volatile bool _stopRequested;
     private bool _disposed;
 
@@ -89,7 +93,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         VideoDecoder? decoder = Volatile.Read(ref _statusDecoder);
         if (decoder is null)
         {
-            return status;
+            return status with { Output = _fader.Current };
         }
 
         long position = Math.Max(0, _clock.MediaTicks - Math.Max(0, decoder.HasFirstFrame ? decoder.FirstPtsTicks : 0));
@@ -107,6 +111,8 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             QueuedFrames = pacer.ReadyCount,
             QueueCapacity = pacer.SlotCount,
             DroppedFrames = pacer.DroppedFrames,
+            Output = _fader.Current,
+            FrameDuration = TimeSpan.FromTicks(decoder.FrameDurationTicks),
         };
     }
 
@@ -114,13 +120,27 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     public bool TryGetFrame(long displayTimestamp, out VideoFrame frame)
     {
         VideoFrameQueue? queue = AcquireRenderQueue();
-        if (queue is null || !_videoVisible)
+        if (queue is null)
         {
             frame = default;
             return false;
         }
 
+        if (!_videoVisible)
+        {
+            // Black until Play, but a seek in that state needs the outdated frames' slots.
+            queue.Pacer.DiscardStaleFrames();
+            frame = default;
+            return false;
+        }
+
         return queue.TryGetFrame(_clock.GetMediaTicks(displayTimestamp), out frame);
+    }
+
+    /// <inheritdoc />
+    public float GetOutputBrightness(long displayTimestamp)
+    {
+        return _fader.GetBrightness(displayTimestamp);
     }
 
     /// <inheritdoc />
@@ -236,6 +256,11 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             case OpenMediaCommand open:
                 _filePath = Path.GetFullPath(open.Path);
                 Apply(_machine.Open());
+                if (open.Play)
+                {
+                    Apply(_machine.Play());
+                }
+
                 break;
             case PlayCommand:
                 Apply(_machine.Play());
@@ -243,8 +268,25 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             case PauseCommand:
                 Apply(_machine.Pause());
                 break;
+            case StopCommand when _machine.State == PlaybackState.Ready:
+                // Already black; Stop still means "back to the beginning" after a seek.
+                SeekTo(TimeSpan.Zero);
+                break;
             case StopCommand:
                 Apply(_machine.Stop());
+                break;
+            case SeekCommand seek:
+                SeekTo(seek.Position);
+                break;
+            case SetLoopCommand loop:
+                _loop = loop.Enabled;
+                PublishStatus(error: null);
+                break;
+            case SetBlackoutCommand blackout:
+                _fader.SetBlackout(blackout.Black);
+                break;
+            case FadeCommand fade:
+                _fader.FadeTo(fade.ToBlack, fade.Duration);
                 break;
             default:
                 _logger.LogWarning("Unknown command {Command} ignored.", command);
@@ -274,21 +316,60 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
                 return;
             }
 
-            _logger.LogInformation("Video ready: {Frames} frames buffered.", decoder.Queue.Pacer.ReadyCount);
+            _logger.LogInformation(
+                "Video ready at {Start}: {Frames} frames buffered.",
+                TimeSpan.FromTicks(decoder.StartTicks - decoder.FirstPtsTicks),
+                decoder.Queue.Pacer.ReadyCount);
+            _clock.Stop(decoder.StartTicks);
             Apply(_machine.MediaReady());
             return;
         }
 
+        if (_machine.Seeking && decoder.IsPrerolled)
+        {
+            _logger.LogInformation(
+                "Seek done at {Start} (requested {Target}).",
+                TimeSpan.FromTicks(decoder.StartTicks - decoder.FirstPtsTicks),
+                _seekPosition);
+            _clock.Stop(decoder.StartTicks);
+            Apply(_machine.SeekCompleted());
+            return;
+        }
+
         if (_machine.State == PlaybackState.Playing
+            && !_machine.Seeking
             && decoder.EndOfStream
             && _clock.MediaTicks >= decoder.LastPtsTicks + decoder.FrameDurationTicks)
         {
             _logger.LogInformation(
-                "End of video reached. Frames shown: {Shown}, dropped: {Dropped}.",
+                "End of video reached. Frames shown: {Shown}, dropped: {Dropped}. Loop: {Loop}.",
                 decoder.Queue.Pacer.ShownFrames,
-                decoder.Queue.Pacer.DroppedFrames);
-            Apply(_machine.EndReached());
+                decoder.Queue.Pacer.DroppedFrames,
+                _loop);
+            if (_loop)
+            {
+                SeekTo(TimeSpan.Zero);
+            }
+            else
+            {
+                Apply(_machine.EndReached());
+            }
         }
+    }
+
+    /// <summary>Jumps to <paramref name="position"/> (from the start of the video), clamped to the video.</summary>
+    private void SeekTo(TimeSpan position)
+    {
+        VideoDecoder? decoder = _decoder;
+        if (decoder is null)
+        {
+            return;
+        }
+
+        long frame = decoder.FrameDurationTicks;
+        long latest = decoder.Duration > TimeSpan.Zero ? Math.Max(0, decoder.Duration.Ticks - frame) : long.MaxValue;
+        _seekPosition = TimeSpan.FromTicks(Math.Clamp(position.Ticks, 0, latest));
+        Apply(_machine.Seek());
     }
 
     private void Apply(PlaybackActions actions)
@@ -308,9 +389,19 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             OpenDecoder();
         }
 
-        if (actions.HasFlag(PlaybackActions.StartClock) && _decoder is not null)
+        if (actions.HasFlag(PlaybackActions.SeekMedia) && _decoder is { } decoder)
         {
-            _clock.Start(_decoder.FirstPtsTicks);
+            // The clock stands at the target until the decoder has the frames there (SeekCompleted / MediaReady).
+            long origin = decoder.HasFirstFrame ? decoder.FirstPtsTicks : 0;
+            long target = origin + _seekPosition.Ticks;
+            _clock.Stop(target);
+            decoder.RequestSeek(target);
+        }
+
+        if (actions.HasFlag(PlaybackActions.StartClock))
+        {
+            // The clock stands at the first frame (or the seek target) since the video became ready.
+            _clock.Resume();
         }
 
         if (actions.HasFlag(PlaybackActions.PauseClock))
@@ -416,6 +507,10 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             0,
             0,
             0,
-            error ?? (_machine.State == PlaybackState.Failed ? Volatile.Read(ref _status).Error : null)));
+            error ?? (_machine.State == PlaybackState.Failed ? Volatile.Read(ref _status).Error : null))
+        {
+            Seeking = _machine.Seeking,
+            Loop = _loop,
+        });
     }
 }

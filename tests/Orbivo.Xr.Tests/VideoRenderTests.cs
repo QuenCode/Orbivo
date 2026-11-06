@@ -1,6 +1,7 @@
 using System.Numerics;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Playback;
 using Orbivo.Xr.Rendering;
 using Orbivo.Xr.Tests.Support;
 using Vortice.DXGI;
@@ -120,6 +121,25 @@ public sealed class VideoRenderTests(WarpRendererFixture fixture) : IClassFixtur
         Assert.True(mismatches.Count == 0, $"{mismatches.Count} pixels differ, first: {string.Join("; ", mismatches.Take(5))}");
     }
 
+    [Theory]
+    [InlineData(1f)]
+    [InlineData(0.5f)]
+    [InlineData(0.1f)]
+    [InlineData(0f)]
+    public void FadeLevel_DimsTheVideoInPerceivedBrightness(float level)
+    {
+        // Full white (Y = 235): the output in sRGB code values follows the fade level roughly linearly (F5).
+        var color = new VideoColorFormat(YuvMatrix.Bt709, YuvRange.Limited, ColorPrimaries.Bt709, 8);
+        using var frame = new TestVideoFrame(fixture.Device, 64, 32, 8, (235, 128, 128), (235, 128, 128), StereoLayout.Mono, color);
+
+        byte[] bgra = RenderSrgb(PanoramaSource.FromVideo(frame.Frame), Eye.Left, TestViews.Create(0, 0, 60, 1), OutputFader.ToLinear(level));
+
+        float expected = VideoColor.LinearToSrgb(OutputFader.ToLinear(level)) * 255f;
+        Vector3 actual = CenterPixel(bgra);
+        Assert.True(MathF.Abs(actual.X - expected) <= 1.5f, $"level {level}: expected {expected}, shader {actual}");
+        Assert.True(MathF.Abs((level * 255f) - actual.X) <= 0.06f * 255f, $"level {level} should look like {level * 100}% white, got {actual.X}");
+    }
+
     [Fact]
     public void RenderVideo_DoesNotAllocate()
     {
@@ -149,10 +169,10 @@ public sealed class VideoRenderTests(WarpRendererFixture fixture) : IClassFixtur
         fixture.Renderer.Render(fixture.Device.ImmediateContext, target.RenderTargetView, Size, Size, view, Eye.Right, source);
     }
 
-    private byte[] RenderSrgb(in PanoramaSource source, Eye eye, ViewParameters view)
+    private byte[] RenderSrgb(in PanoramaSource source, Eye eye, ViewParameters view, float brightness = 1f)
     {
         using var target = new OffscreenTarget(fixture.Device, Size, Size, Format.B8G8R8A8_UNorm_SRgb);
-        fixture.Renderer.Render(fixture.Device.ImmediateContext, target.RenderTargetView, Size, Size, view, eye, source);
+        fixture.Renderer.Render(fixture.Device.ImmediateContext, target.RenderTargetView, Size, Size, view, eye, source, brightness);
         return target.Read<byte>();
     }
 
