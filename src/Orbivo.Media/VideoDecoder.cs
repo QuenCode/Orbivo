@@ -16,19 +16,20 @@ using VideoColor = Orbivo.Core.Formats.VideoColor;
 namespace Orbivo.Media;
 
 /// <summary>
-/// One opened video file: FFmpeg demux and D3D11VA hardware decoding on the shared device, on its own decode thread
-/// (docs/ARCHITECTURE.md, "Datenfluss Video"). Each decoded frame is copied into a slot of <see cref="Queue"/>
-/// and released at once, so the decoder's own texture pool never runs dry.
+/// D3D11VA hardware decoding of the video stream on the shared device, on its own decode thread
+/// (docs/ARCHITECTURE.md, "Datenfluss Video"). Packets come from the video queue of a <see cref="MediaDemuxer"/>.
+/// Each decoded frame is copied into a slot of <see cref="Queue"/> and released at once, so the decoder's own
+/// texture pool never runs dry.
 /// </summary>
 /// <remarks>
-/// Video only until M5: demux and decode share one thread. Other streams are discarded by the demuxer.
 /// Disposing stops the thread and frees FFmpeg; the <see cref="Queue"/> is owned by the caller, because the render
 /// thread may still be showing one of its frames.
 /// <para>
-/// Seeking (<see cref="RequestSeek"/>) runs on the decode thread: it starts a new frame generation in the
-/// <see cref="FramePacer"/>, seeks to the keyframe before the target and decodes forward, dropping frames that end
-/// before the target without copying them. The first published frame is the one shown at the target. After the end of
-/// the file the thread waits for a seek instead of ending.
+/// Seeking: the demuxer jumps and puts a seek marker into the queue. At the marker the decoder starts a new frame
+/// generation in the <see cref="FramePacer"/>, flushes the codec and decodes forward, dropping frames that end before
+/// the target without copying them. The first published frame is the one shown at the target. Packets and frames
+/// between the seek request and its marker belong to the old position and are dropped. After the end of the file the
+/// thread waits for a seek instead of ending.
 /// </para>
 /// </remarks>
 internal sealed unsafe class VideoDecoder : IDisposable
@@ -48,15 +49,14 @@ internal sealed unsafe class VideoDecoder : IDisposable
     private readonly ILogger _logger;
     private readonly ID3D11DeviceContext _context;
     private readonly string _path;
-    private readonly int _streamIndex;
+    private readonly MediaDemuxer _demuxer;
+    private readonly bool _ownsDemuxer;
     private readonly AVRational _streamTimeBase;
     private readonly long _streamStartPts;
     private readonly VideoColorFormat _colorHint;
     private readonly Thread _thread;
 
-    private AVFormatContext* _format;
     private AVCodecContext* _codec;
-    private AVPacket* _packet;
     private AVFrame* _frame;
     private ID3D11Texture2D? _decoderTexture;
 
@@ -75,34 +75,30 @@ internal sealed unsafe class VideoDecoder : IDisposable
     private int _framesInGeneration;
     private long _generationStartTicks = long.MinValue;
 
-    // Written by the control thread, read by the decode thread. Id 0 = decode from the start after opening.
-    private int _requestedSeekId;
-    private long _requestedSeekTicks;
-
-    // Decode thread only.
+    // Decode thread only. Seek id 0 = decode from the start after opening.
     private bool _inputFinished;
+    private bool _awaitingReseek;
     private long _skipUntilTicks = long.MinValue;
     private long _lastSkippedPtsTicks = long.MinValue;
 
     private VideoDecoder(
-        string path,
+        MediaDemuxer demuxer,
+        bool ownsDemuxer,
         VideoFrameQueue queue,
         ID3D11DeviceContext context,
-        AVFormatContext* format,
         AVCodecContext* codec,
-        int streamIndex,
         VideoStreamInfo info,
         TimeSpan duration,
         long frameDurationTicks,
         ILogger logger)
     {
-        _path = path;
+        _demuxer = demuxer;
+        _ownsDemuxer = ownsDemuxer;
+        _path = demuxer.Path;
         Queue = queue;
         _context = context;
-        _format = format;
         _codec = codec;
-        _streamIndex = streamIndex;
-        AVStream* stream = format->streams[streamIndex];
+        AVStream* stream = demuxer.Format->streams[demuxer.VideoStreamIndex];
         _streamTimeBase = stream->time_base;
         _streamStartPts = stream->start_time == ffmpeg.AV_NOPTS_VALUE ? 0 : stream->start_time;
         _colorHint = info.Color;
@@ -110,7 +106,6 @@ internal sealed unsafe class VideoDecoder : IDisposable
         Duration = duration;
         FrameDurationTicks = frameDurationTicks;
         _logger = logger;
-        _packet = ffmpeg.av_packet_alloc();
         _frame = ffmpeg.av_frame_alloc();
         _thread = new Thread(DecodeThread)
         {
@@ -141,8 +136,8 @@ internal sealed unsafe class VideoDecoder : IDisposable
     /// <summary>All frames are decoded and published.</summary>
     public bool EndOfStream => Volatile.Read(ref _endOfStream) != 0;
 
-    /// <summary>German error text for the operator if decoding failed, else null.</summary>
-    public string? ErrorMessage => Volatile.Read(ref _errorMessage);
+    /// <summary>German error text for the operator if decoding (or reading the file) failed, else null.</summary>
+    public string? ErrorMessage => Volatile.Read(ref _errorMessage) ?? _demuxer.ErrorMessage;
 
     /// <summary>
     /// Frames decoded per second, measured over about one second of wall-clock time. While the buffer is full this
@@ -159,7 +154,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
         get
         {
             // The decode thread resets the generation counters before it publishes the seek id it handles.
-            if (Volatile.Read(ref _activeSeekId) != Volatile.Read(ref _requestedSeekId))
+            if (Volatile.Read(ref _activeSeekId) != _demuxer.RequestedSeekId)
             {
                 return false;
             }
@@ -186,25 +181,25 @@ internal sealed unsafe class VideoDecoder : IDisposable
 
     /// <summary>
     /// Control thread: decode from <paramref name="targetTicks"/> (media time, like <see cref="FirstPtsTicks"/>) on.
-    /// Replaces a seek that is still running. <see cref="IsPrerolled"/> tells when it is done.
+    /// Replaces a seek that is still running. <see cref="IsPrerolled"/> tells when it is done. The seek runs in the
+    /// demuxer, so a sound decoder on the same demuxer follows it as well.
     /// </summary>
     public void RequestSeek(long targetTicks)
     {
-        Volatile.Write(ref _requestedSeekTicks, targetTicks);
-        Interlocked.Increment(ref _requestedSeekId);
+        _demuxer.RequestSeek(targetTicks);
+        Wake();
+    }
+
+    /// <summary>Wakes the decode thread if it waits for a free slot (a seek was requested at the demuxer).</summary>
+    public void Wake()
+    {
         Queue.Pacer.WakeProducer();
     }
 
     /// <summary>
-    /// Opens <paramref name="path"/> and prepares hardware decoding on <paramref name="device"/>. Throws
-    /// <see cref="MediaOpenException"/> if the file cannot be played. Call <see cref="Start"/> afterwards.
+    /// Opens <paramref name="path"/> with a demuxer of its own (video only) and prepares hardware decoding.
+    /// Throws <see cref="MediaOpenException"/> if the file cannot be played. Call <see cref="Start"/> afterwards.
     /// </summary>
-    /// <param name="path">Video file.</param>
-    /// <param name="device">The shared, multithread-protected D3D11 device of the renderer.</param>
-    /// <param name="context">Its immediate context (used for the copy into the frame ring).</param>
-    /// <param name="layoutOverride">Stereo layout chosen by the operator, or null to guess from the size.</param>
-    /// <param name="slotCount">Number of frame textures.</param>
-    /// <param name="logger">Receives open details and errors.</param>
     public static VideoDecoder Open(
         string path,
         ID3D11Device device,
@@ -213,43 +208,50 @@ internal sealed unsafe class VideoDecoder : IDisposable
         int slotCount,
         ILogger logger)
     {
-        ArgumentNullException.ThrowIfNull(path);
+        MediaDemuxer demuxer = MediaDemuxer.Open(path, withAudio: false, logger);
+        try
+        {
+            return Open(demuxer, ownsDemuxer: true, device, context, layoutOverride, slotCount, logger);
+        }
+        catch
+        {
+            demuxer.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Prepares hardware decoding of the video stream of <paramref name="demuxer"/> on <paramref name="device"/>.
+    /// Throws <see cref="MediaOpenException"/> if the video cannot be played. Call <see cref="Start"/> afterwards.
+    /// </summary>
+    /// <param name="demuxer">The opened file, not started yet.</param>
+    /// <param name="ownsDemuxer">True: this decoder starts and disposes the demuxer.</param>
+    /// <param name="device">The shared, multithread-protected D3D11 device of the renderer.</param>
+    /// <param name="context">Its immediate context (used for the copy into the frame ring).</param>
+    /// <param name="layoutOverride">Stereo layout chosen by the operator, or null to guess from the size.</param>
+    /// <param name="slotCount">Number of frame textures.</param>
+    /// <param name="logger">Receives open details and errors.</param>
+    public static VideoDecoder Open(
+        MediaDemuxer demuxer,
+        bool ownsDemuxer,
+        ID3D11Device device,
+        ID3D11DeviceContext context,
+        StereoLayout? layoutOverride,
+        int slotCount,
+        ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(demuxer);
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(logger);
 
-        if (!File.Exists(path))
-        {
-            throw new MediaOpenException($"Video file {path} not found.", "Datei nicht gefunden");
-        }
-
-        AVFormatContext* format = null;
+        string path = demuxer.Path;
+        AVFormatContext* format = demuxer.Format;
         AVCodecContext* codec = null;
         VideoFrameQueue? queue = null;
         try
         {
-            int result = ffmpeg.avformat_open_input(&format, path, null, null);
-            if (result < 0)
-            {
-                throw new MediaOpenException(
-                    $"avformat_open_input({path}) failed: {FFmpegError.Describe(result)}.",
-                    "Datei kann nicht geöffnet werden (kein bekanntes Videoformat?)");
-            }
-
-            FFmpegError.Check(ffmpeg.avformat_find_stream_info(format, null), "avformat_find_stream_info");
-
-            int streamIndex = ffmpeg.av_find_best_stream(format, AVMediaType.AVMEDIA_TYPE_VIDEO, -1, -1, null, 0);
-            if (streamIndex < 0)
-            {
-                throw new MediaOpenException($"{path} contains no video stream.", "Datei enthält kein Video");
-            }
-
-            for (int i = 0; i < format->nb_streams; i++)
-            {
-                format->streams[i]->discard = i == streamIndex ? AVDiscard.AVDISCARD_DEFAULT : AVDiscard.AVDISCARD_ALL;
-            }
-
-            AVStream* stream = format->streams[streamIndex];
+            AVStream* stream = format->streams[demuxer.VideoStreamIndex];
             AVCodecParameters* parameters = stream->codecpar;
             string codecName = ffmpeg.avcodec_get_name(parameters->codec_id) ?? "unknown";
             string profile = ffmpeg.avcodec_profile_name(parameters->codec_id, parameters->profile) ?? string.Empty;
@@ -326,28 +328,32 @@ internal sealed unsafe class VideoDecoder : IDisposable
                 Marshal.PtrToStringUTF8((nint)decoder->name));
 
             queue = new VideoFrameQueue(device, slotCount, layout);
-            var result2 = new VideoDecoder(path, queue, context, format, codec, streamIndex, info, duration, frameDurationTicks, logger);
-            format = null;
+            var result = new VideoDecoder(demuxer, ownsDemuxer, queue, context, codec, info, duration, frameDurationTicks, logger);
             codec = null;
-            return result2;
+            return result;
         }
         catch (FFmpegException exception)
         {
             throw new MediaOpenException(exception.Message, "Video kann nicht dekodiert werden (Details im Log)", exception);
         }
-        catch (Exception) when (FreeOnFailure(ref format, ref codec, queue))
+        catch (Exception) when (FreeOnFailure(ref codec, queue))
         {
             throw;
         }
         finally
         {
-            FreeOnFailure(ref format, ref codec, null);
+            FreeOnFailure(ref codec, null);
         }
     }
 
+    /// <summary>Starts the decode thread (and the demuxer, if this decoder owns it).</summary>
     public void Start()
     {
         _thread.Start();
+        if (_ownsDemuxer)
+        {
+            _demuxer.Start();
+        }
     }
 
     public void Dispose()
@@ -359,6 +365,8 @@ internal sealed unsafe class VideoDecoder : IDisposable
 
         _disposed = true;
         _stopRequested = true;
+        _demuxer.VideoQueue.WakeConsumer();
+        Queue.Pacer.WakeProducer();
         if (_thread.IsAlive && !_thread.Join(TimeSpan.FromSeconds(5)))
         {
             // Freeing FFmpeg under a running decode call would crash; leak instead and say so.
@@ -371,15 +379,13 @@ internal sealed unsafe class VideoDecoder : IDisposable
         AVFrame* frame = _frame;
         ffmpeg.av_frame_free(&frame);
         _frame = null;
-        AVPacket* packet = _packet;
-        ffmpeg.av_packet_free(&packet);
-        _packet = null;
         AVCodecContext* codec = _codec;
         ffmpeg.avcodec_free_context(&codec);
         _codec = null;
-        AVFormatContext* format = _format;
-        ffmpeg.avformat_close_input(&format);
-        _format = null;
+        if (_ownsDemuxer)
+        {
+            _demuxer.Dispose();
+        }
     }
 
     private void DecodeThread()
@@ -403,17 +409,11 @@ internal sealed unsafe class VideoDecoder : IDisposable
 
         while (!_stopRequested)
         {
-            int requestedSeek = Volatile.Read(ref _requestedSeekId);
-            if (requestedSeek != _activeSeekId)
+            bool seekPending = _demuxer.RequestedSeekId != _activeSeekId;
+            if (seekPending || _awaitingReseek || EndOfStream)
             {
-                BeginSeek(requestedSeek);
-                continue;
-            }
-
-            if (EndOfStream)
-            {
-                // Wait for a seek or the end of the decoder; RequestSeek wakes this up.
-                Queue.Pacer.WaitForFreeSlot(SlotWaitTimeout);
+                // Only the queue matters now: the marker of the next seek. Packets before it are dropped.
+                TakeInput(seekPending);
                 continue;
             }
 
@@ -450,13 +450,14 @@ internal sealed unsafe class VideoDecoder : IDisposable
             {
                 if (Volatile.Read(ref _framesInGeneration) == 0 && _lastSkippedPtsTicks != long.MinValue)
                 {
-                    // The seek target lies after the last frame: show the last frame instead.
+                    // The seek target lies after the last frame: read again and show the last frame instead.
                     _logger.LogInformation(
                         "Seek target {Target} is after the last frame of {Path}; showing the last frame ({Last}).",
                         TimeSpan.FromTicks(_skipUntilTicks),
                         _path,
                         TimeSpan.FromTicks(_lastSkippedPtsTicks));
-                    SeekStream(_lastSkippedPtsTicks);
+                    _awaitingReseek = true;
+                    _demuxer.RequestVideoReseek(_activeSeekId, _lastSkippedPtsTicks);
                     continue;
                 }
 
@@ -475,54 +476,71 @@ internal sealed unsafe class VideoDecoder : IDisposable
                 throw new InvalidOperationException("The decoder wants more input after the end of the file.");
             }
 
-            result = ffmpeg.av_read_frame(_format, _packet);
-            if (result == ffmpeg.AVERROR_EOF)
-            {
-                // Drain: the decoder returns the remaining frames, then AVERROR_EOF.
-                FFmpegError.Check(ffmpeg.avcodec_send_packet(_codec, null), "avcodec_send_packet (drain)");
-                _inputFinished = true;
-                continue;
-            }
-
-            FFmpegError.Check(result, "av_read_frame");
-            try
-            {
-                if (_packet->stream_index == _streamIndex)
-                {
-                    FFmpegError.Check(ffmpeg.avcodec_send_packet(_codec, _packet), "avcodec_send_packet");
-                }
-            }
-            finally
-            {
-                ffmpeg.av_packet_unref(_packet);
-            }
+            TakeInput(seekPending: false);
         }
     }
 
     /// <summary>
-    /// Starts seek <paramref name="seekId"/>: outdates all queued frames, resets the counters of the generation and seeks
-    /// the demuxer. The counters are reset before the id is published, so <see cref="IsPrerolled"/> never sees old values.
+    /// Takes the next entry of the video queue (waits a little if there is none) and acts on it. While
+    /// <paramref name="seekPending"/>, packets and end markers belong to the old position and are dropped.
     /// </summary>
-    private void BeginSeek(int seekId)
+    private void TakeInput(bool seekPending)
     {
-        long target = Math.Max(0, Volatile.Read(ref _requestedSeekTicks));
+        if (!_demuxer.VideoQueue.TryDequeue(SlotWaitTimeout, out PacketEntry entry))
+        {
+            return;
+        }
+
+        try
+        {
+            bool current = !seekPending && !_awaitingReseek && !EndOfStream;
+            switch (entry.Kind)
+            {
+                case PacketEntryKind.Packet when current && !_inputFinished:
+                    FFmpegError.Check(ffmpeg.avcodec_send_packet(_codec, entry.Packet), "avcodec_send_packet");
+                    break;
+                case PacketEntryKind.Seek:
+                    BeginSeek(entry.SeekId, entry.TargetTicks);
+                    break;
+                case PacketEntryKind.Reseek when _awaitingReseek && entry.SeekId == _activeSeekId:
+                    _awaitingReseek = false;
+                    FlushCodec(entry.TargetTicks);
+                    break;
+                case PacketEntryKind.End when current && !_inputFinished:
+                    // Drain: the decoder returns the remaining frames, then AVERROR_EOF.
+                    FFmpegError.Check(ffmpeg.avcodec_send_packet(_codec, null), "avcodec_send_packet (drain)");
+                    _inputFinished = true;
+                    break;
+            }
+        }
+        finally
+        {
+            PacketQueue.Free(entry);
+        }
+    }
+
+    /// <summary>
+    /// Starts seek <paramref name="seekId"/> at its marker: outdates all queued frames, resets the counters of the
+    /// generation and flushes the codec. The counters are reset before the id is published, so
+    /// <see cref="IsPrerolled"/> never sees old values.
+    /// </summary>
+    private void BeginSeek(int seekId, long targetTicks)
+    {
+        long target = Math.Max(0, targetTicks);
         Queue.Pacer.BeginGeneration();
         Volatile.Write(ref _framesInGeneration, 0);
         Volatile.Write(ref _generationStartTicks, long.MinValue);
         Volatile.Write(ref _endOfStream, 0);
         Volatile.Write(ref _activeSeekTargetTicks, target);
         _logger.LogInformation("Seek {Id} in {Path} to {Target}.", seekId, _path, TimeSpan.FromTicks(target));
-        SeekStream(target);
+        _awaitingReseek = false;
+        FlushCodec(target);
         Volatile.Write(ref _activeSeekId, seekId);
     }
 
-    /// <summary>Seeks the demuxer to the keyframe at or before <paramref name="targetTicks"/> and skips up to the target.</summary>
-    private void SeekStream(long targetTicks)
+    /// <summary>The demuxer has jumped to the keyframe at or before <paramref name="targetTicks"/>: skip up to the target.</summary>
+    private void FlushCodec(long targetTicks)
     {
-        long timestamp = ffmpeg.av_rescale_q(targetTicks, MediaTimeBase, _streamTimeBase) + _streamStartPts;
-        FFmpegError.Check(
-            ffmpeg.av_seek_frame(_format, _streamIndex, timestamp, ffmpeg.AVSEEK_FLAG_BACKWARD),
-            "av_seek_frame");
         ffmpeg.avcodec_flush_buffers(_codec);
         _inputFinished = false;
         _skipUntilTicks = targetTicks;
@@ -550,7 +568,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
                     return false;
                 }
 
-                if (Volatile.Read(ref _requestedSeekId) != _activeSeekId)
+                if (_demuxer.RequestedSeekId != _activeSeekId)
                 {
                     return true;
                 }
@@ -638,6 +656,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
         _context.CopySubresourceRegion(Queue.GetTexture(slot), 0, 0, 0, 0, _decoderTexture, arrayIndex, box);
     }
 
+    /// <summary>Media time of the frame: ticks from the start of the video stream (<see cref="MediaDemuxer.OriginTicks"/>).</summary>
     private long PresentationTicks()
     {
         long pts = _frame->best_effort_timestamp;
@@ -727,20 +746,13 @@ internal sealed unsafe class VideoDecoder : IDisposable
         return reference;
     }
 
-    private static bool FreeOnFailure(ref AVFormatContext* format, ref AVCodecContext* codec, VideoFrameQueue? queue)
+    private static bool FreeOnFailure(ref AVCodecContext* codec, VideoFrameQueue? queue)
     {
         if (codec is not null)
         {
             AVCodecContext* codecToFree = codec;
             ffmpeg.avcodec_free_context(&codecToFree);
             codec = null;
-        }
-
-        if (format is not null)
-        {
-            AVFormatContext* formatToClose = format;
-            ffmpeg.avformat_close_input(&formatToClose);
-            format = null;
         }
 
         queue?.Dispose();
