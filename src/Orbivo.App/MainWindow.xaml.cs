@@ -110,6 +110,7 @@ public partial class MainWindow : Window
             Key.PageDown => (viewModel.NextCommand, null),
             Key.B => (viewModel.ToggleBlackoutCommand, null),
             Key.F => (viewModel.ToggleFadeCommand, null),
+            Key.M => (viewModel.ToggleMuteCommand, null),
             _ => ((ICommand?)null, (object?)null),
         };
 

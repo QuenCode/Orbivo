@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -5,10 +6,13 @@ using System.Threading.Channels;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Orbivo.Audio.Output;
+using Orbivo.Core.Audio;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Playback;
 using Orbivo.Core.Playlists;
+using Orbivo.Core.Settings;
 using Orbivo.Core.Status;
 using Orbivo.Xr.DebugViewport;
 using Orbivo.Xr.OpenXr;
@@ -20,7 +24,8 @@ namespace Orbivo.App.ViewModels;
 /// keyboard shortcuts (F2, F60), blackout and fade (F5). Everything reaches the player as a command
 /// (CLAUDE.md rule 3); what the player does comes back through status snapshots.
 /// The status panel shows the headset connection (F40, F41), or in <c>--no-xr</c> mode the preview window, and the player.
-/// Format controls are still placeholders (M6).
+/// Format controls are still placeholders (M6). Sound (M5): output device (F24), volume and mute (F4), sound and
+/// A/V status.
 /// </summary>
 public sealed class MainViewModel : ObservableObject
 {
@@ -44,6 +49,15 @@ public sealed class MainViewModel : ObservableObject
     private readonly StatusEntry? _xrRenderEntry;
     private readonly StatusEntry _outputEntry;
     private readonly StatusEntry _playlistEntry;
+    private readonly StatusEntry _soundEntry;
+    private readonly StatusEntry _soundOutputEntry;
+    private readonly StatusEntry _avSyncEntry;
+    private readonly Func<IReadOnlyList<AudioDeviceInfo>> _listAudioDevices;
+    private AudioDeviceChoice? _selectedAudioDevice;
+    private double _volumePercent;
+    private bool _muted;
+    private bool _updatingDevices;
+    private string _audioModeText = "–";
     private readonly Stopwatch _sinceSeekSent = new();
     private DispatcherTimer? _statusTimer;
     private PlayerStatus _lastStatus = PlayerStatus.Empty;
@@ -70,12 +84,18 @@ public sealed class MainViewModel : ObservableObject
         StartupOptions options,
         IEnumerable<NativeComponentStatus> nativeComponents,
         string logFilePath,
-        ChannelWriter<PlayerCommand> commands)
+        ChannelWriter<PlayerCommand> commands,
+        AppSettings settings,
+        Func<IReadOnlyList<AudioDeviceInfo>> listAudioDevices)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(nativeComponents);
         ArgumentNullException.ThrowIfNull(commands);
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(listAudioDevices);
         _commands = commands;
+        _listAudioDevices = listAudioDevices;
+        _volumePercent = Math.Round(settings.Volume * 100);
         Playlist = new Playlist();
         ((System.Collections.Specialized.INotifyCollectionChanged)Playlist.Entries).CollectionChanged += (_, _) => OnPlaylistChanged();
 
@@ -103,6 +123,8 @@ public sealed class MainViewModel : ObservableObject
         GoToTimeCommand = new RelayCommand(GoToTime, () => CanSeek);
         ToggleBlackoutCommand = new RelayCommand(ToggleBlackout, () => _playerRunning);
         ToggleFadeCommand = new RelayCommand(ToggleFade, () => _playerRunning);
+        ToggleMuteCommand = new RelayCommand(() => Muted = !Muted);
+        RefreshAudioDevicesCommand = new RelayCommand(RefreshAudioDevices);
 
         Title = options.NoXr ? "Orbivo – Operator (ohne Brille)" : "Orbivo – Operator";
 
@@ -123,6 +145,9 @@ public sealed class MainViewModel : ObservableObject
         _decoderEntry = new StatusEntry("Decoder", "–", StatusLevel.Neutral);
         _outputEntry = new StatusEntry("Ausgabe", "Bild (kein Schwarzbild)", StatusLevel.Neutral);
         _playlistEntry = new StatusEntry("Playlist", "Leer", StatusLevel.Neutral);
+        _soundEntry = new StatusEntry("Ton", "–", StatusLevel.Neutral);
+        _soundOutputEntry = new StatusEntry("Tonausgabe", "Startet …", StatusLevel.Neutral);
+        _avSyncEntry = new StatusEntry("A/V", "–", StatusLevel.Neutral);
 
         if (options.NoXr)
         {
@@ -138,6 +163,9 @@ public sealed class MainViewModel : ObservableObject
                 _playlistEntry,
                 _videoEntry,
                 _decoderEntry,
+                _soundEntry,
+                _soundOutputEntry,
+                _avSyncEntry,
                 _viewEntry,
             ]);
         }
@@ -147,7 +175,11 @@ public sealed class MainViewModel : ObservableObject
             _sessionEntry = new StatusEntry("Session", "–", StatusLevel.Neutral);
             _xrRenderEntry = new StatusEntry("Bildausgabe", "–", StatusLevel.Neutral);
             _viewEntry = new StatusEntry("Blick (Proband)", "–", StatusLevel.Neutral);
-            entries.AddRange([_headsetEntry, _sessionEntry, _xrRenderEntry, _gpuEntry, _playbackEntry, _outputEntry, _playlistEntry, _videoEntry, _decoderEntry, _viewEntry]);
+            entries.AddRange(
+            [
+                _headsetEntry, _sessionEntry, _xrRenderEntry, _gpuEntry, _playbackEntry, _outputEntry, _playlistEntry,
+                _videoEntry, _decoderEntry, _soundEntry, _soundOutputEntry, _avSyncEntry, _viewEntry,
+            ]);
         }
 
         if (_imageEntry is not null)
@@ -162,6 +194,74 @@ public sealed class MainViewModel : ObservableObject
         entries.Add(new StatusEntry("Log-Datei", logFilePath, StatusLevel.Neutral));
 
         StatusEntries = entries;
+        FillAudioDevices(settings.AudioDeviceId);
+    }
+
+    /// <summary>The operator changed the output device; the app saves the settings.</summary>
+    public event EventHandler? SettingsChanged;
+
+    /// <summary>Settings to keep: output device and volume (not mute).</summary>
+    public AppSettings CurrentSettings => new(SelectedAudioDevice?.Id, (float)(VolumePercent / 100));
+
+    /// <summary>"Windows-Standard" and the active output devices (F24).</summary>
+    public ObservableCollection<AudioDeviceChoice> AudioDevices { get; } = [];
+
+    public AudioDeviceChoice? SelectedAudioDevice
+    {
+        get => _selectedAudioDevice;
+        set
+        {
+            if (value is null || !SetProperty(ref _selectedAudioDevice, value) || _updatingDevices)
+            {
+                return;
+            }
+
+            Send(new SetAudioDeviceCommand(value.Id));
+            SettingsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Volume in percent (F4); the player applies a loudness curve.</summary>
+    public double VolumePercent
+    {
+        get => _volumePercent;
+        set
+        {
+            if (SetProperty(ref _volumePercent, Math.Clamp(Math.Round(value), 0, 100)))
+            {
+                Send(new SetVolumeCommand((float)(_volumePercent / 100)));
+                OnPropertyChanged(nameof(VolumeText));
+            }
+        }
+    }
+
+    public string VolumeText => string.Create(CultureInfo.CurrentCulture, $"{VolumePercent:0} %");
+
+    /// <summary>Mute (F4, key M). Not kept across restarts.</summary>
+    public bool Muted
+    {
+        get => _muted;
+        set
+        {
+            if (SetProperty(ref _muted, value))
+            {
+                Send(new SetMuteCommand(value));
+                OnPropertyChanged(nameof(MuteButtonText));
+            }
+        }
+    }
+
+    public string MuteButtonText => Muted ? "Ton an (M)" : "Stumm (M)";
+
+    public IRelayCommand ToggleMuteCommand { get; }
+
+    public IRelayCommand RefreshAudioDevicesCommand { get; }
+
+    /// <summary>How the sound of the current video reaches the headphones.</summary>
+    public string AudioModeText
+    {
+        get => _audioModeText;
+        private set => SetProperty(ref _audioModeText, value);
     }
 
     public string Title { get; }
@@ -621,6 +721,40 @@ public sealed class MainViewModel : ObservableObject
         Send(new SetBlackoutCommand(!_lastStatus.Output.TowardsBlack));
     }
 
+    private void RefreshAudioDevices()
+    {
+        FillAudioDevices(SelectedAudioDevice?.Id);
+    }
+
+    /// <summary>Lists the devices again; the selection stays, also if that device is unplugged right now.</summary>
+    private void FillAudioDevices(string? selectedId)
+    {
+        _updatingDevices = true;
+        try
+        {
+            AudioDevices.Clear();
+            AudioDevices.Add(new AudioDeviceChoice(null, "Windows-Standard"));
+            foreach (AudioDeviceInfo device in _listAudioDevices())
+            {
+                AudioDevices.Add(new AudioDeviceChoice(device.Id, device.Name));
+            }
+
+            AudioDeviceChoice? selected = AudioDevices.FirstOrDefault(choice => choice.Id == selectedId);
+            if (selected is null)
+            {
+                selected = new AudioDeviceChoice(selectedId, "Gespeichertes Gerät (nicht verbunden)");
+                AudioDevices.Add(selected);
+            }
+
+            _selectedAudioDevice = selected;
+            OnPropertyChanged(nameof(SelectedAudioDevice));
+        }
+        finally
+        {
+            _updatingDevices = false;
+        }
+    }
+
     private void ToggleFade()
     {
         Send(new FadeCommand(!_lastStatus.Output.TowardsBlack, _fadeDuration));
@@ -688,6 +822,7 @@ public sealed class MainViewModel : ObservableObject
         };
         _playbackEntry.Update(stateText, stateLevel);
         ShowOutput(status);
+        ShowSound(status);
 
         VideoStreamInfo? video = status.Video;
         if (video is null)
@@ -775,6 +910,70 @@ public sealed class MainViewModel : ObservableObject
         _outputEntry.Update(
             output.Fading ? text : output.Level <= 0f ? "Schwarzbild aktiv" : "Bild (kein Schwarzbild)",
             output.Fading ? StatusLevel.Warning : output.Level <= 0f ? StatusLevel.Warning : StatusLevel.Ok);
+    }
+
+    /// <summary>Sound track, output device and A/V deviation (M5).</summary>
+    private void ShowSound(PlayerStatus status)
+    {
+        CultureInfo culture = CultureInfo.CurrentCulture;
+        AudioTrackInfo? track = status.Audio;
+        if (track is null)
+        {
+            _soundEntry.Update(status.Video is null ? "–" : "Kein Ton im Video (Systemuhr als Takt)", StatusLevel.Neutral);
+            AudioModeText = status.Video is null ? "–" : "Kein Ton";
+        }
+        else
+        {
+            AudioConversionPlan plan = track.Conversion;
+            string text = string.Create(culture, $"{track.Codec}, {plan.Describe()}");
+            _soundEntry.Update(
+                plan.IsDownmix ? text + ". Mehrkanal wird bis M7 auf Stereo gemischt" : text,
+                plan.IsDownmix ? StatusLevel.Warning : StatusLevel.Ok);
+            AudioModeText = "Stereo-Durchleitung (räumlicher Ton folgt in M7)";
+        }
+
+        AudioOutputStatus? output = status.AudioOutput;
+        if (output is null)
+        {
+            _soundOutputEntry.Update("Keine Tonausgabe", StatusLevel.Error);
+        }
+        else
+        {
+            string muted = output.Muted ? ", STUMM" : string.Empty;
+            double dropoutMs = output.SampleRate > 0 ? output.UnderrunFrames * 1000.0 / output.SampleRate : 0;
+            switch (output.State)
+            {
+                case AudioEndpointState.Active:
+                    _soundOutputEntry.Update(
+                        string.Create(
+                            culture,
+                            $"{output.DeviceName}, {output.SampleRate / 1000.0:0.#} kHz, {output.DeviceChannels} Kanäle, Latenz {output.LatencyMilliseconds:0} ms, Drift {output.DriftPpm:+0;-0;0} ppm, Aussetzer {dropoutMs:0} ms{muted}"),
+                        output.UnderrunFrames > 0 || output.Muted ? StatusLevel.Warning : StatusLevel.Ok);
+                    break;
+                case AudioEndpointState.Unavailable:
+                    _soundOutputEntry.Update(output.Message ?? "Nicht verfügbar", StatusLevel.Error);
+                    break;
+                default:
+                    _soundOutputEntry.Update("Startet …", StatusLevel.Neutral);
+                    break;
+            }
+        }
+
+        AvSyncStats sync = status.AvSync;
+        string clock = status.ClockSource == PlaybackClockSource.Audio ? "Takt: Ton" : "Takt: Systemuhr";
+        if (sync.WindowFrames == 0)
+        {
+            _avSyncEntry.Update($"– ({clock})", StatusLevel.Neutral);
+        }
+        else
+        {
+            bool inside = sync.WindowMinMs >= -AvSyncMeter.LimitMilliseconds && sync.WindowMaxMs <= AvSyncMeter.LimitMilliseconds;
+            _avSyncEntry.Update(
+                string.Create(
+                    culture,
+                    $"{sync.WindowMeanMs:+0.0;-0.0;0.0} ms ({sync.WindowMinMs:+0.0;-0.0;0.0} … {sync.WindowMaxMs:+0.0;-0.0;0.0}), seit Start {sync.TotalOutsideLimit} von {sync.TotalFrames} Bildern außerhalb ±{AvSyncMeter.LimitMilliseconds:0} ms, {clock}"),
+                inside && sync.TotalOutsideLimit == 0 ? StatusLevel.Ok : StatusLevel.Warning);
+        }
     }
 
     private static string DescribeLayout(StereoLayout layout) => layout switch

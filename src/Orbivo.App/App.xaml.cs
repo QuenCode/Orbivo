@@ -9,9 +9,11 @@ using Microsoft.Extensions.Logging;
 using Orbivo.App.Imaging;
 using Orbivo.App.ViewModels;
 using Orbivo.Audio;
+using Orbivo.Audio.Output;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Logging;
+using Orbivo.Core.Settings;
 using Orbivo.Core.Status;
 using Orbivo.Media;
 using Orbivo.Xr.DebugViewport;
@@ -36,6 +38,7 @@ public partial class App : Application
     private DebugViewportHost? _debugViewport;
     private XrHost? _xrHost;
     private VideoPlayer? _player;
+    private AudioOutput? _audioOutput;
     private StartupOptions? _options;
 
     /// <summary>Operator UI → player (CLAUDE.md rule 3).</summary>
@@ -81,7 +84,23 @@ public partial class App : Application
             OpenXrLoader.Check(nativeDirectory, _loggerFactory.CreateLogger(typeof(OpenXrLoader).FullName!)),
         ];
 
-        _viewModel = new MainViewModel(options, nativeComponents, logFilePath, _playerCommands.Writer);
+        AppSettings settings = AppSettings.Load(AppSettings.DefaultPath, out string? settingsProblem);
+        if (settingsProblem is not null)
+        {
+            _logger.LogWarning("{Path}: {Problem}", AppSettings.DefaultPath, settingsProblem);
+        }
+
+        // The sound output runs from the start (silence until a video plays), so the decoders know the device rate.
+        _audioOutput = new AudioOutput(settings.AudioDeviceId, settings.Volume, _loggerFactory.CreateLogger<AudioOutput>());
+        ILogger deviceLogger = _loggerFactory.CreateLogger(typeof(AudioDeviceCatalog).FullName!);
+        _viewModel = new MainViewModel(
+            options,
+            nativeComponents,
+            logFilePath,
+            _playerCommands.Writer,
+            settings,
+            () => AudioDeviceCatalog.ListOutputs(deviceLogger));
+        _viewModel.SettingsChanged += (_, _) => SaveSettings();
         var window = new MainWindow
         {
             DataContext = _viewModel,
@@ -110,13 +129,16 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _viewModel?.StopStatusPolling();
+        SaveSettings();
         _playerCommands.Writer.TryComplete();
 
         // Render threads first: the player frees the frames they read. Disposing the XR host releases its reference
         // to the device; the player's textures and FFmpeg keep their own references until the player is disposed.
+        // The sound output goes after the player, whose decoders write into its ring buffer.
         _xrHost?.Dispose();
         _debugViewport?.Dispose();
         _player?.Dispose();
+        _audioOutput?.Dispose();
         _graphicsDevice?.Dispose();
         _logger?.LogInformation("Orbivo exiting with code {ExitCode}.", e.ApplicationExitCode);
         ShutDownLogging();
@@ -172,7 +194,7 @@ public partial class App : Application
             return;
         }
 
-        _player = new VideoPlayer(device.Device, _playerCommands.Reader, new VideoPlayerOptions(_options?.StereoLayout), loggerFactory);
+        _player = new VideoPlayer(device.Device, _playerCommands.Reader, new VideoPlayerOptions(_options?.StereoLayout), loggerFactory, _audioOutput);
         attach(_player);
         _player.Start();
         viewModel.StartPlayerPolling(_player.GetStatus);
@@ -264,6 +286,24 @@ public partial class App : Application
             _ => "Laden fehlgeschlagen",
         };
         return reason + " (Details im Log)";
+    }
+
+    /// <summary>Keeps output device and volume for the next start (decision M5).</summary>
+    private void SaveSettings()
+    {
+        if (_viewModel is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _viewModel.CurrentSettings.Save(AppSettings.DefaultPath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            _logger?.LogWarning(exception, "Saving the settings to {Path} failed.", AppSettings.DefaultPath);
+        }
     }
 
     private void RegisterGlobalExceptionHandlers()

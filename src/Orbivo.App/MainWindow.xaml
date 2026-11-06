@@ -93,6 +93,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
           </Grid.RowDefinitions>
           <Grid.Resources>
             <Style TargetType="TextBlock">
@@ -108,8 +109,15 @@
           <TextBlock Grid.Row="3" Grid.Column="0" Text="Ausrichtung (Yaw/Pitch/Roll):" />
           <TextBlock Grid.Row="3" Grid.Column="1" Text="–" />
           <TextBlock Grid.Row="4" Grid.Column="0" Text="Audio-Modus:" />
-          <TextBlock Grid.Row="4" Grid.Column="1" Text="–" />
-          <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource PlaceholderText}"
+          <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding AudioModeText}" />
+          <TextBlock Grid.Row="5" Grid.Column="0" Text="Tonausgabe:" VerticalAlignment="Center" />
+          <DockPanel Grid.Row="5" Grid.Column="1" Margin="0,2,0,2">
+            <Button DockPanel.Dock="Right" Content="Aktualisieren" Command="{Binding RefreshAudioDevicesCommand}" Margin="6,0,0,0"
+                    ToolTip="Geräteliste neu einlesen (z. B. nach dem Einstecken eines Kopfhörers)" />
+            <ComboBox ItemsSource="{Binding AudioDevices}" SelectedItem="{Binding SelectedAudioDevice}" Focusable="False"
+                      ToolTip="Gerät für die Kopfhörer. Windows-Standard folgt dem Standardgerät; ein fest gewähltes Gerät wird nie automatisch gewechselt." />
+          </DockPanel>
+          <TextBlock Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource PlaceholderText}"
                      Margin="0,8,0,0" Text="Formateinstellungen folgen in M6. Bis dahin: Stereo-Layout per --stereo mono|tb|sbs." />
         </Grid>
       </GroupBox>
@@ -181,8 +189,12 @@
         <DockPanel Margin="0,0,0,8">
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
             <TextBlock Text="Lautstärke" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <Slider Width="120" IsEnabled="False" VerticalAlignment="Center" ToolTip="Folgt mit dem Ton (M5)" />
-            <Button Content="Stumm" IsEnabled="False" Margin="8,0,0,0" ToolTip="Folgt mit dem Ton (M5)" />
+            <Slider Width="140" VerticalAlignment="Center" Minimum="0" Maximum="100" Value="{Binding VolumePercent}"
+                    IsMoveToPointEnabled="True" Focusable="False" SmallChange="1" LargeChange="10"
+                    ToolTip="Lautstärke der Kopfhörer (nur Orbivo, nicht die Windows-Lautstärke)" />
+            <TextBlock Text="{Binding VolumeText}" Width="40" VerticalAlignment="Center" TextAlignment="Right" />
+            <ToggleButton Content="{Binding MuteButtonText}" IsChecked="{Binding Muted}" MinWidth="90" Margin="8,0,0,0" Focusable="False"
+                          ToolTip="Ton aus und wieder an, weich ohne Knacken (Taste M)" />
           </StackPanel>
           <WrapPanel>
             <Button Content="⏮ Zurück" Command="{Binding PreviousCommand}" ToolTip="Vorheriges Video (Bild↑)" />
@@ -216,7 +228,7 @@
           </WrapPanel>
         </DockPanel>
         <TextBlock Style="{StaticResource PlaceholderText}" Margin="0,8,0,0" FontStyle="Normal"
-                   Text="Tasten: Leertaste Play/Pause · ←/→ ±5 s · Shift+←/→ ±30 s · , / . Einzelbild · Bild↑/Bild↓ Video zurück/weiter · B Schwarzbild · F Fade" />
+                   Text="Tasten: Leertaste Play/Pause · ←/→ ±5 s · Shift+←/→ ±30 s · , / . Einzelbild · Bild↑/Bild↓ Video zurück/weiter · B Schwarzbild · F Fade · M Stumm" />
       </StackPanel>
     </GroupBox>
   </Grid>
