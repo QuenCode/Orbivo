@@ -11,6 +11,9 @@ internal static class TestVideos
 
     public static string MonoImage => Require("equirect360_mono_4096x2048.png");
 
+    /// <summary>10 minutes, for the A/V long test (<c>make_testmedia.py --long</c>).</summary>
+    public static string Mono4KLong => Require("equirect360_mono_4096x2048_hevc_8bit_30fps_600s.mp4");
+
     public static string OutputDirectory
     {
         get

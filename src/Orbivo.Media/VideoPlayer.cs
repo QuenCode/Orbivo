@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
+using Orbivo.Core.Audio;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Playback;
@@ -20,6 +22,11 @@ public sealed record VideoPlayerOptions(StereoLayout? StereoLayout, int FrameSlo
 /// its frames and the output brightness through <see cref="IVideoFrameSource"/>.
 /// </summary>
 /// <remarks>
+/// With a sound output (M5), a file is opened with one <see cref="MediaDemuxer"/> for a <see cref="VideoDecoder"/> and
+/// an <see cref="AudioDecoder"/>; the audio clock is the master clock then, and blackout and fade apply to the sound
+/// as well (docs/DECISIONS.md, M5).
+/// </remarks>
+/// <remarks>
 /// Every opened video has its own <see cref="VideoFrameQueue"/>. A new queue is handed to the render thread through
 /// <see cref="_publishedQueue"/>; the render thread announces the queue it uses in <see cref="_renderHazard"/>
 /// (a hazard pointer). An old queue is disposed only once the render thread no longer uses it. No locks on the
@@ -29,18 +36,32 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(20);
 
+    /// <summary>A sound track that is not ready this long after the picture does not hold up the start.</summary>
+    private static readonly TimeSpan AudioPrerollTimeout = TimeSpan.FromSeconds(2);
+
+    /// <summary>The A/V deviation goes to the log this often while playing.</summary>
+    private static readonly TimeSpan AvSyncLogInterval = TimeSpan.FromSeconds(10);
+
     private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _context;
     private readonly ChannelReader<PlayerCommand> _commands;
     private readonly VideoPlayerOptions _options;
     private readonly ILogger _logger;
     private readonly Thread _thread;
-    private readonly SystemPlaybackClock _clock = new();
+    private readonly TransportClock _clock;
+    private readonly IAudioOutput? _audio;
     private readonly PlaybackStateMachine _machine = new();
     private readonly OutputFader _fader = new();
+    private readonly AvSyncMeter _avSync = new(Stopwatch.Frequency);
     private readonly List<VideoFrameQueue> _retiredQueues = [];
 
+    private MediaDemuxer? _demuxer;
     private VideoDecoder? _decoder;
+    private AudioDecoder? _audioDecoder;
+    private long _prerollStartTimestamp;
+    private bool _audioErrorLogged;
+    private long _avSyncLoggedWindow;
+    private long _avSyncLogTimestamp;
     private string? _filePath;
     private bool _loop;
     private TimeSpan _seekPosition;
@@ -54,6 +75,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
 
     // Render thread only.
     private VideoFrameQueue? _renderQueue;
+    private long _lastShownPts = long.MinValue;
 
     // Status, written by the control thread, read by the UI.
     private PlayerStatus _status = PlayerStatus.Empty;
@@ -63,7 +85,13 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     /// <param name="commands">Commands from the operator UI.</param>
     /// <param name="options">Player settings.</param>
     /// <param name="loggerFactory">Creates the player logger.</param>
-    public VideoPlayer(ID3D11Device device, ChannelReader<PlayerCommand> commands, VideoPlayerOptions options, ILoggerFactory loggerFactory)
+    /// <param name="audio">Sound output, or null to play without sound (system timer as clock).</param>
+    public VideoPlayer(
+        ID3D11Device device,
+        ChannelReader<PlayerCommand> commands,
+        VideoPlayerOptions options,
+        ILoggerFactory loggerFactory,
+        IAudioOutput? audio = null)
     {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(commands);
@@ -74,6 +102,9 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         _commands = commands;
         _options = options;
         _logger = loggerFactory.CreateLogger<VideoPlayer>();
+        _audio = audio;
+        _clock = new TransportClock(audio);
+        audio?.SetFader(_fader);
         _thread = new Thread(ControlThread)
         {
             Name = "Orbivo player control",
@@ -89,7 +120,12 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     /// <summary>Current state for the operator UI. Any thread.</summary>
     public PlayerStatus GetStatus()
     {
-        PlayerStatus status = Volatile.Read(ref _status);
+        PlayerStatus status = Volatile.Read(ref _status) with
+        {
+            AudioOutput = _audio?.GetStatus(),
+            ClockSource = _clock.Source,
+            AvSync = _avSync.Current,
+        };
         VideoDecoder? decoder = Volatile.Read(ref _statusDecoder);
         if (decoder is null)
         {
@@ -134,7 +170,23 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             return false;
         }
 
-        return queue.TryGetFrame(_clock.GetMediaTicks(displayTimestamp), out frame);
+        long target = _clock.GetMediaTicks(displayTimestamp, out bool advancing);
+        if (!queue.TryGetFrame(target, out frame))
+        {
+            return false;
+        }
+
+        if (frame.PtsTicks != _lastShownPts)
+        {
+            // First display of this frame: how far the heard sound (the clock) is ahead of the picture.
+            _lastShownPts = frame.PtsTicks;
+            if (advancing)
+            {
+                _avSync.Record(displayTimestamp, target - frame.PtsTicks);
+            }
+        }
+
+        return true;
     }
 
     /// <inheritdoc />
@@ -288,6 +340,15 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             case FadeCommand fade:
                 _fader.FadeTo(fade.ToBlack, fade.Duration);
                 break;
+            case SetVolumeCommand volume:
+                _audio?.SetVolume(volume.Level);
+                break;
+            case SetMuteCommand mute:
+                _audio?.SetMuted(mute.Muted);
+                break;
+            case SetAudioDeviceCommand device:
+                _audio?.SelectDevice(device.DeviceId);
+                break;
             default:
                 _logger.LogWarning("Unknown command {Command} ignored.", command);
                 break;
@@ -308,7 +369,9 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             return;
         }
 
-        if (_machine.State == PlaybackState.Opening && decoder.IsPrerolled)
+        PollAudio();
+        bool prerolled = decoder.IsPrerolled && IsAudioPrerolled();
+        if (_machine.State == PlaybackState.Opening && prerolled)
         {
             if (!decoder.HasFirstFrame)
             {
@@ -325,7 +388,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             return;
         }
 
-        if (_machine.Seeking && decoder.IsPrerolled)
+        if (_machine.Seeking && prerolled)
         {
             _logger.LogInformation(
                 "Seek done at {Start} (requested {Target}).",
@@ -355,6 +418,111 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
                 Apply(_machine.EndReached());
             }
         }
+    }
+
+    /// <summary>
+    /// True when the sound of the current position is buffered too (or there is none). A sound track that is late by
+    /// more than <see cref="AudioPrerollTimeout"/> after the picture does not hold up the start; it is a dropout then.
+    /// </summary>
+    private bool IsAudioPrerolled()
+    {
+        AudioDecoder? audio = _audioDecoder;
+        if (audio is null || audio.IsPrerolled)
+        {
+            return true;
+        }
+
+        if (Stopwatch.GetElapsedTime(_prerollStartTimestamp) < AudioPrerollTimeout)
+        {
+            return false;
+        }
+
+        _logger.LogWarning("The sound is not ready {Timeout} after the start or seek; the picture starts without it.", AudioPrerollTimeout);
+        _prerollStartTimestamp = Stopwatch.GetTimestamp();
+        return true;
+    }
+
+    /// <summary>Sound decoder errors, a new device rate, and the A/V log.</summary>
+    private void PollAudio()
+    {
+        AudioDecoder? audio = _audioDecoder;
+        IAudioOutput? output = _audio;
+        if (audio is null || output is null || _demuxer is null)
+        {
+            return;
+        }
+
+        if (audio.ErrorMessage is { } error && !_audioErrorLogged)
+        {
+            // The picture plays on; the clock keeps following the device, which plays silence.
+            _audioErrorLogged = true;
+            _logger.LogError("Sound decoding failed, the video plays on without sound: {Error}", error);
+        }
+
+        int rate = output.SampleRate;
+        if (rate > 0 && rate != audio.OutputSampleRate && _machine.State is not (PlaybackState.Failed or PlaybackState.NoMedia))
+        {
+            // The device changed its rate (other device, or Windows settings): decode for the new rate from here on.
+            long origin = _decoder is { HasFirstFrame: true } video ? video.FirstPtsTicks : 0;
+            TimeSpan position = TimeSpan.FromTicks(Math.Max(0, _clock.MediaTicks - origin));
+            _logger.LogInformation(
+                "Sound output rate changed from {Old} to {New} Hz; the sound decoder starts again at {Position}.",
+                audio.OutputSampleRate,
+                rate,
+                position);
+            audio.Dispose();
+            _audioDecoder = null;
+            try
+            {
+                AudioDecoder reopened = AudioDecoder.Open(_demuxer, output.Ring, rate, _logger);
+                _audioDecoder = reopened;
+                reopened.Start();
+            }
+            catch (MediaOpenException exception)
+            {
+                _logger.LogError(exception, "The sound decoder cannot start again; the video plays on without sound.");
+            }
+
+            _clock.UseAudio(_audioDecoder is not null);
+            SeekTo(position);
+        }
+
+        LogAvSync();
+    }
+
+    private void LogAvSync()
+    {
+        AvSyncStats stats = _avSync.Current;
+        if (stats.WindowEndTimestamp == 0 || stats.WindowEndTimestamp == _avSyncLoggedWindow)
+        {
+            return;
+        }
+
+        _avSyncLoggedWindow = stats.WindowEndTimestamp;
+        bool outside = stats.WindowMinMs < -AvSyncMeter.LimitMilliseconds || stats.WindowMaxMs > AvSyncMeter.LimitMilliseconds;
+        if (!outside && Stopwatch.GetElapsedTime(_avSyncLogTimestamp) < AvSyncLogInterval)
+        {
+            return;
+        }
+
+        _avSyncLogTimestamp = Stopwatch.GetTimestamp();
+        AudioOutputStatus? output = _audio?.GetStatus();
+        _logger.Log(
+            outside ? LogLevel.Warning : LogLevel.Information,
+            "A/V {Mean:+0.0;-0.0} ms ({Min:+0.0;-0.0} to {Max:+0.0;-0.0}) over {Frames} frames; since start {TotalMin:+0.0;-0.0} to {TotalMax:+0.0;-0.0} ms, {Outside} of {Total} outside +-{Limit} ms. Clock {Clock}, sound latency {Latency:0.0} ms, drift {Drift:+0;-0} ppm, dropouts {Underruns} frames.",
+            stats.WindowMeanMs,
+            stats.WindowMinMs,
+            stats.WindowMaxMs,
+            stats.WindowFrames,
+            stats.TotalMinMs,
+            stats.TotalMaxMs,
+            stats.TotalOutsideLimit,
+            stats.TotalFrames,
+            AvSyncMeter.LimitMilliseconds,
+            _clock.Source,
+            output?.LatencyMilliseconds ?? 0,
+            output?.DriftPpm ?? 0,
+            output?.UnderrunFrames ?? 0);
     }
 
     /// <summary>Jumps to <paramref name="position"/> (from the start of the video), clamped to the video.</summary>
@@ -396,6 +564,8 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             long target = origin + _seekPosition.Ticks;
             _clock.Stop(target);
             decoder.RequestSeek(target);
+            _prerollStartTimestamp = Stopwatch.GetTimestamp();
+            _avSync.Reset();
         }
 
         if (actions.HasFlag(PlaybackActions.StartClock))
@@ -428,11 +598,26 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         string path = _filePath ?? throw new InvalidOperationException("No file to open.");
         try
         {
-            VideoDecoder decoder = VideoDecoder.Open(path, _device, _context, _options.StereoLayout, _options.FrameSlots, _logger);
-            _decoder = decoder;
+            if (!TryOpenParts(path, withAudio: _audio is not null))
+            {
+                // The sound track cannot be decoded: without sound, so its packets do not pile up in the demuxer.
+                TryOpenParts(path, withAudio: false);
+            }
+
+            VideoDecoder decoder = _decoder!;
             PublishQueue(decoder.Queue);
+            _clock.UseAudio(_audioDecoder is not null);
+            _audioErrorLogged = false;
+            _prerollStartTimestamp = Stopwatch.GetTimestamp();
+            _avSync.Reset();
             decoder.Start();
+            _audioDecoder?.Start();
+            _demuxer!.Start();
             Volatile.Write(ref _statusDecoder, decoder);
+            if (_audio is not null && _audioDecoder is null)
+            {
+                _logger.LogInformation("{Path} plays without sound; the system timer is the clock.", path);
+            }
         }
         catch (MediaOpenException exception)
         {
@@ -441,16 +626,61 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         }
     }
 
+    /// <summary>
+    /// Opens the demuxer and the decoders (not started). False if the sound decoder could not be opened (nothing is
+    /// kept open then). Throws <see cref="MediaOpenException"/> if the video cannot be played.
+    /// </summary>
+    private bool TryOpenParts(string path, bool withAudio)
+    {
+        MediaDemuxer demuxer = MediaDemuxer.Open(path, withAudio, _logger);
+        VideoDecoder? video = null;
+        try
+        {
+            video = VideoDecoder.Open(demuxer, ownsDemuxer: false, _device, _context, _options.StereoLayout, _options.FrameSlots, _logger);
+            AudioDecoder? audio = null;
+            if (withAudio && demuxer.AudioStreamIndex >= 0)
+            {
+                try
+                {
+                    audio = AudioDecoder.Open(demuxer, _audio!.Ring, _audio.SampleRate, _logger);
+                }
+                catch (MediaOpenException exception)
+                {
+                    _logger.LogWarning(exception, "The sound track of {Path} cannot be decoded; the video plays without sound.", path);
+                    video.Dispose();
+                    demuxer.Dispose();
+                    return false;
+                }
+            }
+
+            _demuxer = demuxer;
+            _decoder = video;
+            _audioDecoder = audio;
+            return true;
+        }
+        catch
+        {
+            video?.Dispose();
+            demuxer.Dispose();
+            throw;
+        }
+    }
+
     private void CloseDecoder()
     {
-        VideoDecoder? decoder = _decoder;
-        if (decoder is null)
-        {
-            return;
-        }
+        // Decoders first: they read the demuxer's queues.
+        AudioDecoder? audio = _audioDecoder;
+        _audioDecoder = null;
+        audio?.Dispose();
 
+        VideoDecoder? decoder = _decoder;
         _decoder = null;
-        decoder.Dispose();
+        decoder?.Dispose();
+
+        MediaDemuxer? demuxer = _demuxer;
+        _demuxer = null;
+        demuxer?.Dispose();
+        _clock.UseAudio(false);
     }
 
     /// <summary>Hands a new queue to the render thread; the old one is disposed once the render thread lets go of it.</summary>
@@ -511,6 +741,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         {
             Seeking = _machine.Seeking,
             Loop = _loop,
+            Audio = _audioDecoder?.Info,
         });
     }
 }

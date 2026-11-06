@@ -11,6 +11,10 @@ namespace Orbivo.Audio.Output;
 /// <param name="DeviceId">Id the endpoint reports.</param>
 /// <param name="Channels">Channels of the mix format.</param>
 /// <param name="Encoding">Sample format.</param>
+/// <param name="OnsetThreshold">
+/// Records the stream frame where the left channel first exceeds this after at least half a second below it (beep
+/// onsets for the sync tests, without recording minutes of sound); 0 = off.
+/// </param>
 internal sealed record SimulatedEndpointOptions(
     int SampleRate = 48_000,
     double DriftPpm = 0,
@@ -19,7 +23,8 @@ internal sealed record SimulatedEndpointOptions(
     int RecordFrames = 0,
     string DeviceId = "sim",
     int Channels = 2,
-    SampleEncoding Encoding = SampleEncoding.Float32);
+    SampleEncoding Encoding = SampleEncoding.Float32,
+    float OnsetThreshold = 0);
 
 /// <summary>
 /// A device for tests: plays in real time with a chosen drift and latency, records what it plays and counts glitches
@@ -31,6 +36,9 @@ internal sealed class SimulatedAudioEndpoint : IAudioEndpoint
     private readonly byte[] _scratch;
     private readonly float[] _record;
     private readonly double _framesPerTimestampTick;
+    private readonly long[] _onsets = new long[8192];
+    private int _onsetCount;
+    private long _quietFrames;
     private long _startTimestamp;
     private long _written;
     private long _starvedFrames;
@@ -70,6 +78,9 @@ internal sealed class SimulatedAudioEndpoint : IAudioEndpoint
 
     /// <summary>Recorded stream frames (interleaved L/R, from stream frame 0).</summary>
     public ReadOnlySpan<float> Recorded => _record.AsSpan(0, (int)Math.Min(WrittenFrames, _options.RecordFrames) * 2);
+
+    /// <summary>Stream frames of the onsets found so far (see <see cref="SimulatedEndpointOptions.OnsetThreshold"/>).</summary>
+    public long[] Onsets => _onsets.AsSpan(0, Volatile.Read(ref _onsetCount)).ToArray();
 
     /// <summary>From now on every call throws, as with an unplugged device.</summary>
     public void Fail() => _fail = true;
@@ -114,6 +125,11 @@ internal sealed class SimulatedAudioEndpoint : IAudioEndpoint
                 .CopyTo(_record.AsSpan((int)(_written * 2)));
         }
 
+        if (_options.OnsetThreshold > 0 && Encoding == SampleEncoding.Float32 && Channels == 2)
+        {
+            DetectOnsets(System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(_scratch.AsSpan(0, frames * 8)));
+        }
+
         Interlocked.Add(ref _written, frames);
     }
 
@@ -142,6 +158,27 @@ internal sealed class SimulatedAudioEndpoint : IAudioEndpoint
         }
 
         return played;
+    }
+
+    private void DetectOnsets(ReadOnlySpan<float> stereo)
+    {
+        long quietNeeded = SampleRate / 2;
+        for (int i = 0; i < stereo.Length / 2; i++)
+        {
+            if (Math.Abs(stereo[2 * i]) <= _options.OnsetThreshold)
+            {
+                _quietFrames++;
+                continue;
+            }
+
+            if (_quietFrames >= quietNeeded && _onsetCount < _onsets.Length)
+            {
+                _onsets[_onsetCount] = _written + i;
+                Volatile.Write(ref _onsetCount, _onsetCount + 1);
+            }
+
+            _quietFrames = 0;
+        }
     }
 
     private void ThrowIfFailed()

@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Orbivo.Audio.Tests" />
+    <!-- The player sync tests run on simulated devices. -->
+    <InternalsVisibleTo Include="Orbivo.Media.Tests" />
   </ItemGroup>
 
 </Project>

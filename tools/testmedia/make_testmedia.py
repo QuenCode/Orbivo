@@ -21,6 +21,8 @@ TOOL_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TOOL_DIR.parents[1]
 DEFAULT_FFMPEG = REPO_ROOT / "native" / "win-x64" / "ffmpeg.exe"
 DEFAULT_OUT = TOOL_DIR / "out"
+DEFAULT_DURATION_S = 20.0
+LONG_DURATION_S = 600.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -34,7 +36,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bit-depth", type=int, default=8, choices=(8, 10))
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--duration", type=float, default=20.0, help="video length in seconds")
-    return parser.parse_args()
+    parser.add_argument("--long", action="store_true",
+                        help=f"only the {LONG_DURATION_S:.0f} s 4K mono video for the A/V long test (M5)")
+    args = parser.parse_args()
+    if args.long:
+        args.what, args.sizes, args.layouts, args.duration = "videos", "4k", "mono", LONG_DURATION_S
+    return args
 
 
 def split(value: str, allowed: set[str], name: str) -> list[str]:
@@ -69,6 +76,7 @@ def generate_visuals(args, what, sizes, layouts, manifest) -> None:
             stem = f"equirect360_{layout_key}_{width}x{height}"
             still = args.out / f"{stem}.png"
 
+            still_existed = still.exists()
             started = time.monotonic()
             frame = equirect.render_frame(layout, width, height)
             Image.fromarray(frame).save(still, compress_level=3)
@@ -84,7 +92,9 @@ def generate_visuals(args, what, sizes, layouts, manifest) -> None:
             if max(width, height) > settings.codec.max_size:
                 log(f"skip video {stem}: {settings.codec.name} supports at most {settings.codec.max_size} px")
                 continue
-            name = f"{stem}_{settings.codec.short}_{args.bit_depth}bit_{args.fps}fps.mp4"
+            # Other lengths than the default get their own name, so the long test video sits next to the short one.
+            length = "" if args.duration == DEFAULT_DURATION_S else f"_{args.duration:g}s"
+            name = f"{stem}_{settings.codec.short}_{args.bit_depth}bit_{args.fps}fps{length}.mp4"
             elapsed = video.encode(args.ffmpeg, still, args.out / name, layout, width, height, settings)
             log(f"{name} ({elapsed:.0f} s)")
             manifest["videos"].append({
@@ -101,7 +111,7 @@ def generate_visuals(args, what, sizes, layouts, manifest) -> None:
                     "sync_flash_lat_deg": video.FLASH_LAT_DEG,
                 },
             })
-            if "images" not in what:
+            if "images" not in what and not still_existed:
                 still.unlink()
 
 
@@ -150,6 +160,14 @@ def main() -> None:
         generate_visuals(args, what, sizes, layouts, manifest)
     if "audio" in what:
         generate_audio(args, manifest)
+
+    # Keep the entries of files that were not generated this time (e.g. the short videos when only --long ran).
+    if manifest_path.exists():
+        previous = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for kind in ("images", "videos", "audio"):
+            fresh = {entry["file"] for entry in manifest[kind]}
+            kept = [entry for entry in previous.get(kind, []) if entry["file"] not in fresh and (args.out / entry["file"]).exists()]
+            manifest[kind] = kept + manifest[kind]
 
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     log(f"done in {time.monotonic() - started:.0f} s -> {args.out}")

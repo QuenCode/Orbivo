@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Orbivo.Audio\Orbivo.Audio.csproj" />
     <ProjectReference Include="..\..\src\Orbivo.Media\Orbivo.Media.csproj" />
     <ProjectReference Include="..\..\src\Orbivo.Xr\Orbivo.Xr.csproj" />
   </ItemGroup>
