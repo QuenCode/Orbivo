@@ -51,6 +51,14 @@ public sealed class MediaTimeTests
     }
 
     [Fact]
+    public void Format_RoundsToTheMillisecond()
+    {
+        // Three frames at 30 fps in whole ticks: 999 999 ticks.
+        Assert.Equal("00:00:00.100", MediaTime.Format(TimeSpan.FromTicks(999_999)));
+        Assert.Equal("00:00:00.033", MediaTime.Format(TimeSpan.FromTicks(333_333)));
+    }
+
+    [Fact]
     public void Format_ClampsNegativeTimes()
     {
         Assert.Equal("00:00:00.000", MediaTime.Format(TimeSpan.FromSeconds(-1)));

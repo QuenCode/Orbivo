@@ -91,8 +91,9 @@ public partial class App : Application
 
         if (options.VideoPath is not null)
         {
-            // Queued until the player runs; the headset stays black until the operator presses Play (F6).
-            _playerCommands.Writer.TryWrite(new OpenMediaCommand(Path.GetFullPath(options.VideoPath)));
+            // First playlist entry. The open command waits in the channel until the player runs; the headset stays
+            // black until the operator presses Play (F6).
+            _viewModel.AddAndLoad(options.VideoPath);
         }
 
         bool ffmpegAvailable = nativeComponents[0].IsAvailable;

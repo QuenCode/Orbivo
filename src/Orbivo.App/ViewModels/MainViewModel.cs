@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Threading.Channels;
@@ -7,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Playback;
+using Orbivo.Core.Playlists;
 using Orbivo.Core.Status;
 using Orbivo.Xr.DebugViewport;
 using Orbivo.Xr.OpenXr;
@@ -14,13 +16,19 @@ using Orbivo.Xr.OpenXr;
 namespace Orbivo.App.ViewModels;
 
 /// <summary>
-/// View model of the operator main window. Play, Pause and Stop send commands to the player (CLAUDE.md rule 3);
-/// playlist, seek and format controls are still placeholders (M4, M6).
+/// View model of the operator main window (M4): playlist (F1–F3), transport with timeline, time input and
+/// keyboard shortcuts (F2, F60), blackout and fade (F5). Everything reaches the player as a command
+/// (CLAUDE.md rule 3); what the player does comes back through status snapshots.
 /// The status panel shows the headset connection (F40, F41), or in <c>--no-xr</c> mode the preview window, and the player.
+/// Format controls are still placeholders (M6).
 /// </summary>
 public sealed class MainViewModel : ObservableObject
 {
     private static readonly TimeSpan StatusPollInterval = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan DefaultFrameDuration = TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 30);
+
+    /// <summary>How long a sent seek target counts as the current position for relative jumps.</summary>
+    private static readonly TimeSpan SeekTargetHold = TimeSpan.FromMilliseconds(400);
 
     private readonly ChannelWriter<PlayerCommand> _commands;
     private readonly List<Action> _refreshers = [];
@@ -34,10 +42,27 @@ public sealed class MainViewModel : ObservableObject
     private readonly StatusEntry? _headsetEntry;
     private readonly StatusEntry? _sessionEntry;
     private readonly StatusEntry? _xrRenderEntry;
+    private readonly StatusEntry _outputEntry;
+    private readonly StatusEntry _playlistEntry;
+    private readonly Stopwatch _sinceSeekSent = new();
     private DispatcherTimer? _statusTimer;
+    private PlayerStatus _lastStatus = PlayerStatus.Empty;
     private PlaybackState _playbackState = PlaybackState.NoMedia;
-    private string _timeText = FormatTime(TimeSpan.Zero) + " / " + FormatTime(TimeSpan.Zero);
-    private double _progress;
+    private bool _playerRunning;
+    private string _timeText = MediaTime.Format(TimeSpan.Zero) + " / " + MediaTime.Format(TimeSpan.Zero);
+    private double _timelineSeconds;
+    private double _durationSeconds;
+    private bool _scrubbing;
+    private bool _updatingTimeline;
+    private TimeSpan _lastSeekTarget;
+    private string _timeInput = string.Empty;
+    private string _fadeSecondsText = "1,0";
+    private TimeSpan _fadeDuration = TimeSpan.FromSeconds(1);
+    private bool _autoAdvance = true;
+    private bool _loop;
+    private PlaylistEntry? _selectedEntry;
+    private string _outputText = "Brille: schwarz";
+    private StatusLevel _outputLevel = StatusLevel.Neutral;
     private string _stereoLayoutText = "–";
     private string _projectionText = "–";
 
@@ -51,6 +76,9 @@ public sealed class MainViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(nativeComponents);
         ArgumentNullException.ThrowIfNull(commands);
         _commands = commands;
+        Playlist = new Playlist();
+        ((System.Collections.Specialized.INotifyCollectionChanged)Playlist.Entries).CollectionChanged += (_, _) => OnPlaylistChanged();
+
         PlayCommand = new RelayCommand(
             () => Send(new Core.Commands.PlayCommand()),
             () => _playbackState is PlaybackState.Ready or PlaybackState.Paused or PlaybackState.Ended or PlaybackState.Opening);
@@ -59,7 +87,22 @@ public sealed class MainViewModel : ObservableObject
             () => _playbackState == PlaybackState.Playing);
         StopCommand = new RelayCommand(
             () => Send(new Core.Commands.StopCommand()),
-            () => _playbackState is PlaybackState.Playing or PlaybackState.Paused or PlaybackState.Ended);
+            () => _playbackState is PlaybackState.Playing or PlaybackState.Paused or PlaybackState.Ended
+                || (_playbackState == PlaybackState.Ready && _lastStatus.Position > TimeSpan.Zero));
+        PlayPauseCommand = new RelayCommand(TogglePlayPause);
+        NextCommand = new RelayCommand(() => LoadEntry(Playlist.MoveNext()), () => Playlist.HasNext);
+        PreviousCommand = new RelayCommand(() => LoadEntry(Playlist.MovePrevious()), () => Playlist.HasPrevious);
+        LoadSelectedCommand = new RelayCommand(LoadSelected, () => SelectedEntry is not null);
+        RemoveSelectedCommand = new RelayCommand(RemoveSelected, () => SelectedEntry is not null);
+        MoveSelectedUpCommand = new RelayCommand(() => MoveSelected(-1), () => SelectedEntry is not null && Playlist.Entries.IndexOf(SelectedEntry) > 0);
+        MoveSelectedDownCommand = new RelayCommand(
+            () => MoveSelected(+1),
+            () => SelectedEntry is not null && Playlist.Entries.IndexOf(SelectedEntry) < Playlist.Entries.Count - 1);
+        SeekRelativeCommand = new RelayCommand<string>(SeekRelative, _ => CanSeek);
+        StepFrameCommand = new RelayCommand<string>(StepFrame, _ => CanSeek);
+        GoToTimeCommand = new RelayCommand(GoToTime, () => CanSeek);
+        ToggleBlackoutCommand = new RelayCommand(ToggleBlackout, () => _playerRunning);
+        ToggleFadeCommand = new RelayCommand(ToggleFade, () => _playerRunning);
 
         Title = options.NoXr ? "Orbivo – Operator (ohne Brille)" : "Orbivo – Operator";
 
@@ -78,6 +121,8 @@ public sealed class MainViewModel : ObservableObject
             : new StatusEntry("Wiedergabe", "Wartet auf die Grafikkarte …", StatusLevel.Neutral);
         _videoEntry = new StatusEntry("Video", "–", StatusLevel.Neutral);
         _decoderEntry = new StatusEntry("Decoder", "–", StatusLevel.Neutral);
+        _outputEntry = new StatusEntry("Ausgabe", "Bild (kein Schwarzbild)", StatusLevel.Neutral);
+        _playlistEntry = new StatusEntry("Playlist", "Leer", StatusLevel.Neutral);
 
         if (options.NoXr)
         {
@@ -89,6 +134,8 @@ public sealed class MainViewModel : ObservableObject
                 _gpuEntry,
                 _viewportEntry,
                 _playbackEntry,
+                _outputEntry,
+                _playlistEntry,
                 _videoEntry,
                 _decoderEntry,
                 _viewEntry,
@@ -100,7 +147,7 @@ public sealed class MainViewModel : ObservableObject
             _sessionEntry = new StatusEntry("Session", "–", StatusLevel.Neutral);
             _xrRenderEntry = new StatusEntry("Bildausgabe", "–", StatusLevel.Neutral);
             _viewEntry = new StatusEntry("Blick (Proband)", "–", StatusLevel.Neutral);
-            entries.AddRange([_headsetEntry, _sessionEntry, _xrRenderEntry, _gpuEntry, _playbackEntry, _videoEntry, _decoderEntry, _viewEntry]);
+            entries.AddRange([_headsetEntry, _sessionEntry, _xrRenderEntry, _gpuEntry, _playbackEntry, _outputEntry, _playlistEntry, _videoEntry, _decoderEntry, _viewEntry]);
         }
 
         if (_imageEntry is not null)
@@ -127,6 +174,75 @@ public sealed class MainViewModel : ObservableObject
 
     public IRelayCommand StopCommand { get; }
 
+    /// <summary>Space bar: Pause while playing, otherwise Play.</summary>
+    public IRelayCommand PlayPauseCommand { get; }
+
+    public IRelayCommand NextCommand { get; }
+
+    public IRelayCommand PreviousCommand { get; }
+
+    public IRelayCommand LoadSelectedCommand { get; }
+
+    public IRelayCommand RemoveSelectedCommand { get; }
+
+    public IRelayCommand MoveSelectedUpCommand { get; }
+
+    public IRelayCommand MoveSelectedDownCommand { get; }
+
+    /// <summary>Parameter: seconds to jump, e.g. "-5" or "30".</summary>
+    public IRelayCommand<string> SeekRelativeCommand { get; }
+
+    /// <summary>Parameter: "-1" or "1" frames.</summary>
+    public IRelayCommand<string> StepFrameCommand { get; }
+
+    public IRelayCommand GoToTimeCommand { get; }
+
+    public IRelayCommand ToggleBlackoutCommand { get; }
+
+    public IRelayCommand ToggleFadeCommand { get; }
+
+    public Playlist Playlist { get; }
+
+    /// <summary>The entry selected in the list (not necessarily the loaded one).</summary>
+    public PlaylistEntry? SelectedEntry
+    {
+        get => _selectedEntry;
+        set
+        {
+            if (SetProperty(ref _selectedEntry, value))
+            {
+                RefreshPlaylistCommands();
+            }
+        }
+    }
+
+    /// <summary>At the end of a video, open the next one and play it (F3).</summary>
+    public bool AutoAdvance
+    {
+        get => _autoAdvance;
+        set
+        {
+            if (SetProperty(ref _autoAdvance, value))
+            {
+                ShowPlaylistStatus();
+            }
+        }
+    }
+
+    /// <summary>Repeat the current video (F3). Wins over <see cref="AutoAdvance"/>.</summary>
+    public bool Loop
+    {
+        get => _loop;
+        set
+        {
+            if (SetProperty(ref _loop, value))
+            {
+                Send(new SetLoopCommand(value));
+                ShowPlaylistStatus();
+            }
+        }
+    }
+
     /// <summary>"position / duration" for the transport bar.</summary>
     public string TimeText
     {
@@ -134,12 +250,73 @@ public sealed class MainViewModel : ObservableObject
         private set => SetProperty(ref _timeText, value);
     }
 
-    /// <summary>Position as a fraction of the duration (0–1), shown on the timeline. Seek follows in M4.</summary>
-    public double Progress
+    /// <summary>Length of the video in seconds (timeline maximum), at least 1 so the slider has a range.</summary>
+    public double DurationSeconds
     {
-        get => _progress;
-        private set => SetProperty(ref _progress, value);
+        get => _durationSeconds;
+        private set => SetProperty(ref _durationSeconds, value);
     }
+
+    /// <summary>
+    /// Timeline position in seconds. The status updates it; when the operator moves the slider (click or drag),
+    /// the new value is sent as a seek.
+    /// </summary>
+    public double TimelineSeconds
+    {
+        get => _timelineSeconds;
+        set
+        {
+            if (SetProperty(ref _timelineSeconds, value) && !_updatingTimeline && CanSeek)
+            {
+                SeekTo(TimeSpan.FromSeconds(value));
+            }
+        }
+    }
+
+    /// <summary>Time typed by the operator ("1:23.4", "83,4").</summary>
+    public string TimeInput
+    {
+        get => _timeInput;
+        set => SetProperty(ref _timeInput, value);
+    }
+
+    /// <summary>Fade duration in seconds as typed (comma or point).</summary>
+    public string FadeSecondsText
+    {
+        get => _fadeSecondsText;
+        set
+        {
+            if (SetProperty(ref _fadeSecondsText, value)
+                && double.TryParse(value.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out double seconds))
+            {
+                _fadeDuration = TimeSpan.FromSeconds(Math.Clamp(seconds, 0.1, 30));
+            }
+        }
+    }
+
+    /// <summary>Big indicator: what the participant sees right now.</summary>
+    public string OutputText
+    {
+        get => _outputText;
+        private set => SetProperty(ref _outputText, value);
+    }
+
+    public StatusLevel OutputStatusLevel
+    {
+        get => _outputLevel;
+        private set => SetProperty(ref _outputLevel, value);
+    }
+
+    /// <summary>"Schwarzbild" or "Schwarzbild aus", depending on the output.</summary>
+    public string BlackoutButtonText => _lastStatus.Output.TowardsBlack ? "Schwarzbild aus (B)" : "Schwarzbild (B)";
+
+    /// <summary>"Ausblenden" or "Einblenden", depending on the output.</summary>
+    public string FadeButtonText => _lastStatus.Output.TowardsBlack ? "Einblenden (F)" : "Ausblenden (F)";
+
+    /// <summary>True if the timeline and time input can be used (a video is open).</summary>
+    public bool IsSeekable => CanSeek;
+
+    private bool CanSeek => _playbackState is PlaybackState.Ready or PlaybackState.Playing or PlaybackState.Paused or PlaybackState.Ended;
 
     public string ProjectionText
     {
@@ -189,7 +366,42 @@ public sealed class MainViewModel : ObservableObject
     public void StartPlayerPolling(Func<PlayerStatus> getStatus)
     {
         ArgumentNullException.ThrowIfNull(getStatus);
+        _playerRunning = true;
+        ToggleBlackoutCommand.NotifyCanExecuteChanged();
+        ToggleFadeCommand.NotifyCanExecuteChanged();
         AddRefresher(() => ShowPlayerStatus(getStatus()));
+    }
+
+    /// <summary>
+    /// Adds video files to the playlist. Dropped paths: folders contribute the videos in them, files without a video
+    /// extension are left out. Files picked in the file dialog (<paramref name="explicitFiles"/>) are all added.
+    /// Returns the number of videos added.
+    /// </summary>
+    public int AddFiles(IEnumerable<string> paths, bool explicitFiles = false)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        IReadOnlyList<string> videos = explicitFiles ? paths.Select(Path.GetFullPath).ToList() : Playlist.ExpandPaths(paths);
+        IReadOnlyList<PlaylistEntry> added = Playlist.Add(videos);
+        if (added.Count > 0)
+        {
+            SelectedEntry = added[0];
+        }
+        else
+        {
+            _playlistEntry.Update("Keine Videodateien gefunden (" + string.Join(", ", Playlist.VideoExtensions) + ")", StatusLevel.Warning);
+        }
+
+        return added.Count;
+    }
+
+    /// <summary>Adds <paramref name="path"/> and loads it (black until Play), for <c>--video</c>.</summary>
+    public void AddAndLoad(string path)
+    {
+        // Not filtered by extension: the operator asked for exactly this file.
+        PlaylistEntry entry = Playlist.Add([Path.GetFullPath(path)])[0];
+        SelectedEntry = entry;
+        Playlist.SetCurrent(entry);
+        LoadEntry(entry);
     }
 
     public void ShowPlayerUnavailable(string reason)
@@ -236,6 +448,15 @@ public sealed class MainViewModel : ObservableObject
         refresh();
     }
 
+    /// <summary>
+    /// Scrubbing: while the operator drags the timeline thumb, the status does not move it, and every new
+    /// position is sent as a seek (the player keeps only the latest).
+    /// </summary>
+    public void SetScrubbing(bool scrubbing)
+    {
+        _scrubbing = scrubbing;
+    }
+
     private void Send(PlayerCommand command)
     {
         if (!_commands.TryWrite(command))
@@ -244,32 +465,229 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    private void TogglePlayPause()
+    {
+        if (_playbackState == PlaybackState.Playing)
+        {
+            Send(new Core.Commands.PauseCommand());
+        }
+        else if (PlayCommand.CanExecute(null))
+        {
+            Send(new Core.Commands.PlayCommand());
+        }
+    }
+
+    /// <summary>
+    /// Opens <paramref name="entry"/>. While a video plays the new one plays at once; otherwise it waits
+    /// black until Play (F6).
+    /// </summary>
+    private void LoadEntry(PlaylistEntry? entry)
+    {
+        if (entry is null)
+        {
+            return;
+        }
+
+        bool play = _playbackState == PlaybackState.Playing;
+        Send(new OpenMediaCommand(entry.Path, play));
+        SelectedEntry = entry;
+        RefreshPlaylistCommands();
+    }
+
+    private void LoadSelected()
+    {
+        if (SelectedEntry is { } entry)
+        {
+            Playlist.SetCurrent(entry);
+            LoadEntry(entry);
+        }
+    }
+
+    private void RemoveSelected()
+    {
+        if (SelectedEntry is not { } entry)
+        {
+            return;
+        }
+
+        int index = Playlist.Entries.IndexOf(entry);
+        Playlist.Remove(entry);
+        SelectedEntry = Playlist.Entries.Count == 0 ? null : Playlist.Entries[Math.Min(index, Playlist.Entries.Count - 1)];
+    }
+
+    private void MoveSelected(int direction)
+    {
+        if (SelectedEntry is { } entry)
+        {
+            Playlist.Move(entry, direction);
+            RefreshPlaylistCommands();
+        }
+    }
+
+    private void OnPlaylistChanged()
+    {
+        RefreshPlaylistCommands();
+        ShowPlaylistStatus();
+    }
+
+    private void RefreshPlaylistCommands()
+    {
+        NextCommand.NotifyCanExecuteChanged();
+        PreviousCommand.NotifyCanExecuteChanged();
+        LoadSelectedCommand.NotifyCanExecuteChanged();
+        RemoveSelectedCommand.NotifyCanExecuteChanged();
+        MoveSelectedUpCommand.NotifyCanExecuteChanged();
+        MoveSelectedDownCommand.NotifyCanExecuteChanged();
+        ShowPlaylistStatus();
+    }
+
+    private void ShowPlaylistStatus()
+    {
+        int count = Playlist.Entries.Count;
+        int current = Playlist.CurrentIndex;
+        string text = count == 0
+            ? "Leer"
+            : current < 0
+                ? $"{count} Videos, keins geladen"
+                : $"Video {current + 1} von {count}";
+        if (count > 0)
+        {
+            text += Loop ? ", Wiederholen an" : AutoAdvance ? ", automatisch weiter" : ", hält am Ende";
+        }
+
+        _playlistEntry.Update(text, StatusLevel.Neutral);
+    }
+
+    /// <summary>Where relative jumps start: the last sent target while the player is still on its way there.</summary>
+    private TimeSpan SeekBase =>
+        _lastStatus.Seeking || (_sinceSeekSent.IsRunning && _sinceSeekSent.Elapsed < SeekTargetHold)
+            ? _lastSeekTarget
+            : _lastStatus.Position;
+
+    private void SeekTo(TimeSpan position)
+    {
+        TimeSpan duration = _lastStatus.Duration;
+        if (position < TimeSpan.Zero)
+        {
+            position = TimeSpan.Zero;
+        }
+
+        if (duration > TimeSpan.Zero && position > duration)
+        {
+            position = duration;
+        }
+
+        _lastSeekTarget = position;
+        _sinceSeekSent.Restart();
+        Send(new SeekCommand(position));
+        if (!_scrubbing)
+        {
+            ShowTimeline(position, duration);
+        }
+    }
+
+    private void SeekRelative(string? seconds)
+    {
+        if (double.TryParse(seconds, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out double value))
+        {
+            SeekTo(SeekBase + TimeSpan.FromSeconds(value));
+        }
+    }
+
+    private void StepFrame(string? frames)
+    {
+        if (int.TryParse(frames, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out int count))
+        {
+            TimeSpan frame = _lastStatus.FrameDuration > TimeSpan.Zero ? _lastStatus.FrameDuration : DefaultFrameDuration;
+            SeekTo(SeekBase + (frame * count));
+        }
+    }
+
+    private void GoToTime()
+    {
+        if (MediaTime.TryParse(TimeInput, out TimeSpan time))
+        {
+            SeekTo(time);
+            TimeInput = MediaTime.Format(time);
+        }
+        else
+        {
+            _playbackEntry.Update($"Zeit „{TimeInput}“ nicht lesbar. Beispiele: 83, 1:23, 1:23.5, 0:01:23", StatusLevel.Warning);
+        }
+    }
+
+    private void ToggleBlackout()
+    {
+        Send(new SetBlackoutCommand(!_lastStatus.Output.TowardsBlack));
+    }
+
+    private void ToggleFade()
+    {
+        Send(new FadeCommand(!_lastStatus.Output.TowardsBlack, _fadeDuration));
+    }
+
+    private void ShowTimeline(TimeSpan position, TimeSpan duration)
+    {
+        TimeText = MediaTime.Format(position) + " / " + MediaTime.Format(duration);
+        _updatingTimeline = true;
+        try
+        {
+            DurationSeconds = Math.Max(1, duration.TotalSeconds);
+            TimelineSeconds = Math.Clamp(position.TotalSeconds, 0, DurationSeconds);
+        }
+        finally
+        {
+            _updatingTimeline = false;
+        }
+    }
+
     private void ShowPlayerStatus(PlayerStatus status)
     {
         CultureInfo culture = CultureInfo.CurrentCulture;
+        PlayerStatus previous = _lastStatus;
+        _lastStatus = status;
         if (status.State != _playbackState)
         {
+            PlaybackState before = _playbackState;
             _playbackState = status.State;
             PlayCommand.NotifyCanExecuteChanged();
             PauseCommand.NotifyCanExecuteChanged();
-            StopCommand.NotifyCanExecuteChanged();
+            SeekRelativeCommand.NotifyCanExecuteChanged();
+            StepFrameCommand.NotifyCanExecuteChanged();
+            GoToTimeCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(IsSeekable));
+            if (status.State == PlaybackState.Ended && before == PlaybackState.Playing)
+            {
+                AdvanceAfterEnd(status);
+            }
         }
 
-        TimeText = FormatTime(status.Position) + " / " + FormatTime(status.Duration);
-        Progress = status.Duration > TimeSpan.Zero ? Math.Clamp(status.Position / status.Duration, 0.0, 1.0) : 0.0;
+        StopCommand.NotifyCanExecuteChanged();
+        if (status.Output.TowardsBlack != previous.Output.TowardsBlack)
+        {
+            OnPropertyChanged(nameof(BlackoutButtonText));
+            OnPropertyChanged(nameof(FadeButtonText));
+        }
+
+        if (!_scrubbing)
+        {
+            ShowTimeline(status.Position, status.Duration);
+        }
 
         string file = status.FilePath is null ? string.Empty : Path.GetFileName(status.FilePath);
+        string seeking = status.Seeking ? ", springt …" : string.Empty;
         (string stateText, StatusLevel stateLevel) = status.State switch
         {
             PlaybackState.NoMedia => ("Kein Video", StatusLevel.Neutral),
             PlaybackState.Opening => ($"{file}: wird geöffnet …", StatusLevel.Neutral),
-            PlaybackState.Ready => ($"{file}: bereit, Brille schwarz bis Play", StatusLevel.Ok),
-            PlaybackState.Playing => ($"{file}: läuft", StatusLevel.Ok),
-            PlaybackState.Paused => ($"{file}: Pause", StatusLevel.Ok),
+            PlaybackState.Ready => ($"{file}: bereit, Brille schwarz bis Play{seeking}", StatusLevel.Ok),
+            PlaybackState.Playing => ($"{file}: läuft{seeking}", StatusLevel.Ok),
+            PlaybackState.Paused => ($"{file}: Pause{seeking}", StatusLevel.Ok),
             PlaybackState.Ended => ($"{file}: Ende erreicht, letztes Bild steht", StatusLevel.Ok),
             _ => ($"{file}: {status.Error ?? "Fehler"}", StatusLevel.Error),
         };
         _playbackEntry.Update(stateText, stateLevel);
+        ShowOutput(status);
 
         VideoStreamInfo? video = status.Video;
         if (video is null)
@@ -300,9 +718,63 @@ public sealed class MainViewModel : ObservableObject
             starving || status.DroppedFrames > 0 || !video.HardwareDecoding ? StatusLevel.Warning : StatusLevel.Ok);
     }
 
-    private static string FormatTime(TimeSpan time)
+    /// <summary>Auto-advance (F3): the player reached the end of the current video and does not loop.</summary>
+    private void AdvanceAfterEnd(PlayerStatus status)
     {
-        return time.ToString(@"hh\:mm\:ss\.fff", CultureInfo.InvariantCulture);
+        PlaylistEntry? current = Playlist.Current;
+        if (!AutoAdvance || current is null || !string.Equals(current.Path, status.FilePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        PlaylistEntry? next = Playlist.MoveNext();
+        if (next is not null)
+        {
+            Send(new OpenMediaCommand(next.Path, Play: true));
+            SelectedEntry = next;
+            RefreshPlaylistCommands();
+        }
+    }
+
+    /// <summary>What the participant sees (F40): video, still frame, or black, and blackout or fade on top.</summary>
+    private void ShowOutput(PlayerStatus status)
+    {
+        CultureInfo culture = CultureInfo.CurrentCulture;
+        OutputLevel output = status.Output;
+        bool videoVisible = status.State is PlaybackState.Playing or PlaybackState.Paused or PlaybackState.Ended;
+        string content = status.State switch
+        {
+            PlaybackState.Playing => "Video läuft",
+            PlaybackState.Paused => "Standbild (Pause)",
+            PlaybackState.Ended => "Letztes Bild (Ende)",
+            _ => "Schwarz (kein Video freigegeben)",
+        };
+
+        string text;
+        StatusLevel level;
+        if (output.Fading)
+        {
+            text = string.Create(
+                culture,
+                $"{(output.TowardsBlack ? "Blendet aus" : "Blendet ein")} ({output.Level * 100:0} %): {content}");
+            level = StatusLevel.Warning;
+        }
+        else if (output.Level <= 0f)
+        {
+            text = "SCHWARZBILD" + (videoVisible ? $" (dahinter: {content})" : string.Empty);
+            level = StatusLevel.Neutral;
+        }
+        else
+        {
+            text = content;
+            level = videoVisible ? StatusLevel.Ok : StatusLevel.Neutral;
+        }
+
+        OutputText = "Brille: " + text;
+        OutputStatusLevel = level;
+        _outputEntry.Update(
+            output.Fading ? text : output.Level <= 0f ? "Schwarzbild aktiv" : "Bild (kein Schwarzbild)",
+            output.Fading ? StatusLevel.Warning : output.Level <= 0f ? StatusLevel.Warning : StatusLevel.Ok);
     }
 
     private static string DescribeLayout(StereoLayout layout) => layout switch

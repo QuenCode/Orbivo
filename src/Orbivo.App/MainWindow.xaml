@@ -4,11 +4,14 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:Orbivo.App.ViewModels"
+        xmlns:local="clr-namespace:Orbivo.App"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="{Binding Title}"
         Width="1280" Height="800" MinWidth="960" MinHeight="600"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        AllowDrop="True" Drop="OnPlaylistDrop" DragOver="OnPlaylistDragOver"
+        PreviewKeyDown="OnWindowPreviewKeyDown">
 
   <Grid Margin="6">
     <Grid.RowDefinitions>
@@ -20,17 +23,53 @@
       <ColumnDefinition Width="3*" MinWidth="420" />
     </Grid.ColumnDefinitions>
 
-    <!-- Playlist (M4) -->
+    <!-- Playlist (F1–F3): file dialog, drag and drop from Explorer, order, auto-advance, loop -->
     <GroupBox Grid.Row="0" Grid.Column="0" Header="Playlist">
       <DockPanel>
-        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
-          <Button Content="Hinzufügen …" IsEnabled="False" />
-          <Button Content="Entfernen" IsEnabled="False" />
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+          <WrapPanel>
+            <Button Content="Hinzufügen …" Click="OnAddFilesClick" Margin="0,0,6,4"
+                    ToolTip="Videos auswählen. Dateien und Ordner können auch aus dem Explorer hierher gezogen werden." />
+            <Button Content="Laden" Command="{Binding LoadSelectedCommand}" Margin="0,0,6,4"
+                    ToolTip="Ausgewähltes Video laden (Doppelklick). Läuft gerade ein Video, startet es sofort, sonst bleibt die Brille schwarz bis Play." />
+            <Button Content="Entfernen" Command="{Binding RemoveSelectedCommand}" Margin="0,0,6,4" ToolTip="Entf" />
+            <Button Content="▲" MinWidth="36" Command="{Binding MoveSelectedUpCommand}" Margin="0,0,6,4" ToolTip="Nach oben" />
+            <Button Content="▼" MinWidth="36" Command="{Binding MoveSelectedDownCommand}" Margin="0,0,6,4" ToolTip="Nach unten" />
+          </WrapPanel>
+          <CheckBox Content="Automatisch weiter zum nächsten Video" IsChecked="{Binding AutoAdvance}" Margin="0,4,0,0" />
+          <CheckBox Content="Aktuelles Video wiederholen (Loop)" IsChecked="{Binding Loop}" Margin="0,4,0,0" />
         </StackPanel>
-        <Border BorderBrush="LightGray" BorderThickness="1">
-          <TextBlock Style="{StaticResource PlaceholderText}" Margin="12"
-                     Text="Noch keine Videos. Laden per Datei-Dialog oder Drag &amp; Drop folgt in M4." />
-        </Border>
+        <Grid>
+          <ListBox x:Name="PlaylistBox" ItemsSource="{Binding Playlist.Entries}" SelectedItem="{Binding SelectedEntry}"
+                   AllowDrop="True" Drop="OnPlaylistDrop" DragOver="OnPlaylistDragOver"
+                   MouseDoubleClick="OnPlaylistDoubleClick" KeyDown="OnPlaylistKeyDown"
+                   HorizontalContentAlignment="Stretch">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <DockPanel ToolTip="{Binding Path}">
+                  <TextBlock x:Name="Marker" DockPanel.Dock="Left" Width="18" Text="" />
+                  <TextBlock x:Name="Name" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+                <DataTemplate.Triggers>
+                  <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                    <Setter TargetName="Marker" Property="Text" Value="▶" />
+                    <Setter TargetName="Name" Property="FontWeight" Value="Bold" />
+                  </DataTrigger>
+                </DataTemplate.Triggers>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <TextBlock Style="{StaticResource PlaceholderText}" Margin="12" IsHitTestVisible="False"
+                     Text="Noch keine Videos. „Hinzufügen …“ oder Dateien und Ordner aus dem Explorer hierher ziehen.">
+            <TextBlock.Visibility>
+              <Binding Path="Playlist.Entries.Count">
+                <Binding.Converter>
+                  <local:ZeroToVisibleConverter />
+                </Binding.Converter>
+              </Binding>
+            </TextBlock.Visibility>
+          </TextBlock>
+        </Grid>
       </DockPanel>
     </GroupBox>
 
@@ -111,33 +150,73 @@
       </GroupBox>
     </Grid>
 
-    <!-- Transport: Play/Pause/Stop from M3; seek, playlist navigation, blackout, fade and recenter follow in M4/M8 -->
+    <!-- Transport (F2, F5, F60): timeline, time input, playlist navigation, blackout and fade -->
     <GroupBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Header="Wiedergabe">
       <StackPanel>
+        <Border x:Name="OutputBanner" Padding="10,6" Margin="0,0,0,8" CornerRadius="3">
+          <Border.Style>
+            <Style TargetType="Border">
+              <Setter Property="Background" Value="#FF303030" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding OutputStatusLevel}" Value="{x:Static vm:StatusLevel.Ok}">
+                  <Setter Property="Background" Value="#FF2E7D32" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding OutputStatusLevel}" Value="{x:Static vm:StatusLevel.Warning}">
+                  <Setter Property="Background" Value="#FFB26A00" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Border.Style>
+          <TextBlock Text="{Binding OutputText}" Foreground="White" FontSize="16" FontWeight="SemiBold" />
+        </Border>
         <DockPanel Margin="0,0,0,8">
           <TextBlock DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
-                     FontFamily="Consolas" Text="{Binding TimeText}" />
-          <Slider IsEnabled="False" VerticalAlignment="Center" Minimum="0" Maximum="1" Value="{Binding Progress, Mode=OneWay}"
-                  ToolTip="Springen folgt in M4" />
+                     FontFamily="Consolas" FontSize="14" Text="{Binding TimeText}" />
+          <Slider x:Name="Timeline" VerticalAlignment="Center" Minimum="0" Maximum="{Binding DurationSeconds}"
+                  Value="{Binding TimelineSeconds}" IsMoveToPointEnabled="True" Focusable="False"
+                  IsEnabled="{Binding IsSeekable}"
+                  Thumb.DragStarted="OnTimelineDragStarted" Thumb.DragCompleted="OnTimelineDragCompleted"
+                  ToolTip="Klicken oder ziehen zum Springen" />
         </DockPanel>
-        <DockPanel>
+        <DockPanel Margin="0,0,0,8">
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
             <TextBlock Text="Lautstärke" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <Slider Width="140" IsEnabled="False" VerticalAlignment="Center" />
-            <Button Content="Stumm" IsEnabled="False" Margin="8,0,0,0" />
+            <Slider Width="120" IsEnabled="False" VerticalAlignment="Center" ToolTip="Folgt mit dem Ton (M5)" />
+            <Button Content="Stumm" IsEnabled="False" Margin="8,0,0,0" ToolTip="Folgt mit dem Ton (M5)" />
           </StackPanel>
-          <StackPanel Orientation="Horizontal">
-            <Button Content="⏮ Zurück" IsEnabled="False" />
-            <Button Content="▶ Play" Command="{Binding PlayCommand}" />
-            <Button Content="⏸ Pause" Command="{Binding PauseCommand}" />
+          <WrapPanel>
+            <Button Content="⏮ Zurück" Command="{Binding PreviousCommand}" ToolTip="Vorheriges Video (Bild↑)" />
+            <Button Content="▶ Play" Command="{Binding PlayCommand}" ToolTip="Leertaste" />
+            <Button Content="⏸ Pause" Command="{Binding PauseCommand}" ToolTip="Leertaste" />
             <Button Content="⏹ Stop" Command="{Binding StopCommand}" ToolTip="Zurück zum Anfang, Brille schwarz" />
-            <Button Content="⏭ Weiter" IsEnabled="False" />
+            <Button Content="⏭ Weiter" Command="{Binding NextCommand}" ToolTip="Nächstes Video (Bild↓)" />
             <Separator Margin="6,0,12,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
-            <Button Content="Schwarzbild" IsEnabled="False" />
-            <Button Content="Fade" IsEnabled="False" />
-            <Button Content="Recenter" IsEnabled="False" />
-          </StackPanel>
+            <TextBlock Text="Gehe zu" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <TextBox x:Name="TimeInputBox" Width="110" VerticalContentAlignment="Center" FontFamily="Consolas"
+                     Text="{Binding TimeInput, UpdateSourceTrigger=PropertyChanged}"
+                     ToolTip="Zeit eingeben und Enter drücken, z. B. 83, 1:23, 1:23.5 oder 0:01:23,5">
+              <TextBox.InputBindings>
+                <KeyBinding Key="Enter" Command="{Binding GoToTimeCommand}" />
+              </TextBox.InputBindings>
+            </TextBox>
+            <Button Content="Springen" Command="{Binding GoToTimeCommand}" Margin="6,0,6,0" />
+          </WrapPanel>
         </DockPanel>
+        <DockPanel>
+          <WrapPanel>
+            <Button Content="{Binding BlackoutButtonText}" Command="{Binding ToggleBlackoutCommand}" MinWidth="150"
+                    ToolTip="Brille sofort schwarz bzw. wieder Bild, unabhängig von der Wiedergabe" />
+            <Button Content="{Binding FadeButtonText}" Command="{Binding ToggleFadeCommand}" MinWidth="130"
+                    ToolTip="Weich nach Schwarz bzw. zurück zum Bild blenden" />
+            <TextBlock Text="Dauer" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <TextBox x:Name="FadeSecondsBox" Width="48" VerticalContentAlignment="Center"
+                     Text="{Binding FadeSecondsText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Fade-Dauer in Sekunden (0,1 bis 30)" />
+            <TextBlock Text="s" VerticalAlignment="Center" Margin="4,0,12,0" />
+            <Button Content="Recenter" IsEnabled="False" ToolTip="Folgt in M8 (Taste R)" />
+          </WrapPanel>
+        </DockPanel>
+        <TextBlock Style="{StaticResource PlaceholderText}" Margin="0,8,0,0" FontStyle="Normal"
+                   Text="Tasten: Leertaste Play/Pause · ←/→ ±5 s · Shift+←/→ ±30 s · , / . Einzelbild · Bild↑/Bild↓ Video zurück/weiter · B Schwarzbild · F Fade" />
       </StackPanel>
     </GroupBox>
   </Grid>

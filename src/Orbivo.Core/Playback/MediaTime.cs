@@ -5,14 +5,11 @@ namespace Orbivo.Core.Playback;
 /// <summary>Media times as the operator reads and types them.</summary>
 public static class MediaTime
 {
-    /// <summary>"hh:mm:ss.fff", e.g. "00:01:05.250".</summary>
+    /// <summary>"hh:mm:ss.fff", e.g. "00:01:05.250", rounded to the millisecond.</summary>
     public static string Format(TimeSpan time)
     {
-        if (time < TimeSpan.Zero)
-        {
-            time = TimeSpan.Zero;
-        }
-
+        long milliseconds = (long)Math.Round(Math.Max(0, time.Ticks) / (double)TimeSpan.TicksPerMillisecond);
+        time = TimeSpan.FromMilliseconds(milliseconds);
         return time.ToString(@"hh\:mm\:ss\.fff", CultureInfo.InvariantCulture);
     }
 

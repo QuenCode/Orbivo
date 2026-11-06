@@ -39,6 +39,12 @@ internal sealed unsafe class VideoDecoder : IDisposable
     private static readonly AVRational MediaTimeBase = new() { num = 1, den = (int)TimeSpan.TicksPerSecond };
     private static readonly TimeSpan SlotWaitTimeout = TimeSpan.FromMilliseconds(50);
 
+    /// <summary>
+    /// A seek target at most this much before the start of a frame counts as that frame. Covers rounding of frame
+    /// steps (30 fps is not a whole number of ticks) and containers with millisecond timestamps (Matroska).
+    /// </summary>
+    private static readonly long SeekSnapTicks = TimeSpan.TicksPerMillisecond;
+
     private readonly ILogger _logger;
     private readonly ID3D11DeviceContext _context;
     private readonly string _path;
@@ -415,7 +421,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
             if (result == 0)
             {
                 long pts = PresentationTicks();
-                if (pts + FrameDurationTicks <= _skipUntilTicks)
+                if (_skipUntilTicks != long.MinValue && pts + FrameDurationTicks <= _skipUntilTicks + SeekSnapTicks)
                 {
                     // Seeking: this frame ends before the target and is never shown.
                     _lastSkippedPtsTicks = pts;

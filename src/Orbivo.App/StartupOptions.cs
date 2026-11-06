@@ -12,7 +12,7 @@ namespace Orbivo.App;
 /// <c>--image &lt;path&gt;</c>: equirect 360 still image for the headset or the debug viewport. Relative to the current directory.
 /// </param>
 /// <param name="VideoPath">
-/// <c>--video &lt;path&gt;</c>: equirect 360 video to load at start (M3; the playlist follows in M4). Plays when the operator presses Play.
+/// <c>--video &lt;path&gt;</c>: equirect 360 video to load at start as the first playlist entry. Plays when the operator presses Play.
 /// </param>
 /// <param name="StereoLayout">
 /// <c>--stereo mono|tb|sbs</c>: stereo layout of image and video. Without it, square images are top-bottom, all others mono.

@@ -23,7 +23,7 @@ public sealed class VideoPlayerSeekTests(HardwareDecodeFixture fixture) : IDispo
     private readonly Channel<PlayerCommand> _commands = Channel.CreateUnbounded<PlayerCommand>();
     private VideoPlayer? _player;
 
-    public static TheoryData<double> PausedTargets => [7.5, 0.5, 19.95, 3.0, 12.345, 0.0, 1.0 / 30, 10.0 - 0.001, 6.4];
+    public static TheoryData<double> PausedTargets => [7.5, 0.5, 19.95, 3.0, 12.345, 0.0, 1.0 / 30, 10.0 - 0.002, 6.4];
 
     public void Dispose()
     {
@@ -47,6 +47,31 @@ public sealed class VideoPlayerSeekTests(HardwareDecodeFixture fixture) : IDispo
         AssertFrameAt(frame, target);
         Assert.Equal(target, player.GetStatus().Position);
         TestContext.Current.TestOutputHelper?.WriteLine($"Seek to {target} took {elapsed.TotalMilliseconds:0} ms, frame {frame.PtsTicks / (double)FrameTicks:0.0}.");
+    }
+
+    [Fact]
+    public void FrameSteps_LandOnEveryFrame()
+    {
+        VideoPlayer player = OpenPlaying(TestVideos.Mono4K);
+        Send(new PauseCommand());
+        WaitFor(player, status => status.State == PlaybackState.Paused);
+
+        // The operator UI steps by the nominal frame duration (333 333 ticks); 30 fps is not a whole number of ticks,
+        // so after a few steps the target lies a few ticks before the frame. It must still show that frame.
+        TimeSpan step = player.GetStatus().FrameDuration;
+        Assert.Equal(FrameTicks, step.Ticks);
+        TimeSpan position = TimeSpan.Zero;
+        for (int frame = 1; frame <= 12; frame++)
+        {
+            position += step;
+            (_, VideoFrame shown) = SeekAndWait(player, position, PlaybackState.Paused, exactPosition: false);
+            Assert.Equal(frame, FrameIndex(shown));
+            position = player.GetStatus().Position;
+        }
+
+        // Many steps without taking the position back from the player: the error adds up to 300 ticks.
+        (_, VideoFrame far) = SeekAndWait(player, TimeSpan.FromTicks(300 * step.Ticks), PlaybackState.Paused, exactPosition: false);
+        Assert.Equal(300, FrameIndex(far));
     }
 
     [Fact]
@@ -214,7 +239,7 @@ public sealed class VideoPlayerSeekTests(HardwareDecodeFixture fixture) : IDispo
     /// Sends a seek and takes frames like a render loop until it is done. Asserts that the headset never goes black
     /// meanwhile (it holds the last frame) unless it was black before.
     /// </summary>
-    private (TimeSpan Elapsed, VideoFrame Frame) SeekAndWait(VideoPlayer player, TimeSpan target, PlaybackState expectedState)
+    private (TimeSpan Elapsed, VideoFrame Frame) SeekAndWait(VideoPlayer player, TimeSpan target, PlaybackState expectedState, bool exactPosition = true)
     {
         bool hadFrame = player.TryGetFrame(Stopwatch.GetTimestamp(), out _);
         var stopwatch = Stopwatch.StartNew();
@@ -235,7 +260,9 @@ public sealed class VideoPlayerSeekTests(HardwareDecodeFixture fixture) : IDispo
             Assert.Null(status.Error);
             bool atTarget = expectedState == PlaybackState.Playing
                 ? status.Position.Ticks >= expectedPosition && status.Position.Ticks < expectedPosition + TimeSpan.FromSeconds(0.5).Ticks
-                : status.Position.Ticks == expectedPosition;
+                : exactPosition
+                    ? status.Position.Ticks == expectedPosition
+                    : Math.Abs(status.Position.Ticks - expectedPosition) <= TimeSpan.TicksPerMillisecond;
             if (!status.Seeking && status.State == expectedState && atTarget)
             {
                 break;
