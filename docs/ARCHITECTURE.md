@@ -38,11 +38,11 @@ docs/
 |---|---|---|
 | WPF-UI | Operator-UI, schreibt Befehle in `Channel<PlayerCommand>` | ja (UI-üblich) |
 | Player-Control | Liest Befehle, steuert Demux/Decoder, Zustandsautomat, publiziert `PlayerStatus` (~10 Hz) | ja |
-| Demux | liest Pakete und verteilt sie auf Video- und Audio-Paketqueues | ja |
-| Video-Decode | dekodiert in GPU-Frames, legt sie in `VideoFrameQueue` (begrenzt, z. B. 6–8 Frames) | ja |
+| Demux | liest Pakete und verteilt sie auf Video- und Audio-Paketqueues (bis M5 Teil des Video-Decode-Threads) | ja |
+| Video-Decode | dekodiert in GPU-Frames, kopiert sie in den Ring der `VideoFrameQueue` (6 Slots) und gibt sie über `FramePacer` frei | ja |
 | Audio-Decode | dekodiert, konvertiert nach float32 planar, schreibt in `AudioRingBuffer` | ja |
 | Audio-Out (WASAPI) | Callback: Ringpuffer → AmbisonicsProcessor → Ausgabe; zählt ausgegebene Samples (Audio-Clock) | **nein** |
-| XR-Render (`XrHost`) | OpenXR-Frame-Loop, wählt Frame nach Clock, rendert beide Augen, liest Head-Pose. Ohne laufende Session: Verbindungsaufbau und Wiederholung | **nein** im Frame-Loop (wartet nur in `xrWaitFrame`); ohne Session darf er warten |
+| XR-Render (`XrHost`) | OpenXR-Frame-Loop, wählt Frame nach Clock, rendert beide Augen, liest Head-Pose. Ohne laufende Session: Verbindungsaufbau und Wiederholung; holt dabei fällige Video-Frames ab, damit der Decoder mit der Uhr mitläuft | **nein** im Frame-Loop (wartet nur in `xrWaitFrame`); ohne Session darf er warten |
 | Vorschau-Render (nur `--no-xr`) | Fensternachrichten und Maus, rendert ein Auge ins Vorschaufenster | **nein** (wartet nur auf den Frame-Takt der Swapchain, wie `xrWaitFrame`) |
 
 Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC-Queues, `Volatile`/`Interlocked`). Die aktuelle Kopforientierung wird vom Render-Thread als atomarer Snapshot (Quaternion und Zeitstempel) publiziert und vom Audio-Callback gelesen.
@@ -50,16 +50,18 @@ Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC
 ## Datenfluss Video
 1. Ein `ID3D11Device` mit `ID3D11Multithread::SetMultithreadProtected(true)` wird von Renderer und FFmpeg gemeinsam genutzt (`AVHWDeviceContext` auf dieses Device setzen).
 2. Der Decoder liefert `AV_PIX_FMT_D3D11`-Frames (Texture-Array und Index).
-3. Pro Frame `CopySubresourceRegion` in eine eigene Ring-Textur (NV12 oder P010). Das entkoppelt vom Decoder-Pool, und das Frame kann sofort freigegeben werden.
-4. Der Shader sampelt Luma-SRV (R8/R16) und Chroma-SRV (R8G8/R16G16) und konvertiert YUV→RGB (Matrix und Range aus dem Stream: BT.709/BT.2020, limited/full).
-5. **Gamma-Falle:** Bei einem `*_SRGB`-Swapchain-Format muss der Shader linearisiert ausgeben. Entschieden in M1 (`DECISIONS.md`): durchgehend sRGB-Views, der Shader rechnet und schreibt linear. Ab M3 linearisiert der Shader das Video nach YUV→RGB.
+3. Pro Frame `CopySubresourceRegion` in eine eigene Ring-Textur (NV12 oder P010). Das entkoppelt vom Decoder-Pool, und das Frame kann sofort freigegeben werden. Die Kopie läuft auf dem geteilten Immediate Context (Multithread-Lock), damit liegt sie auf der GPU vor jedem Draw, der das Slot liest.
+4. `FramePacer` (Core) übergibt Slots lock-frei: eine SPSC-Queue freier Slots (Decoder → Render) und eine fertiger Slots mit pts (Render ← Decoder). Der Render-Thread wählt das jüngste Frame mit `pts ≤ Zielzeit` und gibt ältere sofort zurück.
+5. `VideoPlayer` (Media) ist die einzige Schnittstelle für die Render-Threads (`IVideoFrameSource.TryGetFrame(Anzeigezeitpunkt)`). Beim Öffnen/Stoppen tauscht der Control-Thread die Queue; ein Hazard-Pointer verhindert, dass er eine Queue freigibt, die der Render-Thread gerade benutzt.
+6. Der Shader sampelt Luma-SRV (R8/R16) und Chroma-SRV (R8G8/R16G16) und konvertiert YUV→RGB (Matrix und Range aus dem Stream: BT.601/BT.709/BT.2020, limited/full; `color.hlsl`, C#-Referenz `VideoColor`). BT.2020 wird in linearem Licht auf BT.709 umgerechnet.
+7. **Gamma-Falle:** Bei einem `*_SRGB`-Swapchain-Format muss der Shader linearisiert ausgeben. Entschieden in M1 (`DECISIONS.md`): durchgehend sRGB-Views, der Shader rechnet und schreibt linear. Seit M3 linearisiert der Shader das Video nach YUV→RGB mit der sRGB-Kurve, die Code-Werte kommen also unverändert an.
 
 ## Rendering
 - Pro Auge ein Fullscreen-Triangle, kein Kugel-Mesh.
 - Der Pixel-Shader rekonstruiert die Blickrichtung: `dir = normalize(mul(invViewRotProj, ndc))`. Die View-Matrix enthält **nur Rotation** (Kopf-Orientierung × Recenter-Offset × Video-Offset). Projektionsmatrix aus dem asymmetrischen `XrFovf`.
 - Umgesetzt als drei Vektoren statt Matrix (`ViewRayBasis`): `dir = normalize(ndc.x·R + ndc.y·U + C)`. C# berechnet R, U und C, der Shader bekommt sie im Constant Buffer. So teilen C# und HLSL kein Matrix-Layout.
 - Abtastung ohne Mipmaps (`SampleLevel 0`), U wiederholend, V am Rand begrenzt. Dadurch gibt es hinten bei ±180° keine Naht.
-- `dir → (u,v)` je nach `ProjectionType`. Danach Stereo-Layout anwenden (Halbbild je Auge wählen).
+- `dir → (u,v)` je nach `ProjectionType`. Danach Stereo-Layout anwenden (Halbbild je Auge wählen): `SourceUv = clamp(uv, min, max) · Scale + Offset` (`EyeSourceRect`). Top-Bottom: oben = linkes Auge; Side-by-Side: links = linkes Auge. Begrenzt wird auf ein halbes Texel vor der Halbbildgrenze.
 - Außerhalb des gültigen Bereichs (z. B. Rückseite bei VR180, außerhalb des Fisheye-Kreises) wird Schwarz ausgegeben.
 - Fade und Blackout sind ein Multiplikator im Shader. Bei vollem Blackout kann das Video-Sampling entfallen.
 - Varjo-spezifisch: Zuerst Standard-Stereo (`PRIMARY_STEREO`). Quad-Views (`XR_VARJO_quad_views`) sind eine spätere Optimierung.
@@ -88,6 +90,7 @@ Alle Formeln stehen in `ProjectionMath.cs` und in `projection.hlsl`. Die Unit-Te
 - Der Render-Thread berechnet `targetPts = Clock.Now + (predictedDisplayTime − nowXr)` und wählt das jüngste Frame mit `pts ≤ targetPts`. Ältere Frames werden verworfen und gezählt.
 - **Seek:** Queues leeren, Decoder flushen, bis zum Ziel dekodieren (Keyframe-Suche plus Vorwärtsdekodieren), Clock neu setzen. Während des Seeks hält die Brille das letzte Bild (oder Schwarz, konfigurierbar).
 - **Pause:** Audio-Ausgabe gibt Stille aus und die Clock steht. Die Brille rendert weiter das aktuelle Frame mit Kopf-Tracking.
+- **Bis M5 (ohne Audio):** `SystemPlaybackClock` (Stopwatch/QPC) ist die Uhr. Die vorhergesagte Anzeigezeit der Brille wird mit `XR_KHR_win32_convert_performance_counter_time` in einen QPC-Zeitstempel umgerechnet; die Vorschau nimmt „jetzt“.
 
 ## OpenXR-Lebenszyklus
 - Loader (`openxr_loader.dll`, Khronos) → Instance mit `XR_KHR_D3D11_enable` → System (HMD) → Grafik-Anforderungen (Adapter-LUID) → D3D11-Device auf diesem Adapter (einmal je App-Lauf) → Session (D3D11-Binding) → Reference Space `LOCAL` → Swapchain je Auge (sRGB, empfohlene Größe).
@@ -100,6 +103,7 @@ Alle Formeln stehen in `ProjectionMath.cs` und in `projection.hlsl`. Die Unit-Te
 - Maus: Ziehen greift das Bild (Ziehen nach rechts = Blick nach links), Mausrad = vertikales Sichtfeld 30–120° (Start 75°), Pos1 = zurücksetzen.
 - Standbild per `--image <Pfad>` (M1: Equirect 360 Mono). Dekodiert wird mit WIC über WPF in `Orbivo.App`, die Textur entsteht auf einem Worker-Thread und wird dem Render-Thread übergeben.
 - Gleiche Shader und Pipeline (`PanoramaRenderer`), nur andere View/Projection-Quelle: im Vorschaufenster `MouseViewSource` (`IViewSource`), in der Brille liefert `xrLocateViews` die Ansichten direkt im Frame-Loop (sie hängen an der vorhergesagten Anzeigezeit).
+- Video per `--video <Pfad>` (M3), in Vorschau und Brille. Stereo-Layout wird aus der Größe geraten (quadratisch = Top-Bottom) oder mit `--stereo mono|tb|sbs` festgelegt; die Vorschau zeigt das linke Auge.
 - Damit lassen sich Decoding, Formate, Sync und UI ohne Brille entwickeln.
 
 ## Sidecar-Format (`<Dateiname mit Endung>.orbivo.json`, z. B. `clip.mp4.orbivo.json`)
