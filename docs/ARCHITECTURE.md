@@ -39,10 +39,10 @@ docs/
 |---|---|---|
 | WPF-UI | Operator-UI, schreibt Befehle in `Channel<PlayerCommand>` | ja (UI-üblich) |
 | Player-Control | Liest Befehle, steuert Demux/Decoder, Zustandsautomat, publiziert `PlayerStatus` (~10 Hz) | ja |
-| Demux | liest Pakete und verteilt sie auf Video- und Audio-Paketqueues (bis M5 Teil des Video-Decode-Threads) | ja |
+| Demux (`MediaDemuxer`) | liest Pakete und verteilt sie auf Video- und Audio-`PacketQueue`; führt Seeks aus und legt eine Seek-Marke in beide Queues | ja |
 | Video-Decode | dekodiert in GPU-Frames, kopiert sie in den Ring der `VideoFrameQueue` (6 Slots) und gibt sie über `FramePacer` frei. Führt Seeks aus und wartet nach dem Dateiende auf den nächsten Seek | ja |
-| Audio-Decode | dekodiert, konvertiert nach float32 planar, schreibt in `AudioRingBuffer` | ja |
-| Audio-Out (WASAPI) | Callback: Ringpuffer → AmbisonicsProcessor → Ausgabe; zählt ausgegebene Samples (Audio-Clock) | **nein** |
+| Audio-Decode (`AudioDecoder`) | dekodiert, konvertiert mit swresample nach float32 Stereo interleaved in der Geräte-Samplerate, schreibt mit Medienposition in `AudioRingBuffer` | ja |
+| Audio-Out (`AudioOutput`, MMCSS „Pro Audio“) | wartet auf das WASAPI-Ereignis, liest Befehle, Geräteposition → `AudioClockTracker` → `ClockSnapshot`; `AudioRenderer` füllt den Puffer aus dem Ringpuffer (ab M7 über den AmbisonicsProcessor). Geräte öffnen und Wiederholung laufen zwischen den Perioden, nie darin | **nein** in der Periode (wartet nur auf das Geräte-Ereignis) |
 | XR-Render (`XrHost`) | OpenXR-Frame-Loop, wählt Frame nach Clock, rendert beide Augen, liest Head-Pose. Ohne laufende Session: Verbindungsaufbau und Wiederholung; holt dabei fällige Video-Frames ab, damit der Decoder mit der Uhr mitläuft | **nein** im Frame-Loop (wartet nur in `xrWaitFrame`); ohne Session darf er warten |
 | Vorschau-Render (nur `--no-xr`) | Fensternachrichten und Maus, rendert ein Auge ins Vorschaufenster | **nein** (wartet nur auf den Frame-Takt der Swapchain, wie `xrWaitFrame`) |
 
@@ -79,21 +79,42 @@ Konvention: +Y oben, −Z vorne, +X rechts. `dir` normalisiert.
 Alle Formeln stehen in `ProjectionMath.cs` und in `projection.hlsl`. Die Unit-Tests prüfen bekannte Richtungen (vorne, links, oben, hinten) gegen erwartete UV.
 
 ## Audio
-- Der Decoder liefert Audio als float32. Die Kanal-Layout-Erkennung bestimmt den `AudioMode`: `Stereo`, `Surround`, `Ambisonics(order, convention)`, `Binaural`.
+Stand M5: nur Stereo-Durchleitung. Räumlicher Ton folgt in M7.
+
+### Datenfluss Ton
+1. `MediaDemuxer` wählt die Tonspur (`av_find_best_stream`, passend zum Videostream) und füllt die Audio-`PacketQueue`.
+2. `AudioDecoder` dekodiert; `AudioConversionPlan` legt die Umrechnung fest: Stereo durchreichen, Mono auf beide Seiten, Mehrkanal bis M7 auf Stereo mischen, Resampling auf die Samplerate des Ausgabegeräts. Ergebnis: float32 Stereo interleaved mit Medienposition.
+3. `AudioRingBuffer` (Core, SPSC, 2¹⁷ Frames ≈ 2,7 s bei 48 kHz) ist medienadressiert: Der Leser holt „Daten ab Medienzeit t“, zu späte Daten werden übersprungen, Lücken werden Stille. Flush (Seek, Stop) als Handshake: Die alten Daten bleiben lesbar, bis die Ausgabe ausgeblendet und bestätigt hat.
+4. `AudioOutput` (Orbivo.Audio) besitzt den Audio-Out-Thread und das Gerät. Der Player spricht nur über `IAudioOutput` (Core) mit ihr: Befehle (Attach, Play, Pause, Hold, Lautstärke, Stumm, Gerät) über eine lock-freie Queue, Uhr und Status über Snapshots.
+5. `AudioRenderer` (Zustände Still / Läuft / Blendet zur Pause aus / Blendet zum Halt aus) holt pro Periode die Frames zur gehörten Medienzeit, wendet Transport-Rampe (5 ms Smoothstep) und Verstärkung an und zählt Aussetzer. `SampleWriter` schreibt in das Geräteformat (float32, int16/24/32; Stereo auf die ersten zwei Kanäle, ein Mono-Gerät bekommt den Mittelwert).
+6. Verstärkung = `level³(Lautstärke)` × (stumm ? 0 : 1) × `level³(Fade/Schwarzbild)` zu dem Zeitpunkt, an dem der erste Frame der Periode gehört wird, geglättet mit 5 ms (`GainSmoother`).
+
+### Geräte
+- `IAudioEndpoint` kapselt ein Gerät: `WasapiAudioEndpoint` (Shared Mode, ereignisgesteuert, 20 ms Puffer, Position über `IAudioClock` mit QPC-Zeitstempel), `NullAudioEndpoint` (stiller Ersatz mit Systemtakt) und `SimulatedAudioEndpoint` (für Tests: Drift, Latenz, Aufnahme, Erkennung von Tönen).
+- `WasapiEndpointProvider` listet Geräte und meldet Änderungen (`IMMNotificationClient`). „Windows-Standard“ folgt dem Standardgerät; ein fest gewähltes Gerät wird nie automatisch gewechselt.
+- Fehlt das Gerät oder fällt es aus (Fehler oder 500 ms ohne Periode), läuft `NullAudioEndpoint` weiter; neuer Versuch alle 2 s und bei jeder Geräteänderung.
+- `settings.json` (`%LOCALAPPDATA%\Orbivo`) speichert Gerät und Lautstärke, nicht Stumm (`AppSettings`, Core).
+
+### Ab M7 (geplant)
+- Die Kanal-Layout-Erkennung bestimmt den `AudioMode`: `Stereo`, `Surround`, `Ambisonics(order, convention)`, `Binaural`.
 - **Ambisonics:** FuMa wird beim Dekodieren nach AmbiX (ACN/SN3D) konvertiert. Steam Audio rechnet intern in N3D, daher vor der Verarbeitung SN3D → N3D (`iplAudioBufferConvertAmbisonics`). Danach Rotation mit der **inversen** Kopforientierung (inkl. Recenter und Video-Yaw-Offset) und binaurales Decoding über Steam Audio (`iplAmbisonicsBinauralEffect` oder Rotation und Decode).
 - **Surround:** virtuelle Lautsprecher (Steam Audio `iplBinauralEffect` pro Kanal, oder Ambisonics-Encode und Decode).
 - **Binaural/Stereo:** durchreichen.
 - Koordinatenumrechnung OpenXR ↔ Steam Audio an genau einer Stelle (`AudioCoordinates.cs`), mit Unit-Test.
-- WASAPI-Puffer 10–20 ms. Die Blockgröße des Prozessors passt zur Puffergröße (z. B. 480 Samples bei 48 kHz).
+- Die Blockgröße des Prozessors passt zur Periode des Geräts (z. B. 480 Samples bei 48 kHz).
 - **Externe Audiodatei** (falls die Aufnahmen getrennt geliefert werden): Sidecar-Feld `externalAudio` mit `path` und `offsetMs`. Eigener Demux/Decoder für Audio, gleiche Clock.
 
 ## Synchronisation
-- `PlaybackClock.Now` = (Anzahl ausgegebener Samples − Puffer-Latenz) / Samplerate + Startoffset.
-- Der Render-Thread berechnet `targetPts = Clock.Now + (predictedDisplayTime − nowXr)` und wählt das jüngste Frame mit `pts ≤ targetPts`. Ältere Frames werden verworfen und gezählt.
-- **Seek:** Uhr steht am Ziel. Der Decode-Thread beginnt eine neue Frame-Generation, sucht den Keyframe davor (`av_seek_frame`, `AVSEEK_FLAG_BACKWARD`), leert den Decoder und dekodiert vorwärts; Frames, die vor dem Ziel enden (1 ms Toleranz), werden ohne Kopie verworfen. Sind 4 Frames bereit, setzt der Player die Uhr auf `max(Ziel, erstes Frame)` und lässt sie bei „Läuft“ weiterlaufen. Während des Seeks hält die Brille das letzte Bild. Weitere Seeks ersetzen den laufenden.
+- **Medienzeit** ist für Bild und Ton gleich: Ticks ab dem Beginn des Videostreams (`MediaDemuxer.OriginTicks`). Im Ringpuffer: Frame = Ticks × Samplerate / 10⁷.
+- **Audio-Clock (Master, Regel 4):** Die Frames, die an das Gerät gehen, sind ab dem Start des Streams nummeriert („Stream-Frames“). Ein Segment ordnet einem Stream-Frame eine Medienzeit zu (Play, Seek). Das Gerät meldet, welcher Stream-Frame zu welchem QPC-Zeitpunkt gehört wird. `AudioClockTracker` folgt dieser Position mit einem PI-Regler und lernt dabei die Drift des Geräts gegen QPC; Fehler über 30 ms setzen die Uhr neu. Vor dem ersten gehörten Frame eines Segments steht die Uhr am Anfang, nach dem Ende (Pause) am Ende.
+- Der Audio-Thread publiziert einen `ClockSnapshot` über `AudioPlaybackClock` (lock-frei). Jeder Thread rechnet daraus die Medienzeit zu einem beliebigen QPC-Zeitstempel, ohne auf den Audio-Thread zu warten. Ein Halt (Seek, Stop) vom Control-Thread gilt sofort, bis der Audio-Thread ihn mit seiner Sequenznummer bestätigt.
+- `TransportClock` (Media) gibt Transportbefehle an Systemuhr und Tonausgabe und liest die Ton-Uhr, solange das Video Ton hat; sonst die Systemuhr (`SystemPlaybackClock`, Stopwatch/QPC).
+- Der Render-Thread wählt das jüngste Frame mit `pts ≤ Uhr(Anzeigezeitpunkt)`. Die vorhergesagte Anzeigezeit der Brille wird mit `XR_KHR_win32_convert_performance_counter_time` in einen QPC-Zeitstempel umgerechnet; die Vorschau nimmt „jetzt“. Ältere Frames werden verworfen und gezählt.
+- **A/V-Messung** (`AvSyncMeter`): bei der ersten Anzeige jedes Frames `Uhr(Anzeigezeit) − pts`, solange die Uhr läuft. Status „A/V“ und Log alle 10 s; Grenze ±20 ms.
+- **Start und Seek:** Die Uhr steht am Ziel. Der Demuxer springt auf den Keyframe davor (`av_seek_frame`, `AVSEEK_FLAG_BACKWARD`) und legt eine Seek-Marke in beide Queues. Der Video-Decoder beginnt eine neue Frame-Generation, leert den Decoder und dekodiert vorwärts; Frames, die vor dem Ziel enden (1 ms Toleranz), werden ohne Kopie verworfen. Der Ton-Decoder leert den Ringpuffer (nach dem Ausblenden) und verwirft Ton vor dem Ziel samplegenau. Sind 4 Frames und genug Ton bereit (der Ton höchstens 2 s nach dem Bild), setzt der Player die Uhr auf `max(Ziel, erstes Frame)` und lässt sie bei „Läuft“ weiterlaufen; der Ton blendet in 5 ms ein. Während des Seeks hält die Brille das letzte Bild. Weitere Seeks ersetzen den laufenden.
 - **Loop:** Am Ende Seek auf 0 im Zustand „Läuft“.
-- **Pause:** Audio-Ausgabe gibt Stille aus und die Clock steht. Die Brille rendert weiter das aktuelle Frame mit Kopf-Tracking.
-- **Bis M5 (ohne Audio):** `SystemPlaybackClock` (Stopwatch/QPC) ist die Uhr. Die vorhergesagte Anzeigezeit der Brille wird mit `XR_KHR_win32_convert_performance_counter_time` in einen QPC-Zeitstempel umgerechnet; die Vorschau nimmt „jetzt“.
+- **Pause:** Der Ton blendet in 5 ms aus, die Uhr steht am Ende der Rampe. Die Brille rendert weiter das aktuelle Frame mit Kopf-Tracking.
+- **Fade und Schwarzbild** wirken auf Bild und Ton (`OutputFader`), jeweils zu dem Zeitpunkt, an dem es gesehen bzw. gehört wird.
 
 ## OpenXR-Lebenszyklus
 - Loader (`openxr_loader.dll`, Khronos) → Instance mit `XR_KHR_D3D11_enable` → System (HMD) → Grafik-Anforderungen (Adapter-LUID) → D3D11-Device auf diesem Adapter (einmal je App-Lauf) → Session (D3D11-Binding) → Reference Space `LOCAL` → Swapchain je Auge (sRGB, empfohlene Größe).

@@ -25,6 +25,13 @@ python tools/testmedia/make_testmedia.py                                  # alle
 python tools/testmedia/make_testmedia.py --sizes 4k --layouts tb          # nur 4K Top-Bottom
 python tools/testmedia/make_testmedia.py --what audio                     # nur der Ambisonics-Test
 python tools/testmedia/make_testmedia.py --bit-depth 10 --fps 60          # HEVC Main10, 60 fps
+python tools/testmedia/make_testmedia.py --long                           # nur das 10-Minuten-Video für den A/V-Langtest (M5)
+```
+
+`--long` erzeugt `equirect360_mono_4096x2048_hevc_8bit_30fps_600s.mp4` (etwa 180 MB) neben den kurzen Videos. Andere Längen als 20 s bekommen allgemein die Endung `_<Sekunden>s`. Vorhandene Dateien und ihre Einträge in `manifest.json` bleiben erhalten. Der Langtest läuft nur mit `ORBIVO_LONG_TESTS=1`:
+
+```
+$env:ORBIVO_LONG_TESTS = '1'; dotnet test --project tests/Orbivo.Media.Tests
 ```
 
 | Option | Standard | Bedeutung |
