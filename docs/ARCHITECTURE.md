@@ -7,8 +7,9 @@ Directory.Build.props          # Nullable, TreatWarningsAsErrors, LangVersion, x
 Directory.Packages.props       # zentrale, gepinnte Paketversionen
 src/
   Orbivo.Core/            # keine UI-, XR- oder Native-Abhängigkeiten
-    Commands/                  # PlayerCommand-Records (Play, Pause, Seek, SetFormat, Blackout, Recenter …)
-    Playback/                  # PlayerController (Zustandsautomat), PlaybackClock
+    Commands/                  # PlayerCommand-Records (Open, Play, Pause, Stop, Seek, Loop, Blackout, Fade; später SetFormat, Recenter …)
+    Playback/                  # PlaybackStateMachine, SystemPlaybackClock, FramePacer, OutputFader (Blackout/Fade), MediaTime
+    Playlists/                 # Playlist (Reihenfolge, aktuelles Video, Weiter/Zurück, Dateien aus Drag & Drop)
     Formats/                   # ProjectionType, StereoLayout, AudioMode, VideoFormatSettings, Sidecar-Laden/Speichern
     Geometry/                  # ProjectionMath (C#-Referenz der Shader-Mathematik), OrientationMath, FovAngles
     Logging/                   # SessionLogger (CSV), EventLog
@@ -39,7 +40,7 @@ docs/
 | WPF-UI | Operator-UI, schreibt Befehle in `Channel<PlayerCommand>` | ja (UI-üblich) |
 | Player-Control | Liest Befehle, steuert Demux/Decoder, Zustandsautomat, publiziert `PlayerStatus` (~10 Hz) | ja |
 | Demux | liest Pakete und verteilt sie auf Video- und Audio-Paketqueues (bis M5 Teil des Video-Decode-Threads) | ja |
-| Video-Decode | dekodiert in GPU-Frames, kopiert sie in den Ring der `VideoFrameQueue` (6 Slots) und gibt sie über `FramePacer` frei | ja |
+| Video-Decode | dekodiert in GPU-Frames, kopiert sie in den Ring der `VideoFrameQueue` (6 Slots) und gibt sie über `FramePacer` frei. Führt Seeks aus und wartet nach dem Dateiende auf den nächsten Seek | ja |
 | Audio-Decode | dekodiert, konvertiert nach float32 planar, schreibt in `AudioRingBuffer` | ja |
 | Audio-Out (WASAPI) | Callback: Ringpuffer → AmbisonicsProcessor → Ausgabe; zählt ausgegebene Samples (Audio-Clock) | **nein** |
 | XR-Render (`XrHost`) | OpenXR-Frame-Loop, wählt Frame nach Clock, rendert beide Augen, liest Head-Pose. Ohne laufende Session: Verbindungsaufbau und Wiederholung; holt dabei fällige Video-Frames ab, damit der Decoder mit der Uhr mitläuft | **nein** im Frame-Loop (wartet nur in `xrWaitFrame`); ohne Session darf er warten |
@@ -52,7 +53,8 @@ Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC
 2. Der Decoder liefert `AV_PIX_FMT_D3D11`-Frames (Texture-Array und Index).
 3. Pro Frame `CopySubresourceRegion` in eine eigene Ring-Textur (NV12 oder P010). Das entkoppelt vom Decoder-Pool, und das Frame kann sofort freigegeben werden. Die Kopie läuft auf dem geteilten Immediate Context (Multithread-Lock), damit liegt sie auf der GPU vor jedem Draw, der das Slot liest.
 4. `FramePacer` (Core) übergibt Slots lock-frei: eine SPSC-Queue freier Slots (Decoder → Render) und eine fertiger Slots mit pts (Render ← Decoder). Der Render-Thread wählt das jüngste Frame mit `pts ≤ Zielzeit` und gibt ältere sofort zurück.
-5. `VideoPlayer` (Media) ist die einzige Schnittstelle für die Render-Threads (`IVideoFrameSource.TryGetFrame(Anzeigezeitpunkt)`). Beim Öffnen/Stoppen tauscht der Control-Thread die Queue; ein Hazard-Pointer verhindert, dass er eine Queue freigibt, die der Render-Thread gerade benutzt.
+5. `VideoPlayer` (Media) ist die einzige Schnittstelle für die Render-Threads (`IVideoFrameSource.TryGetFrame(Anzeigezeitpunkt)` und `GetOutputBrightness(Anzeigezeitpunkt)` für Blackout/Fade). Beim Öffnen/Stoppen tauscht der Control-Thread die Queue; ein Hazard-Pointer verhindert, dass er eine Queue freigibt, die der Render-Thread gerade benutzt.
+5a. **Seek** bleibt in derselben Queue: Der Decode-Thread startet eine neue Generation im `FramePacer`. Der Render-Thread gibt Slots älterer Generationen zurück, zeigt aber sein aktuelles Frame weiter, bis ein Frame der neuen Generation fällig ist.
 6. Der Shader sampelt Luma-SRV (R8/R16) und Chroma-SRV (R8G8/R16G16) und konvertiert YUV→RGB (Matrix und Range aus dem Stream: BT.601/BT.709/BT.2020, limited/full; `color.hlsl`, C#-Referenz `VideoColor`). BT.2020 wird in linearem Licht auf BT.709 umgerechnet.
 7. **Gamma-Falle:** Bei einem `*_SRGB`-Swapchain-Format muss der Shader linearisiert ausgeben. Entschieden in M1 (`DECISIONS.md`): durchgehend sRGB-Views, der Shader rechnet und schreibt linear. Seit M3 linearisiert der Shader das Video nach YUV→RGB mit der sRGB-Kurve, die Code-Werte kommen also unverändert an.
 
@@ -63,7 +65,7 @@ Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC
 - Abtastung ohne Mipmaps (`SampleLevel 0`), U wiederholend, V am Rand begrenzt. Dadurch gibt es hinten bei ±180° keine Naht.
 - `dir → (u,v)` je nach `ProjectionType`. Danach Stereo-Layout anwenden (Halbbild je Auge wählen): `SourceUv = clamp(uv, min, max) · Scale + Offset` (`EyeSourceRect`). Top-Bottom: oben = linkes Auge; Side-by-Side: links = linkes Auge. Begrenzt wird auf ein halbes Texel vor der Halbbildgrenze.
 - Außerhalb des gültigen Bereichs (z. B. Rückseite bei VR180, außerhalb des Fisheye-Kreises) wird Schwarz ausgegeben.
-- Fade und Blackout sind ein Multiplikator im Shader. Bei vollem Blackout kann das Video-Sampling entfallen.
+- Fade und Blackout sind ein Multiplikator im Shader (`Brightness`), bei 0 wird nur gelöscht. Der Faktor kommt pro Frame aus `OutputFader` (über den Player) und ist `level^2,2`, damit der Fade in wahrgenommener Helligkeit gleichmäßig läuft.
 - Varjo-spezifisch: Zuerst Standard-Stereo (`PRIMARY_STEREO`). Quad-Views (`XR_VARJO_quad_views`) sind eine spätere Optimierung.
 
 ## Projektionsmathematik (Referenz)
@@ -88,7 +90,8 @@ Alle Formeln stehen in `ProjectionMath.cs` und in `projection.hlsl`. Die Unit-Te
 ## Synchronisation
 - `PlaybackClock.Now` = (Anzahl ausgegebener Samples − Puffer-Latenz) / Samplerate + Startoffset.
 - Der Render-Thread berechnet `targetPts = Clock.Now + (predictedDisplayTime − nowXr)` und wählt das jüngste Frame mit `pts ≤ targetPts`. Ältere Frames werden verworfen und gezählt.
-- **Seek:** Queues leeren, Decoder flushen, bis zum Ziel dekodieren (Keyframe-Suche plus Vorwärtsdekodieren), Clock neu setzen. Während des Seeks hält die Brille das letzte Bild (oder Schwarz, konfigurierbar).
+- **Seek:** Uhr steht am Ziel. Der Decode-Thread beginnt eine neue Frame-Generation, sucht den Keyframe davor (`av_seek_frame`, `AVSEEK_FLAG_BACKWARD`), leert den Decoder und dekodiert vorwärts; Frames, die vor dem Ziel enden (1 ms Toleranz), werden ohne Kopie verworfen. Sind 4 Frames bereit, setzt der Player die Uhr auf `max(Ziel, erstes Frame)` und lässt sie bei „Läuft“ weiterlaufen. Während des Seeks hält die Brille das letzte Bild. Weitere Seeks ersetzen den laufenden.
+- **Loop:** Am Ende Seek auf 0 im Zustand „Läuft“.
 - **Pause:** Audio-Ausgabe gibt Stille aus und die Clock steht. Die Brille rendert weiter das aktuelle Frame mit Kopf-Tracking.
 - **Bis M5 (ohne Audio):** `SystemPlaybackClock` (Stopwatch/QPC) ist die Uhr. Die vorhergesagte Anzeigezeit der Brille wird mit `XR_KHR_win32_convert_performance_counter_time` in einen QPC-Zeitstempel umgerechnet; die Vorschau nimmt „jetzt“.
 

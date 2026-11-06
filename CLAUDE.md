@@ -49,7 +49,7 @@ dotnet test
 dotnet run --project src/Orbivo.App -- --no-xr      # Desktop-Debug-Viewport ohne Brille
 dotnet run --project src/Orbivo.App -- --no-xr --image tools/testmedia/out/equirect360_mono_4096x2048.png
 dotnet run --project src/Orbivo.App -- --image tools/testmedia/out/equirect360_mono_4096x2048.png   # Testbild in der Brille (Varjo Base muss laufen)
-dotnet run --project src/Orbivo.App -- --no-xr --video tools/testmedia/out/equirect360_tb_8192x8192_hevc_8bit_30fps.mp4   # Video in der Vorschau, Play im Operatorfenster
+dotnet run --project src/Orbivo.App -- --no-xr --video tools/testmedia/out/equirect360_tb_8192x8192_hevc_8bit_30fps.mp4   # Video in der Vorschau als erster Playlist-Eintrag, Play im Operatorfenster
 dotnet run --project src/Orbivo.App -- --video tools/testmedia/out/equirect360_tb_8192x8192_hevc_8bit_30fps.mp4            # Video in der Brille (--stereo mono|tb|sbs erzwingt das Layout)
 powershell -NoProfile -ExecutionPolicy Bypass -File native\fetch-native.ps1   # native DLLs laden
 python tools/testmedia/make_testmedia.py            # Testbilder, -videos, Ambisonics-Test
