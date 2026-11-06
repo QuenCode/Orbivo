@@ -137,8 +137,8 @@ internal sealed unsafe class XrSession : IDisposable
     /// <param name="renderer">Draws the panorama.</param>
     /// <param name="video">Video frames; a due frame wins over <paramref name="image"/>. Null without a player.</param>
     /// <param name="image">Image to show if there is no video frame, or null for black.</param>
-    /// <param name="imageLayout">Stereo layout of <paramref name="image"/>.</param>
-    public XrFrameResult RenderFrame(PanoramaRenderer renderer, IVideoFrameSource? video, StillImageTexture? image, StereoLayout imageLayout)
+    /// <param name="imageFormat">Format of <paramref name="image"/>.</param>
+    public XrFrameResult RenderFrame(PanoramaRenderer renderer, IVideoFrameSource? video, StillImageTexture? image, VideoFormat imageFormat)
     {
         var waitInfo = new FrameWaitInfo(type: StructureType.FrameWaitInfo);
         var frameState = new FrameState(type: StructureType.FrameState);
@@ -161,7 +161,7 @@ internal sealed unsafe class XrSession : IDisposable
             headTracked = LocateViews(frameState.PredictedDisplayTime);
             if (_hasValidViews)
             {
-                PanoramaSource source = hasVideoFrame ? PanoramaSource.FromVideo(frame) : PanoramaSource.FromImage(image, imageLayout);
+                PanoramaSource source = hasVideoFrame ? PanoramaSource.FromVideo(frame) : PanoramaSource.FromImage(image, imageFormat);
                 // Blackout and fade (F5) also cover the still image; without a player there is nothing to dim.
                 RenderEyes(renderer, source, video?.GetOutputBrightness(displayTimestamp) ?? 1f);
                 layerCount = 1;

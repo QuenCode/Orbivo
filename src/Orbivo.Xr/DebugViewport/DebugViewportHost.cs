@@ -55,7 +55,7 @@ public sealed class DebugViewportHost : IDisposable
     private volatile bool _stopRequested;
     private StillImageTexture? _pendingImage;
     private IVideoFrameSource? _videoSource;
-    private int _imageLayout = (int)StereoLayout.Mono;
+    private VideoFormat _imageFormat = VideoFormat.Default;
 
     // Status, written by the render thread, read by the UI.
     private int _state = (int)DebugViewportState.Starting;
@@ -98,7 +98,7 @@ public sealed class DebugViewportHost : IDisposable
     /// <summary>Stereo layout of the images passed to <see cref="ShowImage"/>; the preview shows the left eye. Any thread.</summary>
     public void SetImageLayout(StereoLayout layout)
     {
-        Volatile.Write(ref _imageLayout, (int)layout);
+        Volatile.Write(ref _imageFormat, VideoFormat.Equirect360(layout));
     }
 
     /// <summary>
@@ -226,7 +226,7 @@ public sealed class DebugViewportHost : IDisposable
             long displayTimestamp = Stopwatch.GetTimestamp();
             PanoramaSource source = video is not null && video.TryGetFrame(displayTimestamp, out VideoFrame videoFrame)
                 ? PanoramaSource.FromVideo(videoFrame)
-                : PanoramaSource.FromImage(image, (StereoLayout)Volatile.Read(ref _imageLayout));
+                : PanoramaSource.FromImage(image, Volatile.Read(ref _imageFormat));
             float brightness = video?.GetOutputBrightness(displayTimestamp) ?? 1f;
             renderer.Render(_device.ImmediateContext, swapChain.RenderTargetView, swapChain.Width, swapChain.Height, views[0], Eye.Left, source, brightness);
             swapChain.Present();

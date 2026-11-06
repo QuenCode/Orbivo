@@ -77,7 +77,7 @@ internal sealed class TestVideoFrame : IDisposable
             new ShaderResourceViewDescription(_texture, ShaderResourceViewDimension.Texture2D, tenBit ? Format.R16G16_UNorm : Format.R8G8_UNorm));
 
         Constants = VideoColor.CreateConstants(color with { BitDepth = bitDepth });
-        Frame = new VideoFrame(_luma, _chroma, width, height, layout, Constants, 0);
+        Frame = new VideoFrame(_luma, _chroma, width, height, VideoFormat.Equirect360(layout), Constants, 0);
     }
 
     public VideoColorConstants Constants { get; }

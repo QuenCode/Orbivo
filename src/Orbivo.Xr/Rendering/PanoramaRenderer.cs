@@ -48,13 +48,13 @@ public sealed class PanoramaRenderer : IDisposable
 
         _vertexShader = d3d.CreateVertexShader(
             ShaderCompiler.Compile(ShaderFile, "VsFullscreenTriangle", ShaderCompiler.VertexShaderProfile), null);
-        _imageShader = CreatePixelShader(d3d, "PsEquirect360");
-        _videoShader = CreatePixelShader(d3d, "PsEquirect360Video");
+        _imageShader = CreatePixelShader(d3d, "PsPanoramaImage");
+        _videoShader = CreatePixelShader(d3d, "PsPanoramaVideo");
         _debugDirectionShader = CreatePixelShader(d3d, "PsDebugDirection");
         _debugUvShader = CreatePixelShader(d3d, "PsDebugEquirect360Uv");
         _debugSourceUvShader = CreatePixelShader(d3d, "PsDebugSourceUv");
 
-        // Wrap horizontally (360° around), clamp vertically (poles). No mipmaps, see panorama.hlsl.
+        // Wrap horizontally (360° around), clamp vertically (poles). Other projections clamp in the shader. No mipmaps.
         _sampler = d3d.CreateSamplerState(new SamplerDescription(
             Filter.MinMagMipLinear,
             TextureAddressMode.Wrap,
@@ -81,7 +81,7 @@ public sealed class PanoramaRenderer : IDisposable
     /// <param name="width">Target width in pixels.</param>
     /// <param name="height">Target height in pixels.</param>
     /// <param name="view">Orientation and field of view.</param>
-    /// <param name="eye">Which eye's half of a stereo source to show (the debug viewport shows the left eye).</param>
+    /// <param name="eye">The eye to render (the debug viewport shows the left eye); swapped by the format if set (F11).</param>
     /// <param name="source">Image, video frame or black.</param>
     /// <param name="brightness">1 = full image, 0 = black.</param>
     public void Render(
@@ -97,7 +97,7 @@ public sealed class PanoramaRenderer : IDisposable
         Render(context, target, width, height, view, eye, source, brightness, PanoramaOutput.Image);
     }
 
-    /// <summary>Renders an equirect 360 mono still image, or black for null.</summary>
+    /// <summary>Renders an equirect 360 mono still image, or black for null (tests).</summary>
     public void Render(
         ID3D11DeviceContext context,
         ID3D11RenderTargetView target,
@@ -107,7 +107,7 @@ public sealed class PanoramaRenderer : IDisposable
         StillImageTexture? source,
         float brightness = 1f)
     {
-        Render(context, target, width, height, view, Eye.Left, PanoramaSource.FromImage(source, StereoLayout.Mono), brightness, PanoramaOutput.Image);
+        Render(context, target, width, height, view, Eye.Left, PanoramaSource.FromImage(source, VideoFormat.Default), brightness, PanoramaOutput.Image);
     }
 
     internal void Render(
@@ -129,28 +129,34 @@ public sealed class PanoramaRenderer : IDisposable
             return;
         }
 
-        EyeSourceRect rect = default;
+        VideoFormat format = source.Format;
+        Eye sourceEye = format.SourceEye(eye);
+        bool wrapsAround = format.Projection == ProjectionType.Equirect360;
+        int sourceWidth = 2;
+        int sourceHeight = 2;
         VideoColorConstants color = default;
         if (source.IsVideo)
         {
             VideoFrame frame = source.Video;
-            rect = ProjectionMath.CreateEyeSourceRect(frame.Layout, eye, frame.Width, frame.Height);
+            sourceWidth = frame.Width;
+            sourceHeight = frame.Height;
             color = frame.Color;
             context.PSSetShaderResource(1, frame.Luma);
             context.PSSetShaderResource(2, frame.Chroma);
         }
         else if (source.Image is { } image)
         {
-            rect = ProjectionMath.CreateEyeSourceRect(source.ImageLayout, eye, image.Width, image.Height);
+            sourceWidth = image.Width;
+            sourceHeight = image.Height;
             context.PSSetShaderResource(0, image.ShaderResourceView);
         }
-        else
-        {
-            // Debug outputs without a source: the whole image, as for mono.
-            rect = ProjectionMath.CreateEyeSourceRect(StereoLayout.Mono, eye, 2, 2);
-        }
 
-        WriteConstants(context, ViewConstants.Create(view, rect, color, brightness));
+        // Debug outputs without a source use a 2 x 2 texel image with the format's projection.
+        EyeSourceRect rect = ProjectionMath.CreateEyeSourceRect(format.Layout, sourceEye, sourceWidth, sourceHeight, wrapsAround);
+        (int eyeWidth, int eyeHeight) = ProjectionMath.EyeSize(format.Layout, sourceWidth, sourceHeight);
+        ProjectionParameters projection = ProjectionMath.CreateProjectionParameters(format, eyeWidth, eyeHeight);
+
+        WriteConstants(context, ViewConstants.Create(view, format.Offset, projection, rect, color, brightness));
 
         context.RSSetViewport(0f, 0f, width, height, 0f, 1f);
         context.RSSetState(_rasterizerState);

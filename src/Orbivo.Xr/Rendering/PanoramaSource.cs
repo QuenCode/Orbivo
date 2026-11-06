@@ -6,13 +6,15 @@ namespace Orbivo.Xr.Rendering;
 /// <summary>What a view shows: black, a still image or a decoded video frame. Built on the render thread without allocations.</summary>
 public readonly struct PanoramaSource
 {
-    private PanoramaSource(StillImageTexture? image, StereoLayout imageLayout, VideoFrame video, bool isVideo)
+    private PanoramaSource(StillImageTexture? image, VideoFormat? imageFormat, VideoFrame video, bool isVideo)
     {
         Image = image;
-        ImageLayout = imageLayout;
+        _imageFormat = imageFormat;
         Video = video;
         IsVideo = isVideo;
     }
+
+    private readonly VideoFormat? _imageFormat;
 
     public static PanoramaSource Black => default;
 
@@ -20,19 +22,25 @@ public readonly struct PanoramaSource
 
     internal StillImageTexture? Image { get; }
 
-    internal StereoLayout ImageLayout { get; }
+    /// <summary>Format of the image; equirect 360 mono for <see cref="Black"/> (debug outputs).</summary>
+    internal VideoFormat ImageFormat => _imageFormat ?? VideoFormat.Default;
 
     internal VideoFrame Video { get; }
 
     internal bool IsVideo { get; }
 
-    public static PanoramaSource FromImage(StillImageTexture? image, StereoLayout layout)
+    /// <summary>The format the picture is shown with.</summary>
+    internal VideoFormat Format => IsVideo ? Video.Format : ImageFormat;
+
+    /// <param name="image">The image, or null for black.</param>
+    /// <param name="format">Its format; keep one instance and pass it every frame (no allocation).</param>
+    public static PanoramaSource FromImage(StillImageTexture? image, VideoFormat format)
     {
-        return new PanoramaSource(image, layout, default, isVideo: false);
+        return new PanoramaSource(image, format, default, isVideo: false);
     }
 
     public static PanoramaSource FromVideo(in VideoFrame frame)
     {
-        return new PanoramaSource(null, StereoLayout.Mono, frame, isVideo: true);
+        return new PanoramaSource(null, null, frame, isVideo: true);
     }
 }

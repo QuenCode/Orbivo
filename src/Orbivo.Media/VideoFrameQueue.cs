@@ -18,20 +18,29 @@ internal sealed class VideoFrameQueue : IDisposable
 {
     private readonly ID3D11Device _device;
     private readonly Slot[] _slots;
+    private VideoFormat _format;
     private bool _disposed;
 
-    public VideoFrameQueue(ID3D11Device device, int slotCount, StereoLayout layout)
+    public VideoFrameQueue(ID3D11Device device, int slotCount, VideoFormat format)
     {
         ArgumentNullException.ThrowIfNull(device);
         _device = device;
         _slots = new Slot[slotCount];
-        Layout = layout;
+        _format = format ?? throw new ArgumentNullException(nameof(format));
         Pacer = new FramePacer(slotCount);
     }
 
     public FramePacer Pacer { get; }
 
-    public StereoLayout Layout { get; }
+    /// <summary>
+    /// How the frames are shown. The control thread replaces it (operator override), the render thread reads it with
+    /// every frame; an immutable reference, so no lock is needed.
+    /// </summary>
+    public VideoFormat PictureFormat
+    {
+        get => Volatile.Read(ref _format);
+        set => Volatile.Write(ref _format, value ?? throw new ArgumentNullException(nameof(value)));
+    }
 
     public int Width { get; private set; }
 
@@ -98,7 +107,7 @@ internal sealed class VideoFrameQueue : IDisposable
         }
 
         Slot selected = _slots[slot];
-        frame = new VideoFrame(selected.Luma, selected.Chroma, Width, Height, Layout, Color, pts);
+        frame = new VideoFrame(selected.Luma, selected.Chroma, Width, Height, PictureFormat, Color, pts);
         return true;
     }
 

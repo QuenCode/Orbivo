@@ -11,7 +11,7 @@ namespace Orbivo.Media;
 /// <param name="Chroma">Interleaved Cb/Cr plane (R8G8 or R16G16 view).</param>
 /// <param name="Width">Image width in pixels.</param>
 /// <param name="Height">Image height in pixels.</param>
-/// <param name="Layout">Stereo layout of the image.</param>
+/// <param name="Format">Projection, stereo layout and orientation offset the frame is shown with (may change between frames).</param>
 /// <param name="Color">YUV → linear RGB constants for the shader.</param>
 /// <param name="PtsTicks">Presentation time of the frame (100 ns ticks from the start of the video).</param>
 public readonly record struct VideoFrame(
@@ -19,7 +19,7 @@ public readonly record struct VideoFrame(
     ID3D11ShaderResourceView Chroma,
     int Width,
     int Height,
-    StereoLayout Layout,
+    VideoFormat Format,
     VideoColorConstants Color,
     long PtsTicks);
 

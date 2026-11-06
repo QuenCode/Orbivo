@@ -327,7 +327,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
                 layoutOverride is null ? "guessed from size" : "command line",
                 Marshal.PtrToStringUTF8((nint)decoder->name));
 
-            queue = new VideoFrameQueue(device, slotCount, layout);
+            queue = new VideoFrameQueue(device, slotCount, VideoFormat.Equirect360(layout));
             var result = new VideoDecoder(demuxer, ownsDemuxer, queue, context, codec, info, duration, frameDurationTicks, logger);
             codec = null;
             return result;

@@ -39,7 +39,7 @@ public sealed class XrHost : IDisposable
     private GraphicsDevice? _device;
     private StillImageTexture? _pendingImage;
     private IVideoFrameSource? _videoSource;
-    private int _imageLayout = (int)StereoLayout.Mono;
+    private VideoFormat _imageFormat = VideoFormat.Default;
     private volatile bool _stopRequested;
 
     // Status, written by the render thread, read by the UI.
@@ -94,7 +94,7 @@ public sealed class XrHost : IDisposable
     /// <summary>Stereo layout of the images passed to <see cref="ShowImage"/>. Any thread, before <see cref="ShowImage"/>.</summary>
     public void SetImageLayout(StereoLayout layout)
     {
-        Volatile.Write(ref _imageLayout, (int)layout);
+        Volatile.Write(ref _imageFormat, VideoFormat.Equirect360(layout));
     }
 
     /// <summary>Shows <paramref name="texture"/> from the next frame on. Ownership passes to the host. Any thread.</summary>
@@ -367,7 +367,7 @@ public sealed class XrHost : IDisposable
                 renderer,
                 Volatile.Read(ref _videoSource),
                 image,
-                (StereoLayout)Volatile.Read(ref _imageLayout));
+                Volatile.Read(ref _imageFormat));
             frame++;
             framesInInterval++;
             PublishFrame(result);
