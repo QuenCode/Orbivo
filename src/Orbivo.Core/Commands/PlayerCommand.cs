@@ -1,3 +1,5 @@
+using Orbivo.Core.Formats;
+
 namespace Orbivo.Core.Commands;
 
 /// <summary>
@@ -48,3 +50,9 @@ public sealed record SetMuteCommand(bool Muted) : PlayerCommand;
 /// <summary>Plays the sound on another output device (F24).</summary>
 /// <param name="DeviceId">Windows endpoint id, or null for the Windows default device.</param>
 public sealed record SetAudioDeviceCommand(string? DeviceId) : PlayerCommand;
+
+/// <summary>
+/// The operator's format choices for the loaded video (F10–F14): applied at once and stored in its sidecar
+/// (<c>&lt;video&gt;.orbivo.json</c>). Fields left null are automatic again (metadata or guess).
+/// </summary>
+public sealed record SetVideoFormatCommand(FormatOverrides Overrides) : PlayerCommand;

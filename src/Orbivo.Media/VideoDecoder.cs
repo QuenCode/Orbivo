@@ -204,14 +204,14 @@ internal sealed unsafe class VideoDecoder : IDisposable
         string path,
         ID3D11Device device,
         ID3D11DeviceContext context,
-        StereoLayout? layoutOverride,
+        VideoFormat format,
         int slotCount,
         ILogger logger)
     {
         MediaDemuxer demuxer = MediaDemuxer.Open(path, withAudio: false, logger);
         try
         {
-            return Open(demuxer, ownsDemuxer: true, device, context, layoutOverride, slotCount, logger);
+            return Open(demuxer, ownsDemuxer: true, device, context, format, slotCount, logger);
         }
         catch
         {
@@ -228,7 +228,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
     /// <param name="ownsDemuxer">True: this decoder starts and disposes the demuxer.</param>
     /// <param name="device">The shared, multithread-protected D3D11 device of the renderer.</param>
     /// <param name="context">Its immediate context (used for the copy into the frame ring).</param>
-    /// <param name="layoutOverride">Stereo layout chosen by the operator, or null to guess from the size.</param>
+    /// <param name="format">Format to show the frames with (changeable later through <see cref="VideoFrameQueue.PictureFormat"/>).</param>
     /// <param name="slotCount">Number of frame textures.</param>
     /// <param name="logger">Receives open details and errors.</param>
     public static VideoDecoder Open(
@@ -236,22 +236,23 @@ internal sealed unsafe class VideoDecoder : IDisposable
         bool ownsDemuxer,
         ID3D11Device device,
         ID3D11DeviceContext context,
-        StereoLayout? layoutOverride,
+        VideoFormat format,
         int slotCount,
         ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(demuxer);
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(format);
         ArgumentNullException.ThrowIfNull(logger);
 
         string path = demuxer.Path;
-        AVFormatContext* format = demuxer.Format;
+        AVFormatContext* container = demuxer.Format;
         AVCodecContext* codec = null;
         VideoFrameQueue? queue = null;
         try
         {
-            AVStream* stream = format->streams[demuxer.VideoStreamIndex];
+            AVStream* stream = container->streams[demuxer.VideoStreamIndex];
             AVCodecParameters* parameters = stream->codecpar;
             string codecName = ffmpeg.avcodec_get_name(parameters->codec_id) ?? "unknown";
             string profile = ffmpeg.avcodec_profile_name(parameters->codec_id, parameters->profile) ?? string.Empty;
@@ -288,7 +289,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
                 height,
                 bitDepth > 8 ? 10 : 8);
 
-            AVRational frameRate = ffmpeg.av_guess_frame_rate(format, stream, null);
+            AVRational frameRate = ffmpeg.av_guess_frame_rate(container, stream, null);
             double framesPerSecond = frameRate.num > 0 && frameRate.den > 0 ? ffmpeg.av_q2d(frameRate) : 0;
             long frameDurationTicks = framesPerSecond > 0
                 ? (long)(TimeSpan.TicksPerSecond / framesPerSecond)
@@ -296,9 +297,8 @@ internal sealed unsafe class VideoDecoder : IDisposable
 
             TimeSpan duration = stream->duration != ffmpeg.AV_NOPTS_VALUE
                 ? TimeSpan.FromTicks(ffmpeg.av_rescale_q(stream->duration, stream->time_base, MediaTimeBase))
-                : format->duration > 0 ? TimeSpan.FromTicks(format->duration * (TimeSpan.TicksPerSecond / ffmpeg.AV_TIME_BASE)) : TimeSpan.Zero;
+                : container->duration > 0 ? TimeSpan.FromTicks(container->duration * (TimeSpan.TicksPerSecond / ffmpeg.AV_TIME_BASE)) : TimeSpan.Zero;
 
-            StereoLayout layout = layoutOverride ?? StereoLayoutDetection.FromSize(width, height);
             var info = new VideoStreamInfo(
                 codecName,
                 profile,
@@ -306,12 +306,10 @@ internal sealed unsafe class VideoDecoder : IDisposable
                 height,
                 framesPerSecond,
                 color,
-                layout,
-                layoutOverride is not null,
                 HardwareDecoding: true);
 
             logger.LogInformation(
-                "Opened {Path}: {Codec} {Profile} {Width}x{Height}, {Fps:0.###} fps, {PixelFormat}, {Duration}, color {Matrix}/{Range}/{Primaries}, stereo {Layout} ({LayoutSource}). Using hardware decode (D3D11VA) with FFmpeg decoder '{Decoder}'.",
+                "Opened {Path}: {Codec} {Profile} {Width}x{Height}, {Fps:0.###} fps, {PixelFormat}, {Duration}, color {Matrix}/{Range}/{Primaries}, format {Projection} {Layout}. Using hardware decode (D3D11VA) with FFmpeg decoder '{Decoder}'.",
                 path,
                 codecName,
                 profile,
@@ -323,11 +321,11 @@ internal sealed unsafe class VideoDecoder : IDisposable
                 color.Matrix,
                 color.Range,
                 color.Primaries,
-                layout,
-                layoutOverride is null ? "guessed from size" : "command line",
+                format.Projection,
+                format.Layout,
                 Marshal.PtrToStringUTF8((nint)decoder->name));
 
-            queue = new VideoFrameQueue(device, slotCount, VideoFormat.Equirect360(layout));
+            queue = new VideoFrameQueue(device, slotCount, format);
             var result = new VideoDecoder(demuxer, ownsDemuxer, queue, context, codec, info, duration, frameDurationTicks, logger);
             codec = null;
             return result;

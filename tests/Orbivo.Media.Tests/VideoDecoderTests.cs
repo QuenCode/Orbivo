@@ -15,14 +15,13 @@ public sealed class VideoDecoderTests(HardwareDecodeFixture fixture)
         GraphicsDevice device = fixture.RequireHardware();
         string path = TestVideos.Mono4K;
 
-        using DecoderRun run = DecoderRun.Open(device, path, layout: null);
+        using DecoderRun run = DecoderRun.Open(device, path);
         List<long> pts = run.ConsumeAll(TimeSpan.FromSeconds(60));
 
         Assert.True(run.Decoder.Info.HardwareDecoding);
         Assert.Equal("hevc", run.Decoder.Info.Codec);
         Assert.Equal((4096, 2048), (run.Decoder.Info.Width, run.Decoder.Info.Height));
         Assert.Equal((4096, 2048), (run.Decoder.Queue.Width, run.Decoder.Queue.Height));
-        Assert.Equal(StereoLayout.Mono, run.Decoder.Info.Layout);
         Assert.Null(run.Decoder.ErrorMessage);
 
         Assert.Equal(TestVideos.FrameCount, pts.Count);
@@ -43,7 +42,7 @@ public sealed class VideoDecoderTests(HardwareDecodeFixture fixture)
         GraphicsDevice device = fixture.RequireHardware();
         string path = TestVideos.TopBottom8K;
 
-        using DecoderRun run = DecoderRun.Open(device, path, layout: null);
+        using DecoderRun run = DecoderRun.Open(device, path);
         var stopwatch = Stopwatch.StartNew();
         List<long> pts = run.ConsumeAll(TimeSpan.FromSeconds(120));
         stopwatch.Stop();
@@ -53,20 +52,18 @@ public sealed class VideoDecoderTests(HardwareDecodeFixture fixture)
             $"8K TB HEVC on {device.AdapterName}: {pts.Count} frames in {stopwatch.Elapsed.TotalSeconds:0.00} s = {framesPerSecond:0.0} fps");
 
         Assert.Equal(TestVideos.FrameCount, pts.Count);
-        Assert.Equal(StereoLayout.TopBottom, run.Decoder.Info.Layout);
-        Assert.False(run.Decoder.Info.LayoutChosenExplicitly);
         Assert.True(framesPerSecond > 30, $"only {framesPerSecond:0.0} fps, the video needs 30");
     }
 
     [Fact]
-    public void LayoutOverride_IsUsed()
+    public void Format_IsHandedToTheQueue()
     {
         GraphicsDevice device = fixture.RequireHardware();
+        VideoFormat format = VideoFormat.Equirect360(StereoLayout.SideBySide) with { SwapEyes = true };
 
-        using DecoderRun run = DecoderRun.Open(device, TestVideos.Mono4K, StereoLayout.SideBySide);
+        using DecoderRun run = DecoderRun.Open(device, TestVideos.Mono4K, format);
 
-        Assert.Equal(StereoLayout.SideBySide, run.Decoder.Info.Layout);
-        Assert.True(run.Decoder.Info.LayoutChosenExplicitly);
+        Assert.Same(format, run.Decoder.Queue.PictureFormat);
     }
 
     [Fact]
@@ -75,7 +72,7 @@ public sealed class VideoDecoderTests(HardwareDecodeFixture fixture)
         GraphicsDevice device = fixture.RequireHardware();
 
         MediaOpenException exception = Assert.Throws<MediaOpenException>(
-            () => DecoderRun.Open(device, Path.Combine(TestVideos.OutputDirectory, "does-not-exist.mp4"), layout: null));
+            () => DecoderRun.Open(device, Path.Combine(TestVideos.OutputDirectory, "does-not-exist.mp4")));
 
         Assert.Equal("Datei nicht gefunden", exception.OperatorMessage);
     }
@@ -85,7 +82,7 @@ public sealed class VideoDecoderTests(HardwareDecodeFixture fixture)
     {
         GraphicsDevice device = fixture.RequireHardware();
 
-        MediaOpenException exception = Assert.Throws<MediaOpenException>(() => DecoderRun.Open(device, TestVideos.MonoImage, layout: null));
+        MediaOpenException exception = Assert.Throws<MediaOpenException>(() => DecoderRun.Open(device, TestVideos.MonoImage));
 
         Assert.Contains("keinen Hardware-Decoder", exception.OperatorMessage, StringComparison.Ordinal);
     }
@@ -100,9 +97,9 @@ public sealed class VideoDecoderTests(HardwareDecodeFixture fixture)
 
         public VideoDecoder Decoder { get; }
 
-        public static DecoderRun Open(GraphicsDevice device, string path, StereoLayout? layout)
+        public static DecoderRun Open(GraphicsDevice device, string path, VideoFormat? format = null)
         {
-            VideoDecoder decoder = VideoDecoder.Open(path, device.Device, device.ImmediateContext, layout, slotCount: 6, TestOutputLoggerFactory.Instance.CreateLogger("VideoDecoder"));
+            VideoDecoder decoder = VideoDecoder.Open(path, device.Device, device.ImmediateContext, format ?? VideoFormat.Default, slotCount: 6, TestOutputLoggerFactory.Instance.CreateLogger("VideoDecoder"));
             decoder.Start();
             return new DecoderRun(decoder);
         }

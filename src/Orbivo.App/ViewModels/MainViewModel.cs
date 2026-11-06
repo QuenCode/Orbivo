@@ -24,7 +24,7 @@ namespace Orbivo.App.ViewModels;
 /// keyboard shortcuts (F2, F60), blackout and fade (F5). Everything reaches the player as a command
 /// (CLAUDE.md rule 3); what the player does comes back through status snapshots.
 /// The status panel shows the headset connection (F40, F41), or in <c>--no-xr</c> mode the preview window, and the player.
-/// Format controls are still placeholders (M6). Sound (M5): output device (F24), volume and mute (F4), sound and
+/// Format (M6, F10–F14): see <see cref="FormatViewModel"/>. Sound (M5): output device (F24), volume and mute (F4), sound and
 /// A/V status.
 /// </summary>
 public sealed class MainViewModel : ObservableObject
@@ -77,8 +77,6 @@ public sealed class MainViewModel : ObservableObject
     private PlaylistEntry? _selectedEntry;
     private string _outputText = "Brille: schwarz";
     private StatusLevel _outputLevel = StatusLevel.Neutral;
-    private string _stereoLayoutText = "–";
-    private string _projectionText = "–";
 
     public MainViewModel(
         StartupOptions options,
@@ -95,6 +93,7 @@ public sealed class MainViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(listAudioDevices);
         _commands = commands;
         _listAudioDevices = listAudioDevices;
+        Format = new FormatViewModel(Send);
         _volumePercent = Math.Round(settings.Volume * 100);
         Playlist = new Playlist();
         ((System.Collections.Specialized.INotifyCollectionChanged)Playlist.Entries).CollectionChanged += (_, _) => OnPlaylistChanged();
@@ -418,17 +417,8 @@ public sealed class MainViewModel : ObservableObject
 
     private bool CanSeek => _playbackState is PlaybackState.Ready or PlaybackState.Playing or PlaybackState.Paused or PlaybackState.Ended;
 
-    public string ProjectionText
-    {
-        get => _projectionText;
-        private set => SetProperty(ref _projectionText, value);
-    }
-
-    public string StereoLayoutText
-    {
-        get => _stereoLayoutText;
-        private set => SetProperty(ref _stereoLayoutText, value);
-    }
+    /// <summary>The "Format" group (F10–F14).</summary>
+    public FormatViewModel Format { get; }
 
     public void ShowGraphicsDevice(string adapterName, ulong dedicatedVideoMemoryBytes)
     {
@@ -824,23 +814,26 @@ public sealed class MainViewModel : ObservableObject
         ShowOutput(status);
         ShowSound(status);
 
+        Format.Update(status.Format);
         VideoStreamInfo? video = status.Video;
         if (video is null)
         {
             _videoEntry.Update("–", StatusLevel.Neutral);
             _decoderEntry.Update("–", StatusLevel.Neutral);
-            ProjectionText = "–";
-            StereoLayoutText = "–";
             return;
         }
 
-        ProjectionText = "Equirect 360° (bis M6 fest)";
-        StereoLayoutText = DescribeLayout(video.Layout) + (video.LayoutChosenExplicitly ? " (Kommandozeile)" : " (aus der Größe geschätzt)");
+        VideoFormatStatus? format = status.Format;
+        string formatText = format is null
+            ? string.Empty
+            : $", {VideoFormatResolver.Describe(format.Format.Projection)} {DescribeLayout(format.Format.Layout)}{(format.Format.SwapEyes ? ", Augen getauscht" : string.Empty)}";
+        bool formatWarning = format is not null && (format.Warnings.Count > 0 || format.SidecarError is not null);
         _videoEntry.Update(
             string.Create(
                 culture,
-                $"{video.Codec} {video.Profile}, {video.Width} × {video.Height}, {video.FrameRate:0.##} fps, {video.Color.BitDepth} Bit, {DescribeColor(video.Color)}, {DescribeLayout(video.Layout)}"),
-            StatusLevel.Ok);
+                $"{video.Codec} {video.Profile}, {video.Width} × {video.Height}, {video.FrameRate:0.##} fps, {video.Color.BitDepth} Bit, {DescribeColor(video.Color)}{formatText}")
+                + (formatWarning ? ". Formathinweise im Bereich Format" : string.Empty),
+            formatWarning ? StatusLevel.Warning : StatusLevel.Ok);
 
         string decoderText = string.Create(
             culture,

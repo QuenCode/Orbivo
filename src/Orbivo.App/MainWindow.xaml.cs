@@ -76,6 +76,15 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>A format number field (offset, fisheye) is taken when it loses the focus, as with Enter.</summary>
+    private void OnFormatFieldLostFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox { Tag: ICommand command } && command.CanExecute(null))
+        {
+            command.Execute(null);
+        }
+    }
+
     private void OnTimelineDragStarted(object sender, DragStartedEventArgs e)
     {
         ViewModel.SetScrubbing(true);

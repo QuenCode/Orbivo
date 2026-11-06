@@ -76,12 +76,13 @@
     <Grid Grid.Row="0" Grid.Column="1">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
 
-      <!-- Format (M6) -->
-      <GroupBox Grid.Row="0" Header="Format">
-        <Grid>
+      <!-- Format (M6, F10–F14): applied at once and stored in <video>.orbivo.json -->
+      <GroupBox Grid.Row="0" Header="Format" DataContext="{Binding Format}">
+        <Grid IsEnabled="{Binding IsAvailable}">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
@@ -94,36 +95,161 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
           </Grid.RowDefinitions>
           <Grid.Resources>
+            <BooleanToVisibilityConverter x:Key="VisibleIf" />
             <Style TargetType="TextBlock">
               <Setter Property="Margin" Value="0,2,16,2" />
+              <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style TargetType="ComboBox">
+              <Setter Property="Margin" Value="0,2,0,2" />
+              <Setter Property="Focusable" Value="False" />
+              <Setter Property="DisplayMemberPath" Value="Label" />
+            </Style>
+            <Style x:Key="FieldLabel" TargetType="TextBlock">
+              <Setter Property="Margin" Value="0,2,4,2" />
+              <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="NumberBox" TargetType="TextBox">
+              <Setter Property="Width" Value="56" />
+              <Setter Property="Margin" Value="0,2,10,2" />
+              <Setter Property="VerticalContentAlignment" Value="Center" />
+              <EventSetter Event="LostKeyboardFocus" Handler="OnFormatFieldLostFocus" />
+            </Style>
+            <Style x:Key="HintText" TargetType="TextBlock">
+              <Setter Property="TextWrapping" Value="Wrap" />
+              <Style.Triggers>
+                <Trigger Property="Text" Value="">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                </Trigger>
+              </Style.Triggers>
             </Style>
           </Grid.Resources>
+
           <TextBlock Grid.Row="0" Grid.Column="0" Text="Projektion:" />
-          <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ProjectionText}" />
+          <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Projections}" SelectedItem="{Binding SelectedProjection}"
+                    ToolTip="Automatisch: aus den Metadaten der Datei (sv3d), sonst Equirect 360°." />
+
           <TextBlock Grid.Row="1" Grid.Column="0" Text="Stereo-Layout:" />
-          <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding StereoLayoutText}" />
-          <TextBlock Grid.Row="2" Grid.Column="0" Text="Augen tauschen:" />
-          <TextBlock Grid.Row="2" Grid.Column="1" Text="–" />
-          <TextBlock Grid.Row="3" Grid.Column="0" Text="Ausrichtung (Yaw/Pitch/Roll):" />
-          <TextBlock Grid.Row="3" Grid.Column="1" Text="–" />
-          <TextBlock Grid.Row="4" Grid.Column="0" Text="Audio-Modus:" />
-          <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding AudioModeText}" />
-          <TextBlock Grid.Row="5" Grid.Column="0" Text="Tonausgabe:" VerticalAlignment="Center" />
-          <DockPanel Grid.Row="5" Grid.Column="1" Margin="0,2,0,2">
+          <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Layouts}" SelectedItem="{Binding SelectedLayout}"
+                    IsEnabled="{Binding CanChooseLayout}"
+                    ToolTip="Automatisch: aus den Metadaten (st3d), sonst aus der Bildgröße geschätzt. Linkes Auge oben bzw. links." />
+
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="Augen:" />
+          <CheckBox Grid.Row="2" Grid.Column="1" Content="Augen tauschen" IsChecked="{Binding SwapEyes}" IsEnabled="{Binding CanSwapEyes}"
+                    Focusable="False" VerticalAlignment="Center" Margin="0,2,0,2"
+                    ToolTip="Linkes und rechtes Halbbild vertauschen, wenn die Tiefe falsch herum wirkt." />
+
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="Würfel-Layout:" Visibility="{Binding ShowsCubemap, Converter={StaticResource VisibleIf}}" />
+          <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding CubemapLayouts}" SelectedItem="{Binding SelectedCubemap}"
+                    Visibility="{Binding ShowsCubemap, Converter={StaticResource VisibleIf}}"
+                    ToolTip="Anordnung der sechs Würfelseiten je Auge. Automatisch: 3 × 2, bei EAC das YouTube-Layout." />
+
+          <TextBlock Grid.Row="4" Grid.Column="0" Text="Fisheye:" Visibility="{Binding ShowsFisheye, Converter={StaticResource VisibleIf}}" />
+          <WrapPanel Grid.Row="4" Grid.Column="1" Visibility="{Binding ShowsFisheye, Converter={StaticResource VisibleIf}}">
+            <TextBlock Style="{StaticResource FieldLabel}" Text="Sichtfeld °" />
+            <TextBox Style="{StaticResource NumberBox}" Text="{Binding FovText, UpdateSourceTrigger=PropertyChanged}" Tag="{Binding ApplyFisheyeCommand}"
+                     ToolTip="Sichtfeld des Kreises in Grad (60–360). Übernehmen mit Enter.">
+              <TextBox.InputBindings>
+                <KeyBinding Key="Enter" Command="{Binding ApplyFisheyeCommand}" />
+              </TextBox.InputBindings>
+            </TextBox>
+            <TextBlock Style="{StaticResource FieldLabel}" Text="Mitte X" />
+            <TextBox Style="{StaticResource NumberBox}" Text="{Binding CenterXText, UpdateSourceTrigger=PropertyChanged}" Tag="{Binding ApplyFisheyeCommand}"
+                     ToolTip="Kreismitte, 0 = linker, 1 = rechter Rand des Halbbilds.">
+              <TextBox.InputBindings>
+                <KeyBinding Key="Enter" Command="{Binding ApplyFisheyeCommand}" />
+              </TextBox.InputBindings>
+            </TextBox>
+            <TextBlock Style="{StaticResource FieldLabel}" Text="Y" />
+            <TextBox Style="{StaticResource NumberBox}" Text="{Binding CenterYText, UpdateSourceTrigger=PropertyChanged}" Tag="{Binding ApplyFisheyeCommand}"
+                     ToolTip="Kreismitte, 0 = oberer, 1 = unterer Rand des Halbbilds.">
+              <TextBox.InputBindings>
+                <KeyBinding Key="Enter" Command="{Binding ApplyFisheyeCommand}" />
+              </TextBox.InputBindings>
+            </TextBox>
+            <TextBlock Style="{StaticResource FieldLabel}" Text="Radius" />
+            <TextBox Style="{StaticResource NumberBox}" Text="{Binding RadiusText, UpdateSourceTrigger=PropertyChanged}" Tag="{Binding ApplyFisheyeCommand}"
+                     ToolTip="Kreisradius als Anteil der Halbbildhöhe (0,5 = berührt oben und unten).">
+              <TextBox.InputBindings>
+                <KeyBinding Key="Enter" Command="{Binding ApplyFisheyeCommand}" />
+              </TextBox.InputBindings>
+            </TextBox>
+            <Button Content="Standard" MinWidth="0" Command="{Binding ResetFisheyeCommand}" Focusable="False" ToolTip="180°, mittig, bildhoch" />
+          </WrapPanel>
+
+          <TextBlock Grid.Row="5" Grid.Column="0" Text="Ausrichtung:" />
+          <WrapPanel Grid.Row="5" Grid.Column="1">
+            <TextBlock Style="{StaticResource FieldLabel}" Text="Yaw °" />
+            <TextBox Style="{StaticResource NumberBox}" Text="{Binding YawText, UpdateSourceTrigger=PropertyChanged}" Tag="{Binding ApplyOffsetCommand}"
+                     ToolTip="Drehung um die Hochachse. Positiv: das Bild dreht nach links, die bisherige Mitte liegt dann links. Übernehmen mit Enter.">
+              <TextBox.InputBindings>
+                <KeyBinding Key="Enter" Command="{Binding ApplyOffsetCommand}" />
+              </TextBox.InputBindings>
+            </TextBox>
+            <TextBlock Style="{StaticResource FieldLabel}" Text="Pitch °" />
+            <TextBox Style="{StaticResource NumberBox}" Text="{Binding PitchText, UpdateSourceTrigger=PropertyChanged}" Tag="{Binding ApplyOffsetCommand}"
+                     ToolTip="Neigung. Positiv: die bisherige Mitte wandert nach oben.">
+              <TextBox.InputBindings>
+                <KeyBinding Key="Enter" Command="{Binding ApplyOffsetCommand}" />
+              </TextBox.InputBindings>
+            </TextBox>
+            <TextBlock Style="{StaticResource FieldLabel}" Text="Roll °" />
+            <TextBox Style="{StaticResource NumberBox}" Text="{Binding RollText, UpdateSourceTrigger=PropertyChanged}" Tag="{Binding ApplyOffsetCommand}"
+                     ToolTip="Kippen um die Blickachse. Positiv: gegen den Uhrzeigersinn, wie der Betrachter es sieht.">
+              <TextBox.InputBindings>
+                <KeyBinding Key="Enter" Command="{Binding ApplyOffsetCommand}" />
+              </TextBox.InputBindings>
+            </TextBox>
+            <Button Content="0" MinWidth="0" Command="{Binding ResetOffsetCommand}" Focusable="False" ToolTip="Ausrichtung zurücksetzen" />
+          </WrapPanel>
+
+          <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource HintText}" Text="{Binding InputError}" Foreground="Firebrick" />
+
+          <TextBlock Grid.Row="7" Grid.Column="0" Text="Metadaten:" />
+          <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding MetadataText}" TextWrapping="Wrap" />
+
+          <TextBlock Grid.Row="8" Grid.Column="0" Text="Sidecar:" />
+          <DockPanel Grid.Row="8" Grid.Column="1">
+            <Button DockPanel.Dock="Right" Content="Alles automatisch" Command="{Binding ResetAllCommand}" Focusable="False" Margin="6,2,0,2"
+                    ToolTip="Alle Formateinstellungen dieses Videos verwerfen; das Sidecar wird gelöscht (fremde Einträge bleiben)." />
+            <TextBlock Text="{Binding SidecarText}" TextWrapping="Wrap" />
+          </DockPanel>
+
+          <TextBlock Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource HintText}" Text="{Binding WarningText}"
+                     Foreground="DarkGoldenrod" Margin="0,6,0,0" />
+        </Grid>
+      </GroupBox>
+
+      <!-- Sound (M5): mode and output device (F24) -->
+      <GroupBox Grid.Row="1" Header="Ton">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="Audio-Modus:" Margin="0,2,16,2" />
+          <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AudioModeText}" Margin="0,2,0,2" />
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Tonausgabe:" VerticalAlignment="Center" Margin="0,2,16,2" />
+          <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,2,0,2">
             <Button DockPanel.Dock="Right" Content="Aktualisieren" Command="{Binding RefreshAudioDevicesCommand}" Margin="6,0,0,0"
                     ToolTip="Geräteliste neu einlesen (z. B. nach dem Einstecken eines Kopfhörers)" />
             <ComboBox ItemsSource="{Binding AudioDevices}" SelectedItem="{Binding SelectedAudioDevice}" Focusable="False"
                       ToolTip="Gerät für die Kopfhörer. Windows-Standard folgt dem Standardgerät; ein fest gewähltes Gerät wird nie automatisch gewechselt." />
           </DockPanel>
-          <TextBlock Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource PlaceholderText}"
-                     Margin="0,8,0,0" Text="Formateinstellungen folgen in M6. Bis dahin: Stereo-Layout per --stereo mono|tb|sbs." />
         </Grid>
       </GroupBox>
 
       <!-- Status (F40/F41, filled from M2 on) -->
-      <GroupBox Grid.Row="1" Header="Status">
+      <GroupBox Grid.Row="2" Header="Status">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <ItemsControl ItemsSource="{Binding StatusEntries}">
             <ItemsControl.ItemTemplate>

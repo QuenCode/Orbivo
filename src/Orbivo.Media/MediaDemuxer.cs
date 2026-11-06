@@ -1,5 +1,6 @@
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
+using Orbivo.Core.Formats;
 
 namespace Orbivo.Media;
 
@@ -84,6 +85,22 @@ internal sealed unsafe class MediaDemuxer : IDisposable
     public AVFormatContext* Format => _format;
 
     public int VideoStreamIndex { get; }
+
+    /// <summary>Coded size of the video stream in pixels.</summary>
+    public (int Width, int Height) VideoSize
+    {
+        get
+        {
+            AVCodecParameters* parameters = _format->streams[VideoStreamIndex]->codecpar;
+            return (parameters->width, parameters->height);
+        }
+    }
+
+    /// <summary>Spherical Video metadata of the video stream (sv3d, st3d; F12).</summary>
+    public EmbeddedFormatMetadata ReadFormatMetadata()
+    {
+        return FormatMetadataReader.Read(_format->streams[VideoStreamIndex]);
+    }
 
     /// <summary>Audio stream that is demuxed, or −1 (no sound track, or sound not wanted).</summary>
     public int AudioStreamIndex { get; }

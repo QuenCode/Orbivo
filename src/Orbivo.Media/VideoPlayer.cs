@@ -11,7 +11,9 @@ using Vortice.Direct3D11;
 namespace Orbivo.Media;
 
 /// <summary>Settings of the player that do not change while it runs.</summary>
-/// <param name="StereoLayout">Stereo layout chosen on the command line, or null to guess it from the video size.</param>
+/// <param name="StereoLayout">
+/// Stereo layout from the command line (<c>--stereo</c>): wins over sidecar and metadata, this session only. Null = automatic.
+/// </param>
 /// <param name="FrameSlots">Number of decoded frames on the GPU (docs/ARCHITECTURE.md: 6–8).</param>
 public sealed record VideoPlayerOptions(StereoLayout? StereoLayout, int FrameSlots = 6);
 
@@ -64,6 +66,15 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     private long _avSyncLoggedWindow;
     private long _avSyncLogTimestamp;
     private string? _filePath;
+
+    // Format of the loaded file (F10–F14), control thread only.
+    private SidecarFile? _sidecar;
+    private FormatOverrides _overrides = FormatOverrides.None;
+    private EmbeddedFormatMetadata? _metadata;
+    private (int Width, int Height) _videoSize;
+    private ResolvedVideoFormat? _resolvedFormat;
+    private string? _sidecarError;
+    private VideoFormatStatus? _formatStatus;
     private bool _loop;
     private TimeSpan _seekPosition;
     private volatile bool _stopRequested;
@@ -313,6 +324,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         {
             case OpenMediaCommand open:
                 _filePath = Path.GetFullPath(open.Path);
+                LoadSidecar(_filePath);
                 Apply(_machine.Open());
                 if (open.Play)
                 {
@@ -354,6 +366,9 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
                 break;
             case SetAudioDeviceCommand device:
                 _audio?.SelectDevice(device.DeviceId);
+                break;
+            case SetVideoFormatCommand format:
+                SetFormat(format.Overrides);
                 break;
             default:
                 _logger.LogWarning("Unknown command {Command} ignored.", command);
@@ -565,6 +580,9 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
 
         if (actions.HasFlag(PlaybackActions.SeekMedia) && _decoder is { } decoder)
         {
+            // "Seeking" must be visible before the clock stands at the target, or a reader of the status could take the
+            // seek for done (clock at the target, not seeking) while the old frames are still shown.
+            PublishStatus(error: null);
             // The clock stands at the target until the decoder has the frames there (SeekCompleted / MediaReady).
             long origin = decoder.HasFirstFrame ? decoder.FirstPtsTicks : 0;
             long target = origin + _seekPosition.Ticks;
@@ -642,7 +660,10 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         VideoDecoder? video = null;
         try
         {
-            video = VideoDecoder.Open(demuxer, ownsDemuxer: false, _device, _context, _options.StereoLayout, _options.FrameSlots, _logger);
+            _metadata = demuxer.ReadFormatMetadata();
+            _videoSize = demuxer.VideoSize;
+            ResolveFormat();
+            video = VideoDecoder.Open(demuxer, ownsDemuxer: false, _device, _context, _resolvedFormat!.Format, _options.FrameSlots, _logger);
             AudioDecoder? audio = null;
             if (withAudio && demuxer.AudioStreamIndex >= 0)
             {
@@ -748,6 +769,111 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             Seeking = _machine.Seeking,
             Loop = _loop,
             Audio = _audioDecoder?.Info,
+            Format = _formatStatus,
         });
+    }
+
+    /// <summary>Reads the sidecar of a newly loaded file; its choices hold until the next file (also across Stop).</summary>
+    private void LoadSidecar(string path)
+    {
+        _sidecar = SidecarFile.Load(path);
+        _overrides = _sidecar.Overrides;
+        _metadata = null;
+        _videoSize = default;
+        _resolvedFormat = null;
+        _sidecarError = null;
+        _formatStatus = null;
+        foreach (string warning in _sidecar.Warnings)
+        {
+            _logger.LogWarning("Sidecar {Path}: {Warning}", _sidecar.Path, warning);
+        }
+
+        if (_sidecar.Exists)
+        {
+            _logger.LogInformation("Sidecar {Path} read: {Overrides}.", _sidecar.Path, _overrides);
+        }
+    }
+
+    /// <summary>Decides the format from metadata, sidecar and command line (needs the opened file's metadata and size).</summary>
+    private void ResolveFormat()
+    {
+        if (_metadata is not { } metadata)
+        {
+            return;
+        }
+
+        _resolvedFormat = VideoFormatResolver.Resolve(metadata, _videoSize.Width, _videoSize.Height, _overrides, _options.StereoLayout);
+        ResolvedVideoFormat resolved = _resolvedFormat;
+        UpdateFormatStatus();
+        _logger.LogInformation(
+            "Format of {Path}: {Format} (sources {Sources}); metadata: {Metadata}.",
+            _filePath,
+            resolved.Format,
+            resolved.Sources,
+            metadata.Describe());
+        foreach (string warning in resolved.Warnings)
+        {
+            _logger.LogWarning("Format of {Path}: {Warning}", _filePath, warning);
+        }
+    }
+
+    /// <summary>The operator changed the format: show it at once and store it in the sidecar.</summary>
+    private void SetFormat(FormatOverrides overrides)
+    {
+        if (_filePath is null || _sidecar is null)
+        {
+            _logger.LogWarning("Format change ignored: no video loaded.");
+            return;
+        }
+
+        _overrides = overrides;
+        ResolveFormat();
+        if (_decoder is { } decoder && _resolvedFormat is { } resolved)
+        {
+            decoder.Queue.PictureFormat = resolved.Format;
+        }
+
+        try
+        {
+            _sidecar.Save(overrides);
+            _sidecarError = null;
+            _logger.LogInformation("Sidecar {Path} {Action}: {Overrides}.", _sidecar.Path, _sidecar.Exists ? "saved" : "removed", overrides);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            _logger.LogError(exception, "Cannot save the sidecar {Path}.", _sidecar.Path);
+            _sidecarError = $"Sidecar nicht gespeichert: {exception.Message}";
+        }
+
+        UpdateFormatStatus();
+
+        PublishStatus(error: null);
+    }
+
+    /// <summary>Builds the format part of the status once per change, so publishing the status stays cheap.</summary>
+    private void UpdateFormatStatus()
+    {
+        _formatStatus = CreateFormatStatus();
+    }
+
+    private VideoFormatStatus? CreateFormatStatus()
+    {
+        if (_resolvedFormat is not { } resolved || _sidecar is not { } sidecar)
+        {
+            return null;
+        }
+
+        IReadOnlyList<string> warnings = sidecar.Warnings.Count == 0 ? resolved.Warnings : [.. sidecar.Warnings, .. resolved.Warnings];
+        return new VideoFormatStatus(
+            resolved.Format,
+            resolved.Automatic,
+            resolved.Sources,
+            resolved.AutomaticSources,
+            _overrides,
+            _metadata?.Describe() ?? "none",
+            warnings,
+            sidecar.Path,
+            sidecar.Exists,
+            _sidecarError);
     }
 }

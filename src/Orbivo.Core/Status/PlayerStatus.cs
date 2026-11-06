@@ -11,8 +11,6 @@ namespace Orbivo.Core.Status;
 /// <param name="Height">Decoded height in pixels.</param>
 /// <param name="FrameRate">Nominal frames per second, 0 if unknown.</param>
 /// <param name="Color">Color description used for the conversion.</param>
-/// <param name="Layout">Stereo layout used for rendering.</param>
-/// <param name="LayoutChosenExplicitly">True if the layout comes from the command line, false if it was guessed from the size.</param>
 /// <param name="HardwareDecoding">True for D3D11VA hardware decoding.</param>
 public sealed record VideoStreamInfo(
     string Codec,
@@ -21,9 +19,30 @@ public sealed record VideoStreamInfo(
     int Height,
     double FrameRate,
     VideoColorFormat Color,
-    StereoLayout Layout,
-    bool LayoutChosenExplicitly,
     bool HardwareDecoding);
+
+/// <summary>The format the loaded video is shown with, and where it comes from (F10–F14).</summary>
+/// <param name="Format">Format in use.</param>
+/// <param name="Automatic">Format without the operator's choices (metadata, guess, command line).</param>
+/// <param name="Sources">Where each part of <paramref name="Format"/> comes from.</param>
+/// <param name="AutomaticSources">Where each part of <paramref name="Automatic"/> comes from.</param>
+/// <param name="Overrides">The operator's choices, as in the sidecar.</param>
+/// <param name="Metadata">What the file says, e.g. "sv3d Cubemap, st3d TopBottom", or "none".</param>
+/// <param name="Warnings">Hints for the operator (German).</param>
+/// <param name="SidecarPath">Path of the sidecar file.</param>
+/// <param name="SidecarExists">True if the sidecar file is on disk.</param>
+/// <param name="SidecarError">Why the last change could not be saved (German), or null.</param>
+public sealed record VideoFormatStatus(
+    VideoFormat Format,
+    VideoFormat Automatic,
+    FormatSources Sources,
+    FormatSources AutomaticSources,
+    FormatOverrides Overrides,
+    string Metadata,
+    IReadOnlyList<string> Warnings,
+    string SidecarPath,
+    bool SidecarExists,
+    string? SidecarError);
 
 /// <summary>Properties of the sound track being played.</summary>
 /// <param name="Codec">Codec name, e.g. "aac".</param>
@@ -76,6 +95,9 @@ public sealed record PlayerStatus(
 
     /// <summary>Nominal duration of one frame, <see cref="TimeSpan.Zero"/> if no video is open. For frame steps.</summary>
     public TimeSpan FrameDuration { get; init; }
+
+    /// <summary>Format of the loaded video, or null until it is open.</summary>
+    public VideoFormatStatus? Format { get; init; }
 
     /// <summary>Sound track of the current video, or null if it has none (or no sound output is available).</summary>
     public AudioTrackInfo? Audio { get; init; }
