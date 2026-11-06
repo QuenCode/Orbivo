@@ -28,4 +28,12 @@ float2 Equirect360Uv(float3 direction)
     return float2(longitude / (2.0f * OrbivoPi) + 0.5f, 0.5f - latitude / OrbivoPi);
 }
 
+// Texture coordinates in the whole source image for coordinates within one eye's image (stereo layout, F11).
+// scaleOffset: xy = size of the eye's image, zw = its top left corner. clampRange: xy = min, zw = max, in eye coordinates.
+// C#: ProjectionMath.SourceUv with the values of ProjectionMath.CreateEyeSourceRect.
+float2 SourceUv(float2 eyeUv, float4 scaleOffset, float4 clampRange)
+{
+    return clamp(eyeUv, clampRange.xy, clampRange.zw) * scaleOffset.xy + scaleOffset.zw;
+}
+
 #endif

@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Numerics;
 using Microsoft.Extensions.Logging;
+using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Media;
 using Orbivo.Xr.Graphics;
 using Orbivo.Xr.Rendering;
 using Silk.NET.OpenXR;
@@ -24,6 +26,7 @@ public sealed class XrHost : IDisposable
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MaxFailureRetryDelay = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan IdlePollInterval = TimeSpan.FromMilliseconds(10);
+    private static readonly TimeSpan VideoAdvanceInterval = TimeSpan.FromMilliseconds(50);
     private static readonly TimeSpan ExitGracePeriod = TimeSpan.FromSeconds(2);
 
     private readonly ILoggerFactory _loggerFactory;
@@ -35,6 +38,8 @@ public sealed class XrHost : IDisposable
 
     private GraphicsDevice? _device;
     private StillImageTexture? _pendingImage;
+    private IVideoFrameSource? _videoSource;
+    private int _imageLayout = (int)StereoLayout.Mono;
     private volatile bool _stopRequested;
 
     // Status, written by the render thread, read by the UI.
@@ -75,6 +80,21 @@ public sealed class XrHost : IDisposable
     public void Start()
     {
         _thread.Start();
+    }
+
+    /// <summary>
+    /// Shows video frames from <paramref name="source"/> whenever it has one; otherwise the image or black. Any thread,
+    /// call before the device is ready. The source must outlive the host.
+    /// </summary>
+    public void SetVideoSource(IVideoFrameSource? source)
+    {
+        Volatile.Write(ref _videoSource, source);
+    }
+
+    /// <summary>Stereo layout of the images passed to <see cref="ShowImage"/>. Any thread, before <see cref="ShowImage"/>.</summary>
+    public void SetImageLayout(StereoLayout layout)
+    {
+        Volatile.Write(ref _imageLayout, (int)layout);
     }
 
     /// <summary>Shows <paramref name="texture"/> from the next frame on. Ownership passes to the host. Any thread.</summary>
@@ -227,7 +247,17 @@ public sealed class XrHost : IDisposable
             SetState(XrConnectionState.Connected);
             _logger.LogInformation("Headset {System} connected through {Runtime}.", system.SystemName, instance.RuntimeName);
 
-            XrLifecycleAction outcome = RunSession(instance, session, device, ref image, ref events);
+            XrLifecycleAction outcome;
+            try
+            {
+                outcome = RunSession(instance, session, device, ref image, ref events);
+            }
+            finally
+            {
+                // Lets the player free frames of videos it closed while no session runs.
+                Volatile.Read(ref _videoSource)?.ReleaseRenderThread();
+            }
+
             if (outcome == XrLifecycleAction.Finish || _stopRequested)
             {
                 return;
@@ -333,7 +363,11 @@ public sealed class XrHost : IDisposable
                 _logger.LogInformation("Showing a {Width}x{Height} image in the headset.", image.Width, image.Height);
             }
 
-            XrFrameResult result = session.RenderFrame(renderer, image);
+            XrFrameResult result = session.RenderFrame(
+                renderer,
+                Volatile.Read(ref _videoSource),
+                image,
+                (StereoLayout)Volatile.Read(ref _imageLayout));
             frame++;
             framesInInterval++;
             PublishFrame(result);
@@ -445,9 +479,29 @@ public sealed class XrHost : IDisposable
         }
     }
 
+    /// <summary>
+    /// Waits outside the frame loop. Meanwhile it keeps taking video frames that are due, so the decoder keeps pace
+    /// with the playback clock even while the headset shows nothing; otherwise the video would have to catch up
+    /// by dropping frames once the session runs again.
+    /// </summary>
     private void Wait(TimeSpan delay)
     {
-        _stopSignal.Wait(delay);
+        long end = Stopwatch.GetTimestamp() + (long)(delay.TotalSeconds * Stopwatch.Frequency);
+        while (true)
+        {
+            IVideoFrameSource? video = Volatile.Read(ref _videoSource);
+            if (video is not null)
+            {
+                video.TryGetFrame(Stopwatch.GetTimestamp(), out _);
+                video.ReleaseRenderThread();
+            }
+
+            TimeSpan remaining = TimeSpan.FromSeconds((end - Stopwatch.GetTimestamp()) / (double)Stopwatch.Frequency);
+            if (remaining <= TimeSpan.Zero || _stopSignal.Wait(remaining < VideoAdvanceInterval ? remaining : VideoAdvanceInterval))
+            {
+                return;
+            }
+        }
     }
 
     private static XrSessionState ToPublic(SessionState state)

@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Media;
 using Orbivo.Xr.Graphics;
 using Orbivo.Xr.Rendering;
 
@@ -52,6 +54,8 @@ public sealed class DebugViewportHost : IDisposable
 
     private volatile bool _stopRequested;
     private StillImageTexture? _pendingImage;
+    private IVideoFrameSource? _videoSource;
+    private int _imageLayout = (int)StereoLayout.Mono;
 
     // Status, written by the render thread, read by the UI.
     private int _state = (int)DebugViewportState.Starting;
@@ -80,6 +84,21 @@ public sealed class DebugViewportHost : IDisposable
     public void Start()
     {
         _thread.Start();
+    }
+
+    /// <summary>
+    /// Shows video frames from <paramref name="source"/> whenever it has one; otherwise the image or black. Any thread.
+    /// The source must outlive the viewport.
+    /// </summary>
+    public void SetVideoSource(IVideoFrameSource? source)
+    {
+        Volatile.Write(ref _videoSource, source);
+    }
+
+    /// <summary>Stereo layout of the images passed to <see cref="ShowImage"/>; the preview shows the left eye. Any thread.</summary>
+    public void SetImageLayout(StereoLayout layout)
+    {
+        Volatile.Write(ref _imageLayout, (int)layout);
     }
 
     /// <summary>
@@ -132,7 +151,14 @@ public sealed class DebugViewportHost : IDisposable
                 window.ClientHeight);
             Volatile.Write(ref _state, (int)DebugViewportState.Running);
 
-            RenderLoop(window, swapChain, renderer, view, ref image);
+            try
+            {
+                RenderLoop(window, swapChain, renderer, view, ref image);
+            }
+            finally
+            {
+                Volatile.Read(ref _videoSource)?.ReleaseRenderThread();
+            }
 
             Volatile.Write(ref _state, (int)DebugViewportState.Stopped);
             _logger.LogInformation("Debug viewport stopped.");
@@ -171,6 +197,8 @@ public sealed class DebugViewportHost : IDisposable
             window.PumpMessages();
             if (!frameReady || _stopRequested)
             {
+                // Minimized: nothing is drawn, but due frames are still taken so the decoder keeps pace with the clock.
+                Volatile.Read(ref _videoSource)?.TryGetFrame(Stopwatch.GetTimestamp(), out _);
                 continue;
             }
 
@@ -192,7 +220,13 @@ public sealed class DebugViewportHost : IDisposable
             }
 
             view.GetViews(views);
-            renderer.Render(_device.ImmediateContext, swapChain.RenderTargetView, swapChain.Width, swapChain.Height, views[0], image);
+
+            // Flip model with one frame of latency: the frame appears with the next vertical blank, close enough to now.
+            IVideoFrameSource? video = Volatile.Read(ref _videoSource);
+            PanoramaSource source = video is not null && video.TryGetFrame(Stopwatch.GetTimestamp(), out VideoFrame videoFrame)
+                ? PanoramaSource.FromVideo(videoFrame)
+                : PanoramaSource.FromImage(image, (StereoLayout)Volatile.Read(ref _imageLayout));
+            renderer.Render(_device.ImmediateContext, swapChain.RenderTargetView, swapChain.Width, swapChain.Height, views[0], Eye.Left, source);
             swapChain.Present();
 
             frame++;

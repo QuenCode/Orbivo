@@ -1,6 +1,8 @@
 using System.Numerics;
 using Microsoft.Extensions.Logging;
+using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Media;
 using Orbivo.Xr.Graphics;
 using Orbivo.Xr.Rendering;
 using Silk.NET.OpenXR;
@@ -22,6 +24,7 @@ internal readonly record struct XrFrameResult(bool Submitted, bool HeadTracked, 
 internal sealed unsafe class XrSession : IDisposable
 {
     private readonly XR _xr;
+    private readonly XrInstance _instance;
     private readonly GraphicsDevice _device;
     private readonly XrSwapchain[] _swapchains;
 
@@ -33,9 +36,10 @@ internal sealed unsafe class XrSession : IDisposable
     private bool _hasValidViews;
     private bool _disposed;
 
-    private XrSession(XR xr, GraphicsDevice device, Session handle, Space space, XrSwapchain[] swapchains)
+    private XrSession(XrInstance instance, GraphicsDevice device, Session handle, Space space, XrSwapchain[] swapchains)
     {
-        _xr = xr;
+        _xr = instance.Xr;
+        _instance = instance;
         _device = device;
         Handle = handle;
         Space = space;
@@ -88,7 +92,7 @@ internal sealed unsafe class XrSession : IDisposable
                 system.EyeHeight,
                 format,
                 swapchains[0].ImageCount);
-            return new XrSession(xr, device, handle, space, [.. swapchains]);
+            return new XrSession(instance, device, handle, space, [.. swapchains]);
         }
         catch
         {
@@ -131,8 +135,10 @@ internal sealed unsafe class XrSession : IDisposable
     /// Does not allocate (CLAUDE.md rule 1).
     /// </summary>
     /// <param name="renderer">Draws the panorama.</param>
-    /// <param name="image">Image to show, or null for black.</param>
-    public XrFrameResult RenderFrame(PanoramaRenderer renderer, StillImageTexture? image)
+    /// <param name="video">Video frames; a due frame wins over <paramref name="image"/>. Null without a player.</param>
+    /// <param name="image">Image to show if there is no video frame, or null for black.</param>
+    /// <param name="imageLayout">Stereo layout of <paramref name="image"/>.</param>
+    public XrFrameResult RenderFrame(PanoramaRenderer renderer, IVideoFrameSource? video, StillImageTexture? image, StereoLayout imageLayout)
     {
         var waitInfo = new FrameWaitInfo(type: StructureType.FrameWaitInfo);
         var frameState = new FrameState(type: StructureType.FrameState);
@@ -140,6 +146,12 @@ internal sealed unsafe class XrSession : IDisposable
 
         var beginInfo = new FrameBeginInfo(type: StructureType.FrameBeginInfo);
         _xr.BeginFrame(Handle, &beginInfo).Check("xrBeginFrame");
+
+        // The frame is chosen for the moment the headset shows it, not for now (docs/ARCHITECTURE.md, "Synchronisation").
+        // Taken even when nothing is rendered, so the decoder keeps pace with the playback clock.
+        VideoFrame frame = default;
+        bool hasVideoFrame = video is not null
+            && video.TryGetFrame(_instance.ToStopwatchTimestamp(frameState.PredictedDisplayTime), out frame);
 
         bool headTracked = false;
         Quaternion head = Quaternion.Identity;
@@ -149,7 +161,8 @@ internal sealed unsafe class XrSession : IDisposable
             headTracked = LocateViews(frameState.PredictedDisplayTime);
             if (_hasValidViews)
             {
-                RenderEyes(renderer, image);
+                PanoramaSource source = hasVideoFrame ? PanoramaSource.FromVideo(frame) : PanoramaSource.FromImage(image, imageLayout);
+                RenderEyes(renderer, source);
                 layerCount = 1;
                 head = Quaternion.Slerp(
                     XrConversions.ToQuaternion(_views[0].Pose.Orientation),
@@ -248,7 +261,7 @@ internal sealed unsafe class XrSession : IDisposable
         return valid;
     }
 
-    private void RenderEyes(PanoramaRenderer renderer, StillImageTexture? image)
+    private void RenderEyes(PanoramaRenderer renderer, in PanoramaSource source)
     {
         for (int eye = 0; eye < XrInstance.EyeCount; eye++)
         {
@@ -257,7 +270,7 @@ internal sealed unsafe class XrSession : IDisposable
 
             XrSwapchain swapchain = _swapchains[eye];
             var target = swapchain.AcquireImage();
-            renderer.Render(_device.ImmediateContext, target, swapchain.Width, swapchain.Height, parameters, image);
+            renderer.Render(_device.ImmediateContext, target, swapchain.Width, swapchain.Height, parameters, (Eye)eye, source);
             swapchain.ReleaseImage();
 
             // The submitted pose is the located one: the compositor reprojects from it. Content is at infinity,

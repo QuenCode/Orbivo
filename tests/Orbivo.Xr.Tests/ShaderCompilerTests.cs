@@ -9,6 +9,8 @@ public sealed class ShaderCompilerTests
     [Theory]
     [InlineData("VsFullscreenTriangle", ShaderCompiler.VertexShaderProfile)]
     [InlineData("PsEquirect360", ShaderCompiler.PixelShaderProfile)]
+    [InlineData("PsEquirect360Video", ShaderCompiler.PixelShaderProfile)]
+    [InlineData("PsDebugSourceUv", ShaderCompiler.PixelShaderProfile)]
     [InlineData("PsDebugDirection", ShaderCompiler.PixelShaderProfile)]
     [InlineData("PsDebugEquirect360Uv", ShaderCompiler.PixelShaderProfile)]
     public void PanoramaShader_CompilesWithoutWarnings(string entryPoint, string profile)

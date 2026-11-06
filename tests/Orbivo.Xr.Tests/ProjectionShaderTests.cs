@@ -1,4 +1,5 @@
 using System.Numerics;
+using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
 using Orbivo.Xr.Rendering;
 using Orbivo.Xr.Tests.Support;
@@ -105,7 +106,7 @@ public sealed class ProjectionShaderTests(WarpRendererFixture fixture) : IClassF
     private float[] RenderFloat4(ViewParameters view, PanoramaOutput output)
     {
         using var target = new OffscreenTarget(fixture.Device, Width, Height, Format.R32G32B32A32_Float);
-        fixture.Renderer.Render(fixture.Device.ImmediateContext, target.RenderTargetView, Width, Height, view, null, 1f, output);
+        fixture.Renderer.Render(fixture.Device.ImmediateContext, target.RenderTargetView, Width, Height, view, Eye.Left, PanoramaSource.Black, 1f, output);
         return target.Read<float>();
     }
 }

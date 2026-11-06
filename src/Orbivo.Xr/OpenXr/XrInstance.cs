@@ -27,16 +27,28 @@ internal readonly record struct XrSystemInfo(
 internal sealed unsafe class XrInstance : IDisposable
 {
     public const string D3D11ExtensionName = "XR_KHR_D3D11_enable";
+
+    /// <summary>Optional: converts predicted display times to QueryPerformanceCounter values for the playback clock (M3).</summary>
+    public const string TimeConversionExtensionName = "XR_KHR_win32_convert_performance_counter_time";
     public const ViewConfigurationType ViewConfiguration = ViewConfigurationType.PrimaryStereo;
     public const int EyeCount = 2;
 
     private bool _disposed;
 
-    private XrInstance(XR xr, Instance handle, KhrD3D11Enable d3d11, string runtimeName, string runtimeVersion)
+    private readonly KhrWin32ConvertPerformanceCounterTime? _timeConversion;
+
+    private XrInstance(
+        XR xr,
+        Instance handle,
+        KhrD3D11Enable d3d11,
+        KhrWin32ConvertPerformanceCounterTime? timeConversion,
+        string runtimeName,
+        string runtimeVersion)
     {
         Xr = xr;
         Handle = handle;
         D3D11 = d3d11;
+        _timeConversion = timeConversion;
         RuntimeName = runtimeName;
         RuntimeVersion = runtimeVersion;
     }
@@ -72,15 +84,19 @@ internal sealed unsafe class XrInstance : IDisposable
         WriteUtf8("Orbivo", applicationInfo.ApplicationName, (int)XR.MaxApplicationNameSize);
         WriteUtf8("Orbivo", applicationInfo.EngineName, (int)XR.MaxEngineNameSize);
 
+        bool timeConversionSupported = RuntimeSupportsExtension(xr, TimeConversionExtensionName);
         Instance handle;
-        fixed (byte* extensionName = "XR_KHR_D3D11_enable\0"u8)
+        fixed (byte* d3d11Name = "XR_KHR_D3D11_enable\0"u8)
+        fixed (byte* timeConversionName = "XR_KHR_win32_convert_performance_counter_time\0"u8)
         {
-            byte* extensionNames = extensionName;
+            byte** extensionNames = stackalloc byte*[2];
+            extensionNames[0] = d3d11Name;
+            extensionNames[1] = timeConversionName;
             var createInfo = new InstanceCreateInfo(
                 type: StructureType.InstanceCreateInfo,
                 applicationInfo: applicationInfo,
-                enabledExtensionCount: 1,
-                enabledExtensionNames: &extensionNames);
+                enabledExtensionCount: timeConversionSupported ? 2u : 1u,
+                enabledExtensionNames: extensionNames);
             handle = default;
             xr.CreateInstance(&createInfo, &handle).Check("xrCreateInstance");
         }
@@ -97,8 +113,20 @@ internal sealed unsafe class XrInstance : IDisposable
                 throw new OpenXrException($"Could not load the functions of {D3D11ExtensionName}.");
             }
 
+            KhrWin32ConvertPerformanceCounterTime? timeConversion = null;
+            if (timeConversionSupported && xr.TryGetInstanceExtension(null, handle, out KhrWin32ConvertPerformanceCounterTime conversion))
+            {
+                timeConversion = conversion;
+            }
+            else
+            {
+                logger.LogWarning(
+                    "The OpenXR runtime does not offer {Extension}; video frames are chosen by the time of rendering instead of the predicted display time.",
+                    TimeConversionExtensionName);
+            }
+
             logger.LogInformation("OpenXR instance created: runtime {Runtime} {Version}.", runtimeName, runtimeVersion);
-            return new XrInstance(xr, handle, d3d11, runtimeName, runtimeVersion);
+            return new XrInstance(xr, handle, d3d11, timeConversion, runtimeName, runtimeVersion);
         }
         catch
         {
@@ -153,6 +181,24 @@ internal sealed unsafe class XrInstance : IDisposable
         int height = (int)Math.Max(views[0].RecommendedImageRectHeight, views[1].RecommendedImageRectHeight);
         system = new XrSystemInfo(systemId, systemName, width, height, requirements.AdapterLuid, requirements.MinFeatureLevel);
         return true;
+    }
+
+    /// <summary>
+    /// Converts an OpenXR time (nanoseconds, runtime clock) into a <see cref="System.Diagnostics.Stopwatch"/> timestamp.
+    /// Without the extension it returns the current timestamp. Does not allocate.
+    /// </summary>
+    public long ToStopwatchTimestamp(long xrTime)
+    {
+        if (_timeConversion is { } conversion)
+        {
+            long counter = 0;
+            if (conversion.ConvertTimeToWin32PerformanceCounter(Handle, xrTime, &counter) == Result.Success)
+            {
+                return counter;
+            }
+        }
+
+        return System.Diagnostics.Stopwatch.GetTimestamp();
     }
 
     /// <summary>Takes the next event from the queue. Returns false if the queue is empty. Does not allocate.</summary>

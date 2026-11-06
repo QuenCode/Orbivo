@@ -1,4 +1,6 @@
+using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Media;
 using Orbivo.Xr.Graphics;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
@@ -12,14 +14,16 @@ internal enum PanoramaOutput
     Image,
     DebugDirection,
     DebugEquirect360Uv,
+    DebugSourceUv,
 }
 
 /// <summary>
 /// Draws a panorama into one view with a fullscreen triangle (docs/ARCHITECTURE.md, "Rendering").
-/// Used for the desktop debug viewport and, from M2, for each eye in the headset.
+/// Used for the desktop debug viewport and for each eye in the headset.
 /// </summary>
 /// <remarks>
-/// <see cref="Render"/> runs on the render thread every frame: it does not block and does not allocate (CLAUDE.md rule 1).
+/// <see cref="Render(ID3D11DeviceContext, ID3D11RenderTargetView, int, int, in ViewParameters, Eye, in PanoramaSource, float)"/>
+/// runs on the render thread every frame: it does not block and does not allocate (CLAUDE.md rule 1).
 /// </remarks>
 public sealed class PanoramaRenderer : IDisposable
 {
@@ -29,8 +33,10 @@ public sealed class PanoramaRenderer : IDisposable
 
     private readonly ID3D11VertexShader _vertexShader;
     private readonly ID3D11PixelShader _imageShader;
+    private readonly ID3D11PixelShader _videoShader;
     private readonly ID3D11PixelShader _debugDirectionShader;
     private readonly ID3D11PixelShader _debugUvShader;
+    private readonly ID3D11PixelShader _debugSourceUvShader;
     private readonly ID3D11SamplerState _sampler;
     private readonly ID3D11RasterizerState _rasterizerState;
     private readonly ID3D11Buffer _constantBuffer;
@@ -43,8 +49,10 @@ public sealed class PanoramaRenderer : IDisposable
         _vertexShader = d3d.CreateVertexShader(
             ShaderCompiler.Compile(ShaderFile, "VsFullscreenTriangle", ShaderCompiler.VertexShaderProfile), null);
         _imageShader = CreatePixelShader(d3d, "PsEquirect360");
+        _videoShader = CreatePixelShader(d3d, "PsEquirect360Video");
         _debugDirectionShader = CreatePixelShader(d3d, "PsDebugDirection");
         _debugUvShader = CreatePixelShader(d3d, "PsDebugEquirect360Uv");
+        _debugSourceUvShader = CreatePixelShader(d3d, "PsDebugSourceUv");
 
         // Wrap horizontally (360° around), clamp vertically (poles). No mipmaps, see panorama.hlsl.
         _sampler = d3d.CreateSamplerState(new SamplerDescription(
@@ -65,7 +73,7 @@ public sealed class PanoramaRenderer : IDisposable
     }
 
     /// <summary>
-    /// Renders the view into <paramref name="target"/>. Without a source image the target is cleared to black.
+    /// Renders one eye's view of <paramref name="source"/> into <paramref name="target"/>; black clears the target.
     /// Render thread only.
     /// </summary>
     /// <param name="context">The immediate context of the device.</param>
@@ -73,8 +81,23 @@ public sealed class PanoramaRenderer : IDisposable
     /// <param name="width">Target width in pixels.</param>
     /// <param name="height">Target height in pixels.</param>
     /// <param name="view">Orientation and field of view.</param>
-    /// <param name="source">Equirect 360 mono image, or null for black.</param>
+    /// <param name="eye">Which eye's half of a stereo source to show (the debug viewport shows the left eye).</param>
+    /// <param name="source">Image, video frame or black.</param>
     /// <param name="brightness">1 = full image, 0 = black.</param>
+    public void Render(
+        ID3D11DeviceContext context,
+        ID3D11RenderTargetView target,
+        int width,
+        int height,
+        in ViewParameters view,
+        Eye eye,
+        in PanoramaSource source,
+        float brightness = 1f)
+    {
+        Render(context, target, width, height, view, eye, source, brightness, PanoramaOutput.Image);
+    }
+
+    /// <summary>Renders an equirect 360 mono still image, or black for null.</summary>
     public void Render(
         ID3D11DeviceContext context,
         ID3D11RenderTargetView target,
@@ -84,7 +107,7 @@ public sealed class PanoramaRenderer : IDisposable
         StillImageTexture? source,
         float brightness = 1f)
     {
-        Render(context, target, width, height, view, source?.ShaderResourceView, brightness, PanoramaOutput.Image);
+        Render(context, target, width, height, view, Eye.Left, PanoramaSource.FromImage(source, StereoLayout.Mono), brightness, PanoramaOutput.Image);
     }
 
     internal void Render(
@@ -93,19 +116,41 @@ public sealed class PanoramaRenderer : IDisposable
         int width,
         int height,
         in ViewParameters view,
-        ID3D11ShaderResourceView? source,
+        Eye eye,
+        in PanoramaSource source,
         float brightness,
         PanoramaOutput output)
     {
         context.OMSetRenderTargets(target, null);
 
-        if (output == PanoramaOutput.Image && (source is null || brightness <= 0f))
+        if (output == PanoramaOutput.Image && (source.IsBlack || brightness <= 0f))
         {
             context.ClearRenderTargetView(target, Black);
             return;
         }
 
-        WriteConstants(context, ViewConstants.Create(view, brightness));
+        EyeSourceRect rect = default;
+        VideoColorConstants color = default;
+        if (source.IsVideo)
+        {
+            VideoFrame frame = source.Video;
+            rect = ProjectionMath.CreateEyeSourceRect(frame.Layout, eye, frame.Width, frame.Height);
+            color = frame.Color;
+            context.PSSetShaderResource(1, frame.Luma);
+            context.PSSetShaderResource(2, frame.Chroma);
+        }
+        else if (source.Image is { } image)
+        {
+            rect = ProjectionMath.CreateEyeSourceRect(source.ImageLayout, eye, image.Width, image.Height);
+            context.PSSetShaderResource(0, image.ShaderResourceView);
+        }
+        else
+        {
+            // Debug outputs without a source: the whole image, as for mono.
+            rect = ProjectionMath.CreateEyeSourceRect(StereoLayout.Mono, eye, 2, 2);
+        }
+
+        WriteConstants(context, ViewConstants.Create(view, rect, color, brightness));
 
         context.RSSetViewport(0f, 0f, width, height, 0f, 1f);
         context.RSSetState(_rasterizerState);
@@ -116,15 +161,11 @@ public sealed class PanoramaRenderer : IDisposable
         {
             PanoramaOutput.DebugDirection => _debugDirectionShader,
             PanoramaOutput.DebugEquirect360Uv => _debugUvShader,
+            PanoramaOutput.DebugSourceUv => _debugSourceUvShader,
+            _ when source.IsVideo => _videoShader,
             _ => _imageShader,
         });
         context.PSSetConstantBuffer(0, _constantBuffer);
-        if (source is not null)
-        {
-            // The debug outputs do not sample, so they run without a source.
-            context.PSSetShaderResource(0, source);
-        }
-
         context.PSSetSampler(0, _sampler);
         context.Draw(3, 0);
     }
@@ -134,8 +175,10 @@ public sealed class PanoramaRenderer : IDisposable
         _constantBuffer.Dispose();
         _rasterizerState.Dispose();
         _sampler.Dispose();
+        _debugSourceUvShader.Dispose();
         _debugUvShader.Dispose();
         _debugDirectionShader.Dispose();
+        _videoShader.Dispose();
         _imageShader.Dispose();
         _vertexShader.Dispose();
     }
