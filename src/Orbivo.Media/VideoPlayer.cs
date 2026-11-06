@@ -47,6 +47,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     private readonly ChannelReader<PlayerCommand> _commands;
     private readonly VideoPlayerOptions _options;
     private readonly ILogger _logger;
+    private readonly DisplayKeepAwake _keepAwake;
     private readonly Thread _thread;
     private readonly TransportClock _clock;
     private readonly IAudioOutput? _audio;
@@ -102,6 +103,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         _commands = commands;
         _options = options;
         _logger = loggerFactory.CreateLogger<VideoPlayer>();
+        _keepAwake = new DisplayKeepAwake(_logger);
         _audio = audio;
         _clock = new TransportClock(audio);
         audio?.SetFader(_fader);
@@ -274,6 +276,9 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
 
                 PollDecoder();
                 DisposeUnusedQueues();
+
+                // A monitor switching off or on stalls the video decoding for seconds (DECISIONS.md, M5).
+                _keepAwake.Update(_machine.State is PlaybackState.Playing or PlaybackState.Paused);
             }
             catch (Exception exception)
             {
@@ -297,6 +302,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             }
         }
 
+        _keepAwake.Update(false);
         _logger.LogInformation("Player control thread stopped.");
     }
 

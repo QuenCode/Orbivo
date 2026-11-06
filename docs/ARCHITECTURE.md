@@ -38,7 +38,7 @@ docs/
 | Thread | Aufgabe | Darf blockieren? |
 |---|---|---|
 | WPF-UI | Operator-UI, schreibt Befehle in `Channel<PlayerCommand>` | ja (UI-üblich) |
-| Player-Control | Liest Befehle, steuert Demux/Decoder, Zustandsautomat, publiziert `PlayerStatus` (~10 Hz) | ja |
+| Player-Control | Liest Befehle, steuert Demux/Decoder, Zustandsautomat, publiziert `PlayerStatus` (~10 Hz). Hält bei „Läuft“ und „Pause“ Bildschirm und System wach (`DisplayKeepAwake`) | ja |
 | Demux (`MediaDemuxer`) | liest Pakete und verteilt sie auf Video- und Audio-`PacketQueue`; führt Seeks aus und legt eine Seek-Marke in beide Queues | ja |
 | Video-Decode | dekodiert in GPU-Frames, kopiert sie in den Ring der `VideoFrameQueue` (6 Slots) und gibt sie über `FramePacer` frei. Führt Seeks aus und wartet nach dem Dateiende auf den nächsten Seek | ja |
 | Audio-Decode (`AudioDecoder`) | dekodiert, konvertiert mit swresample nach float32 Stereo interleaved in der Geräte-Samplerate, schreibt mit Medienposition in `AudioRingBuffer` | ja |
