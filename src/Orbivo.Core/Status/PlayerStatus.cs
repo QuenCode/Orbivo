@@ -1,3 +1,4 @@
+using Orbivo.Core.Audio;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Playback;
 
@@ -23,6 +24,21 @@ public sealed record VideoStreamInfo(
     StereoLayout Layout,
     bool LayoutChosenExplicitly,
     bool HardwareDecoding);
+
+/// <summary>Properties of the sound track being played.</summary>
+/// <param name="Codec">Codec name, e.g. "aac".</param>
+/// <param name="Conversion">How the track reaches the stereo output.</param>
+public sealed record AudioTrackInfo(string Codec, AudioConversionPlan Conversion);
+
+/// <summary>Which clock drives the playback (CLAUDE.md rule 4).</summary>
+public enum PlaybackClockSource
+{
+    /// <summary>System timer: the video has no sound, or no sound output is available.</summary>
+    System,
+
+    /// <summary>Audio clock: the heard position of the sound output.</summary>
+    Audio,
+}
 
 /// <summary>
 /// Immutable snapshot of the player for the operator UI (CLAUDE.md rule 3: player → UI only through snapshots).
@@ -60,6 +76,18 @@ public sealed record PlayerStatus(
 
     /// <summary>Nominal duration of one frame, <see cref="TimeSpan.Zero"/> if no video is open. For frame steps.</summary>
     public TimeSpan FrameDuration { get; init; }
+
+    /// <summary>Sound track of the current video, or null if it has none (or no sound output is available).</summary>
+    public AudioTrackInfo? Audio { get; init; }
+
+    /// <summary>State of the sound output device, or null if the player runs without sound output.</summary>
+    public AudioOutputStatus? AudioOutput { get; init; }
+
+    /// <summary>Clock that drives the playback now.</summary>
+    public PlaybackClockSource ClockSource { get; init; }
+
+    /// <summary>Measured A/V deviation of the shown frames (F40, N2).</summary>
+    public AvSyncStats AvSync { get; init; }
 
     public static PlayerStatus Empty { get; } =
         new(PlaybackState.NoMedia, null, TimeSpan.Zero, TimeSpan.Zero, null, 0, 0, 0, 0, null);

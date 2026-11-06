@@ -102,4 +102,17 @@ public sealed class OutputFaderTests
     {
         Assert.Equal(expected, OutputFader.ToLinear(level));
     }
+
+    [Fact]
+    public void GetLevel_IsThePerceivedLevelForTheSound()
+    {
+        var time = new FakeTimeProvider();
+        var fader = new OutputFader(time);
+        fader.FadeTo(black: true, TimeSpan.FromSeconds(1));
+        long halfway = time.Timestamp + (time.TimestampFrequency / 2);
+        Assert.Equal(0.5f, fader.GetLevel(halfway), 4);
+        Assert.Equal(OutputFader.ToLinear(0.5f), fader.GetBrightness(halfway), 4);
+        fader.SetBlackout(false);
+        Assert.Equal(1f, fader.GetLevel(halfway));
+    }
 }

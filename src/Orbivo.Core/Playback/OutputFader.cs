@@ -57,6 +57,15 @@ public sealed class OutputFader
         return ToLinear(Volatile.Read(ref _state).LevelAt(timestamp));
     }
 
+    /// <summary>
+    /// Perceived level (0 = black, 1 = full picture) at <paramref name="timestamp"/>. The audio output uses it for the
+    /// sound, which follows blackout and fade (decision M5). Never blocks, never allocates.
+    /// </summary>
+    public float GetLevel(long timestamp)
+    {
+        return Volatile.Read(ref _state).LevelAt(timestamp);
+    }
+
     /// <summary>Switches to black or back to the picture at once.</summary>
     public void SetBlackout(bool black)
     {

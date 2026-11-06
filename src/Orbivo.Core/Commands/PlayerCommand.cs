@@ -37,3 +37,14 @@ public sealed record SetBlackoutCommand(bool Black) : PlayerCommand;
 /// <param name="ToBlack">True: fade out to black. False: fade in to the picture.</param>
 /// <param name="Duration">Time for a full fade; a fade from halfway takes half of it.</param>
 public sealed record FadeCommand(bool ToBlack, TimeSpan Duration) : PlayerCommand;
+
+/// <summary>Volume of the sound for the test person (F4).</summary>
+/// <param name="Level">0 = silent, 1 = full (before the loudness curve, see <c>AudioGain</c>).</param>
+public sealed record SetVolumeCommand(float Level) : PlayerCommand;
+
+/// <summary>Mutes the sound or switches it on again (F4).</summary>
+public sealed record SetMuteCommand(bool Muted) : PlayerCommand;
+
+/// <summary>Plays the sound on another output device (F24).</summary>
+/// <param name="DeviceId">Windows endpoint id, or null for the Windows default device.</param>
+public sealed record SetAudioDeviceCommand(string? DeviceId) : PlayerCommand;
