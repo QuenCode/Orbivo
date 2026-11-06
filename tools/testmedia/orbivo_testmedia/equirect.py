@@ -183,22 +183,28 @@ def draw_degree_labels(image: np.ndarray) -> np.ndarray:
     return np.asarray(canvas.convert("RGB")).copy()
 
 
+def resolution_patch(block: int, rows: int) -> np.ndarray:
+    """Black/white stripes with 1, 2 and 4 pixel period (vertical, then horizontal) and a 1-pixel checkerboard,
+    each `block` pixels wide; (rows, 7 * block) values 0/255."""
+    patterns = []
+    yy, xx = np.mgrid[0:rows, 0:block]
+    for period in (1, 2, 4):
+        patterns.append((xx // period) % 2)  # vertical stripes
+        patterns.append((yy // period) % 2)  # horizontal stripes
+    patterns.append((xx + yy) % 2)  # checkerboard
+    return np.concatenate(patterns, axis=1).astype(np.uint8) * 255
+
+
 def draw_resolution_patch(image: np.ndarray) -> None:
-    """Black/white stripes with 1, 2 and 4 pixel period halves plus a 1-pixel checkerboard, drawn in
-    source pixels below VORNE. If the player keeps the full resolution, the 1-pixel stripes stay visible."""
+    """The resolution patch in source pixels below VORNE. If the player keeps the full resolution,
+    the 1-pixel stripes stay visible."""
     height, width = image.shape[:2]
     lat_top, lat_bottom = RESOLUTION_PATCH_LAT_DEG
     _, y0 = equirect_pixel(0.0, lat_top, width, height)
     _, y1 = equirect_pixel(0.0, lat_bottom, width, height)
     y0, y1 = int(y0), int(y1)
     block = max(8, round(2.0 * width / 360.0))  # about 2 deg per block
-    patterns = []
-    yy, xx = np.mgrid[0:y1 - y0, 0:block]
-    for period in (1, 2, 4):
-        patterns.append((xx // period) % 2)  # vertical stripes
-        patterns.append((yy // period) % 2)  # horizontal stripes
-    patterns.append((xx + yy) % 2)  # checkerboard
-    patch = np.concatenate(patterns, axis=1).astype(np.uint8) * 255
+    patch = resolution_patch(block, y1 - y0)
     x0 = int(width / 2 - patch.shape[1] / 2)
     frame = max(1, block // 16)
     image[y0 - frame:y1 + frame, x0 - frame:x0 + patch.shape[1] + frame] = 0

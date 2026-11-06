@@ -2,7 +2,8 @@
 
 Per eye, on top of the still image:
 - timecode and frame number below VORNE (judder and frame drops become visible),
-- a yellow marker that travels once around the horizon per clip (smooth motion test),
+- a yellow marker that travels once around the horizon per clip (smooth motion test; equirect only,
+  in VR180 it is visible in the front half),
 - a white square below VORNE that flashes for two frames at every full second, together with
   a 1 kHz beep on the stereo audio track (A/V sync check from M5 on).
 Color conversion is explicitly BT.709 limited range; ffmpeg would otherwise use BT.601 for RGB -> YUV.
@@ -18,6 +19,9 @@ from pathlib import Path
 from .conventions import equirect_pixel
 from .equirect import Layout, eye_regions
 from .faces import FONT_BOLD, FONT_MONO
+from .projections import Projection, eye_point, pixels_per_degree
+
+EQUIRECT360 = Projection("equirect360")
 
 TIMECODE_LAT_DEG = -10.0
 TIMECODE_HEIGHT_DEG = 3.0
@@ -77,7 +81,8 @@ def _ff_path(path: Path) -> str:
     return "'" + path.as_posix().replace(":", r"\:") + "'"
 
 
-def _filter_graph(layout: Layout, width: int, height: int, settings: VideoSettings) -> str:
+def _filter_graph(layout: Layout, width: int, height: int, settings: VideoSettings,
+                  projection: Projection = EQUIRECT360) -> str:
     fps = settings.fps
     font_file = FONT_MONO if FONT_MONO.exists() else FONT_BOLD
     work_format = "yuv420p10le" if settings.bit_depth == 10 else "yuv420p"
@@ -87,24 +92,38 @@ def _filter_graph(layout: Layout, width: int, height: int, settings: VideoSettin
     ]
     stage = 0
     for index, (x0, y0, w, h) in enumerate(eye_regions(layout, width, height)):
-        marker_w = max(4, round(MARKER_SIZE_DEG * w / 360.0))
-        marker_h = max(4, round(MARKER_SIZE_DEG * h / 180.0))
-        _, orbit_y = equirect_pixel(0.0, ORBIT_LAT_DEG, w, h)
-        parts.append(f"color=c=yellow:s={marker_w}x{marker_h}:r={fps}[m{index}]")
-        orbit_x = f"{x0}+min(mod({w}*0.5+t*{w}/{settings.duration_s},{w}),{w - marker_w})"
-        parts.append(
-            f"[s{stage}][m{index}]overlay=x='{orbit_x}':y={round(y0 + orbit_y - marker_h / 2)}:eval=frame[s{stage + 1}]")
-        stage += 1
+        if projection.key == "equirect360":
+            marker_w = max(4, round(MARKER_SIZE_DEG * w / 360.0))
+            marker_h = max(4, round(MARKER_SIZE_DEG * h / 180.0))
+            _, orbit_y = equirect_pixel(0.0, ORBIT_LAT_DEG, w, h)
+            center_x, text_y = w / 2, equirect_pixel(0.0, TIMECODE_LAT_DEG, w, h)[1]
+            flash_x, flash_y = w / 2, equirect_pixel(0.0, FLASH_LAT_DEG, w, h)[1]
+            font_size = max(12, round(TIMECODE_HEIGHT_DEG * h / 180.0))
+        else:
+            density = pixels_per_degree(projection, 0.0, 0.0, w, h)
+            marker_w = marker_h = max(4, round(MARKER_SIZE_DEG * density))
+            _, orbit_y = eye_point(projection, 0.0, ORBIT_LAT_DEG, w, h)
+            center_x, text_y = eye_point(projection, 0.0, TIMECODE_LAT_DEG, w, h)
+            flash_x, flash_y = eye_point(projection, 0.0, FLASH_LAT_DEG, w, h)
+            font_size = max(12, round(TIMECODE_HEIGHT_DEG * pixels_per_degree(projection, 0.0, TIMECODE_LAT_DEG, w, h)))
 
-        center_x = x0 + w / 2
-        _, text_y = equirect_pixel(0.0, TIMECODE_LAT_DEG, w, h)
-        font_size = max(12, round(TIMECODE_HEIGHT_DEG * h / 180.0))
-        _, flash_y = equirect_pixel(0.0, FLASH_LAT_DEG, w, h)
+        if projection.key in ("equirect360", "equirect180"):
+            # Equirect 180 covers half the turn: the marker runs over 2w and is shown while it is inside the eye.
+            turn = w if projection.key == "equirect360" else 2 * w
+            parts.append(f"color=c=yellow:s={marker_w}x{marker_h}:r={fps}[m{index}]")
+            position = f"mod({w}*0.5+t*{turn}/{settings.duration_s},{turn})"
+            enable = "" if turn == w else f":enable='lt({position},{w - marker_w})'"
+            orbit_x = f"{x0}+min({position},{w - marker_w})"
+            parts.append(
+                f"[s{stage}][m{index}]overlay=x='{orbit_x}':y={round(y0 + orbit_y - marker_h / 2)}:eval=frame{enable}"
+                f"[s{stage + 1}]")
+            stage += 1
+
         parts.append(
             f"[s{stage}]drawtext=fontfile={_ff_path(font_file)}:text='%{{pts\\:hms}}  F%{{frame_num}}'"
             f":fontsize={font_size}:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw={max(2, font_size // 5)}"
-            f":x={round(center_x)}-text_w/2:y={round(y0 + text_y)}-text_h/2,"
-            f"drawbox=x={round(center_x - marker_w / 2)}:y={round(y0 + flash_y - marker_h / 2)}"
+            f":x={round(x0 + center_x)}-text_w/2:y={round(y0 + text_y)}-text_h/2,"
+            f"drawbox=x={round(x0 + flash_x - marker_w / 2)}:y={round(y0 + flash_y - marker_h / 2)}"
             f":w={marker_w}:h={marker_h}:color=white:t=fill:enable='lt(mod(t,1),{settings.flash_s})'[s{stage + 1}]")
         stage += 1
 
@@ -121,14 +140,14 @@ def _beep_source(settings: VideoSettings) -> str:
 
 
 def encode(ffmpeg: Path, still: Path, output: Path, layout: Layout, width: int, height: int,
-           settings: VideoSettings) -> float:
+           settings: VideoSettings, projection: Projection = EQUIRECT360) -> float:
     """Encodes one video; returns the elapsed time in seconds. Raises on ffmpeg errors."""
     codec = settings.codec
     command = [
         str(ffmpeg), "-hide_banner", "-nostdin", "-y",
         "-framerate", str(settings.fps), "-i", str(still),
         "-f", "lavfi", "-i", _beep_source(settings),
-        "-filter_complex", _filter_graph(layout, width, height, settings),
+        "-filter_complex", _filter_graph(layout, width, height, settings, projection),
         "-map", "[v]", "-map", "1:a",
         "-frames:v", str(settings.frame_count), "-r", str(settings.fps), "-fps_mode", "cfr",
         "-c:v", codec.name, *codec.args, *(codec.extra_10 if settings.bit_depth == 10 else ()),
