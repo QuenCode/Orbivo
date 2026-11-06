@@ -41,10 +41,11 @@
 | 2026-11-05 | M2: `--image` gilt jetzt auch für die Brille. Das Bild erscheint, sobald es geladen ist. Den Startzustand „Schwarz“ mit Freigabe durch den Operator (F6) baut M4. Im Brillen-Modus gibt es kein Vorschaufenster (Mirror-Vorschau F42 später) | M2 braucht das Testbild in der Brille, die Transport-Steuerung kommt erst in M4 |
 | 2026-11-05 | M2: Statusanzeige im Brillen-Modus: Brille (Runtime-Name und -Version, Brillenname, Auflösung je Auge), Session-State, Bildausgabe (fps und Bildrate der Brille, Warnung unter 95 %), GPU, Bild, Blickrichtung des Probanden (F41, Mittel beider Augen) | F40/F41 |
 | 2026-11-05 | M2: Beobachtet auf dem Entwicklungsrechner ohne angeschlossene Brille: Varjo OpenXR Runtime 4.14.2 legt die Instance an und meldet `XR_ERROR_FORM_FACTOR_UNAVAILABLE` | Der Fall „Varjo Base installiert, Brille fehlt“ ist damit ohne Brille getestet |
+| 2026-11-06 | M2: Brillen-Test bestanden (alle 8 Punkte der Checkliste): Orientierung, stabiles Bild ohne Mitbewegung bei Kopfverschiebung, keine Doppelbilder, Roll, keine Naht, Farben, Wiederverbinden nach Absetzen und nach Neustart von Varjo Base, sauberes Beenden | Rückmeldung des Projektinhabers mit Varjo XR-3 |
 
 ## Offene Punkte
 
-- **M2 mit Brille prüfen:** Session, Frame-Loop und Swapchains konnten ohne Brille nicht laufen. Offen sind die Checkliste aus M2, ob der Frame-Loop wirklich allokationsfrei ist (Status zeigt sonst eine Warnung) und wie scharf `PRIMARY_STEREO` auf der XR-3 wirkt (sonst Quad-Views vorziehen).
+- **Schärfe von `PRIMARY_STEREO` auf der XR-3:** Ohne Quad-Views nutzt Varjo das Fokus-Display nicht voll. Mit echtem 8K-Material (ab M3) beurteilen, ob Quad-Views (`XR_VARJO_quad_views`) vorgezogen werden müssen.
 - **Kopf-Log mit 90 Hz (F50, M8):** Der Render-Thread darf nicht schreiben. Es braucht eine lock-freie Queue und einen eigenen Schreib-Thread; die Thread-Tabelle in ARCHITECTURE.md bekommt dann einen Logger-Thread.
 - **FuMa 2. und 3. Ordnung:** selten und uneinheitlich definiert. Nur umsetzen, wenn echtes Material es verlangt.
 - **Echtes Aufnahmeformat** (SPEC, offene Punkte): Auflösung, Codec, Stereo-Layout, Ambisonics-Ordnung. 8192×8192 HEVC liegt über HEVC-Level 6.2; früh mit echtem Material testen.
