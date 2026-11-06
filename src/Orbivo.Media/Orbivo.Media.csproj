@@ -16,4 +16,8 @@
     <ProjectReference Include="..\Orbivo.Core\Orbivo.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Orbivo.Media.Tests" />
+  </ItemGroup>
+
 </Project>

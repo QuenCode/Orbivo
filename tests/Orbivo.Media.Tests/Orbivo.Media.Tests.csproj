@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Decoder and player tests against the real FFmpeg build and the hardware GPU (D3D11VA).
+    They skip themselves when the FFmpeg DLLs, a hardware GPU or the test videos
+    (python tools/testmedia/make_testmedia.py) are missing.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Orbivo.Media\Orbivo.Media.csproj" />
+    <ProjectReference Include="..\..\src\Orbivo.Xr\Orbivo.Xr.csproj" />
+  </ItemGroup>
+
+  <Import Project="$(OrbivoRepoRoot)build\Native.targets" />
+
+</Project>
