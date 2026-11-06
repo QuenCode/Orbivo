@@ -1,4 +1,5 @@
 using System.Numerics;
+using Orbivo.Core.Formats;
 
 namespace Orbivo.Core.Geometry;
 
@@ -53,6 +54,50 @@ public static class ProjectionMath
         float longitude = MathF.Atan2(direction.X, -direction.Z);
         float latitude = MathF.Asin(Math.Clamp(direction.Y, -1f, 1f));
         return new Vector2((longitude / (2f * MathF.PI)) + 0.5f, 0.5f - (latitude / MathF.PI));
+    }
+
+    /// <summary>
+    /// Where one eye lies in the source image (F11). Mono uses the whole image; top-bottom puts the left eye on top,
+    /// side-by-side on the left. HLSL: the constants <c>SourceScaleOffset</c> and <c>SourceClamp</c>.
+    /// </summary>
+    /// <remarks>
+    /// Sampling stays half a texel inside the eye, so bilinear filtering never mixes in the other eye.
+    /// Along a wrapping axis (u of a full-width eye) nothing is clamped, so there is no seam at the back.
+    /// </remarks>
+    /// <param name="layout">Stereo layout of the image.</param>
+    /// <param name="eye">The eye to render.</param>
+    /// <param name="width">Image width in texels.</param>
+    /// <param name="height">Image height in texels.</param>
+    public static EyeSourceRect CreateEyeSourceRect(StereoLayout layout, Eye eye, int width, int height)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(width, 2);
+        ArgumentOutOfRangeException.ThrowIfLessThan(height, 2);
+
+        // No clamp along a wrapping axis: any value outside [0, 1] works, the sampler wraps u.
+        const float Open = 2f;
+        bool second = eye == Eye.Right;
+        return layout switch
+        {
+            StereoLayout.TopBottom => new EyeSourceRect(
+                new Vector2(1f, 0.5f),
+                new Vector2(0f, second ? 0.5f : 0f),
+                new Vector2(-Open, 1f / height),
+                new Vector2(Open, 1f - (1f / height))),
+            StereoLayout.SideBySide => new EyeSourceRect(
+                new Vector2(0.5f, 1f),
+                new Vector2(second ? 0.5f : 0f, 0f),
+                new Vector2(1f / width, 0f),
+                new Vector2(1f - (1f / width), 1f)),
+            _ => new EyeSourceRect(Vector2.One, Vector2.Zero, new Vector2(-Open, 0f), new Vector2(Open, 1f)),
+        };
+    }
+
+    /// <summary>
+    /// Texture coordinates in the whole source image for coordinates within one eye's image. HLSL: <c>SourceUv</c>.
+    /// </summary>
+    public static Vector2 SourceUv(Vector2 eyeUv, in EyeSourceRect rect)
+    {
+        return (Vector2.Clamp(eyeUv, rect.ClampMin, rect.ClampMax) * rect.Scale) + rect.Offset;
     }
 
     /// <summary>
