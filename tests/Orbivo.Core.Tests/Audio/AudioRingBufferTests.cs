@@ -69,8 +69,13 @@ public sealed class AudioRingBufferTests
 
         int generation = ring.RequestFlush();
         Assert.False(ring.IsFlushed(generation));
-        Assert.False(ring.HasStart);
-        Assert.Equal(0, ring.AvailableFrames);
+
+        // Until the consumer acknowledges, the old data stays readable (for the fade-out).
+        Assert.True(ring.HasStart);
+        Assert.Equal(3, ring.AvailableFrames);
+        Span<float> old = stackalloc float[1];
+        Assert.Equal(1, ring.Read(old, 1));
+        Assert.Equal(1f, old[0]);
 
         ring.AcknowledgeFlush();
         Assert.Equal(generation, ring.Generation);

@@ -174,17 +174,20 @@ public sealed class AudioRingBuffer : IDisposable
         _consumerProgress.Set();
     }
 
-    /// <summary>Consumer: the producer has said where the data of the current generation starts.</summary>
-    public bool HasStart => !FlushPending && Volatile.Read(ref _startedGeneration) == _generation;
+    /// <summary>
+    /// Consumer: the producer has said where the data of the current generation starts. Stays true while a flush is
+    /// pending: the old data can still be read (to fade it out) until <see cref="AcknowledgeFlush"/>.
+    /// </summary>
+    public bool HasStart => Volatile.Read(ref _startedGeneration) == _generation;
 
     /// <summary>Consumer: media position (frames) of the next frame to read. Valid if <see cref="HasStart"/>.</summary>
     public long ReadPosition => Volatile.Read(ref _startFrame) + (_head - _generationHead);
 
-    /// <summary>Consumer: frames ready to read.</summary>
-    public int AvailableFrames => FlushPending ? 0 : (int)(Volatile.Read(ref _tail) - _head);
+    /// <summary>Consumer: frames ready to read (of the current generation, also while a flush is pending).</summary>
+    public int AvailableFrames => (int)(Volatile.Read(ref _tail) - _head);
 
     /// <summary>Consumer: the current generation is complete and fully read.</summary>
-    public bool EndOfData => !FlushPending && Volatile.Read(ref _endedGeneration) == _generation && AvailableFrames == 0;
+    public bool EndOfData => Volatile.Read(ref _endedGeneration) == _generation && AvailableFrames == 0;
 
     /// <summary>Consumer: copies up to <paramref name="frames"/> frames into <paramref name="destination"/>; returns the number read.</summary>
     public int Read(Span<float> destination, int frames)

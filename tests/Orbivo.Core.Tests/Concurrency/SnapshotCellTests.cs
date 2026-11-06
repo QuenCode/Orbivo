@@ -19,31 +19,35 @@ public sealed class SnapshotCellTests
     [Fact]
     public async Task ConcurrentReads_NeverSeeATornValue()
     {
+        // Runs until the reader has done enough reads, not for a fixed time: under load (parallel tests, a build) the
+        // reader task may start late.
+        const long wantedReads = 200_000;
         var cell = new SnapshotCell<Pair>(new Pair(0, 0));
-        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(1));
         long reads = 0;
         Task reader = Task.Run(() =>
         {
             long last = 0;
-            while (!cancel.IsCancellationRequested)
+            while (Volatile.Read(ref reads) < wantedReads)
             {
                 Pair value = cell.Read();
                 Assert.Equal(value.A, -value.B);
                 Assert.True(value.A >= last, "values went backwards");
                 last = value.A;
-                reads++;
+                Volatile.Write(ref reads, reads + 1);
             }
         }, TestContext.Current.CancellationToken);
 
+        var timeout = System.Diagnostics.Stopwatch.StartNew();
         long next = 1;
-        while (!cancel.IsCancellationRequested)
+        while (!reader.IsCompleted && timeout.Elapsed < TimeSpan.FromSeconds(30))
         {
             cell.Write(new Pair(next, -next));
             next++;
         }
 
         await reader;
-        Assert.True(reads > 1000);
+        Assert.Equal(wantedReads, reads);
+        Assert.True(next > 1000, "the writer was running during the reads");
     }
 
     [Fact]
