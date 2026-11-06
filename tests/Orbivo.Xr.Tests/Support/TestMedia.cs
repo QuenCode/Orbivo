@@ -14,6 +14,9 @@ internal static class TestMedia
     public static string MonoTestImagePath =>
         Path.Combine(RepositoryRoot.Value, "tools", "testmedia", "out", "equirect360_mono_4096x2048.png");
 
+    /// <summary>The folder of the generated test media (<c>tools/testmedia/out</c>).</summary>
+    public static string OutputDirectory => Path.Combine(RepositoryRoot.Value, "tools", "testmedia", "out");
+
     /// <summary>Rendered views are written here so that a human (or Claude) can look at them.</summary>
     public static string RenderedViewsDirectory
     {
@@ -47,6 +50,7 @@ internal static class TestMedia
     public static void SavePng(string path, int width, int height, byte[] bgra)
     {
         BitmapSource bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, bgra, width * 4);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using FileStream stream = File.Create(path);
