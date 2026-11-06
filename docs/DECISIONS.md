@@ -59,6 +59,7 @@
 | 2026-11-06 | M3: Neues Testprojekt `Orbivo.Media.Tests` mit echter GPU und FFmpeg (überspringt sich ohne GPU, DLLs oder Testmedien). Die Tests laufen nacheinander in einer Collection, weil sie Durchsatz und Timing auf dem einen Video-Decoder der GPU messen. Gemessen auf der RTX 3070: 8K-TB-HEVC mit 61 fps | Decoder, Player-Ablauf und Fehlermeldungen werden ohne Brille automatisch geprüft |
 | 2026-11-06 | M3: Fund: Vortice gibt pro Device **einen** gemeinsamen `ImmediateContext`-Wrapper aus. Nur der Besitzer des Device (`GraphicsDevice`) gibt ihn frei, alle anderen leihen ihn | Ein `Dispose` im Player hatte den Context für alle anderen ungültig gemacht |
 | 2026-11-06 | M3: Bildschirmfotos des Operatorfensters per `PrintWindow` zeigen den Fensterinhalt weiß. Das ist ein Problem der Aufnahme, nicht der App (M2 sieht genauso aus) | Für automatische Prüfungen die Statusfelder per UI Automation lesen |
+| 2026-11-06 | M3: Brillen-Test bestanden (alle 10 Punkte der Checkliste): 8K-TB-Video ohne Ruckeln, Bildausgabe im Takt der Brille, Puffer voll und keine verworfenen Frames, Stereo-Tiefe richtig (oben = linkes Auge), Pause hält das Bild bei Kopf-Tracking, Stop schwarz und zurück auf Anfang, Weiterlaufen nach Absetzen der Brille, Ende hält das letzte Bild, sauberes Beenden | Rückmeldung des Projektinhabers mit Varjo XR-3 |
 
 ## Offene Punkte
 
