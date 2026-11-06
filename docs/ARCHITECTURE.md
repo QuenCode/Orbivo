@@ -7,10 +7,11 @@ Directory.Build.props          # Nullable, TreatWarningsAsErrors, LangVersion, x
 Directory.Packages.props       # zentrale, gepinnte Paketversionen
 src/
   Orbivo.Core/            # keine UI-, XR- oder Native-Abhängigkeiten
-    Commands/                  # PlayerCommand-Records (Open, Play, Pause, Stop, Seek, Loop, Blackout, Fade; später SetFormat, Recenter …)
+    Commands/                  # PlayerCommand-Records (Open, Play, Pause, Stop, Seek, Loop, Blackout, Fade, SetVideoFormat; später Recenter …)
     Playback/                  # PlaybackStateMachine, SystemPlaybackClock, FramePacer, OutputFader (Blackout/Fade), MediaTime
     Playlists/                 # Playlist (Reihenfolge, aktuelles Video, Weiter/Zurück, Dateien aus Drag & Drop)
-    Formats/                   # ProjectionType, StereoLayout, AudioMode, VideoFormatSettings, Sidecar-Laden/Speichern
+    Formats/                   # ProjectionType, StereoLayout, CubemapLayout, FisheyeParameters, VideoFormat, FormatOverrides,
+                               # EmbeddedFormatMetadata, VideoFormatResolver (Rangfolge), SidecarFile (Laden/Speichern)
     Geometry/                  # ProjectionMath (C#-Referenz der Shader-Mathematik), OrientationMath, FovAngles
     Logging/                   # SessionLogger (CSV), EventLog
     Status/                    # PlayerStatus-Snapshot (immutable record)
@@ -26,7 +27,7 @@ src/
 tests/
   Orbivo.Core.Tests/      # ProjectionMath, Sidecar, Clock/Sync-Logik, Zustandsautomat
   Orbivo.Audio.Tests/     # Ambisonics-Konvertierungen (FuMa→AmbiX), Kanalreihenfolgen
-  Orbivo.Xr.Tests/        # Shader gegen ProjectionMath (WARP), Richtungstest mit dem Testbild, Maus-Steuerung
+  Orbivo.Xr.Tests/        # Shader gegen ProjectionMath (WARP), Richtungstest mit dem Testbild, alle Projektionen gegen Equirect 360, Maus-Steuerung
 tools/
   testmedia/                   # Skripte (ffmpeg + Python) zum Erzeugen von Testvideos und Test-Ambisonics
 native/
@@ -61,9 +62,11 @@ Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC
 ## Rendering
 - Pro Auge ein Fullscreen-Triangle, kein Kugel-Mesh.
 - Der Pixel-Shader rekonstruiert die Blickrichtung: `dir = normalize(mul(invViewRotProj, ndc))`. Die View-Matrix enthält **nur Rotation** (Kopf-Orientierung × Recenter-Offset × Video-Offset). Projektionsmatrix aus dem asymmetrischen `XrFovf`.
+- Der Ausrichtungs-Offset des Videos (F14) dreht die Blickrichtung vor der Projektion: `view' = conj(R) · view` mit `R = yaw · pitch · roll` (`OrientationOffset.ApplyToView`). So dreht sich das Bild um R: Yaw +30° legt die bisherige Bildmitte 30° nach links.
 - Umgesetzt als drei Vektoren statt Matrix (`ViewRayBasis`): `dir = normalize(ndc.x·R + ndc.y·U + C)`. C# berechnet R, U und C, der Shader bekommt sie im Constant Buffer. So teilen C# und HLSL kein Matrix-Layout.
 - Abtastung ohne Mipmaps (`SampleLevel 0`), U wiederholend, V am Rand begrenzt. Dadurch gibt es hinten bei ±180° keine Naht.
-- `dir → (u,v)` je nach `ProjectionType`. Danach Stereo-Layout anwenden (Halbbild je Auge wählen): `SourceUv = clamp(uv, min, max) · Scale + Offset` (`EyeSourceRect`). Top-Bottom: oben = linkes Auge; Side-by-Side: links = linkes Auge. Begrenzt wird auf ein halbes Texel vor der Halbbildgrenze.
+- `dir → (u,v)` je nach `ProjectionType` (`ProjectedEyeUv` in `projection.hlsl`, `ProjectionMath.EyeUv` in C#). Die Parameter der Projektion (Würfel-Layout als Tabelle je Fläche, Fisheye-Kreis) rechnet C# einmal pro Frame aus dem `VideoFormat` (`ProjectionMath.CreateProjectionParameters`) und legt sie in den Constant Buffer. Danach Stereo-Layout anwenden (Halbbild je Auge wählen): `SourceUv = clamp(uv, min, max) · Scale + Offset` (`EyeSourceRect`). Top-Bottom: oben = linkes Auge; Side-by-Side: links = linkes Auge. Begrenzt wird auf ein halbes Texel vor der Halbbildgrenze, bei allen Projektionen außer Equirect 360 auch links und rechts.
+- **Augen tauschen** (F11): `VideoFormat.SourceEye` nimmt für das linke Auge das rechte Halbbild und umgekehrt.
 - Außerhalb des gültigen Bereichs (z. B. Rückseite bei VR180, außerhalb des Fisheye-Kreises) wird Schwarz ausgegeben.
 - Fade und Blackout sind ein Multiplikator im Shader (`Brightness`), bei 0 wird nur gelöscht. Der Faktor kommt pro Frame aus `OutputFader` (über den Player) und ist `level^2,2`, damit der Fade in wahrgenommener Helligkeit gleichmäßig läuft.
 - Varjo-spezifisch: Zuerst Standard-Stereo (`PRIMARY_STEREO`). Quad-Views (`XR_VARJO_quad_views`) sind eine spätere Optimierung.
@@ -72,11 +75,20 @@ Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC
 Konvention: +Y oben, −Z vorne, +X rechts. `dir` normalisiert.
 - **Equirect 360:** `lon = atan2(dir.x, -dir.z)`, `lat = asin(dir.y)`, `u = lon/(2π) + 0.5`, `v = 0.5 − lat/π`
 - **Equirect 180:** wie oben, aber `u = lon/π + 0.5`, gültig für `|lon| ≤ π/2`
-- **Cubemap:** Hauptachse bestimmt die Fläche. Flächen-Reihenfolge und Rotation pro Fläche kommen aus einer `CubemapLayout`-Tabelle (3×2, 6×1, 1×6 vorbelegt).
-- **EAC:** Cubemap mit Winkelkorrektur `uv' = (2/π)·atan(uv) `je Flächenachse (uv ∈ [−1,1]), Layout nach Google Spherical Video V2 / YouTube. **Gegen ein echtes EAC-Testvideo verifizieren.**
-- **Fisheye (äquidistant):** `θ = acos(dot(dir, forward))`, `r = θ / (fov/2)`, Winkel um die Achse ergibt die Position im Kreis mit konfigurierbarem Mittelpunkt und Radius.
+- **Cubemap:** Die Hauptachse bestimmt die Fläche (bei Gleichstand X vor Y vor Z). Auf der Fläche `(s, t) ∈ [−1, 1]²`, s nach rechts, t nach unten, so wie man die Fläche von der Würfelmitte aus sieht. Ungedrehte Flächen: vorne, hinten, links, rechts aufrecht; OBEN mit der Oberkante nach hinten (+Z), UNTEN mit der Oberkante nach vorne (wie ffmpeg `v360`). `CubemapLayout` beschreibt Raster (Spalten × Zeilen), Flächen je Zelle (`rludfb`) und Drehung je Zelle in Vierteldrehungen im Uhrzeigersinn, in der Schreibweise von `v360` (`in_forder`, `in_frot`). Vorbelegt: 3×2 und 6×1 und 1×6 (`rludfb`, `000000`), EAC (`lfrdbu`, `000313`). Optionaler Rand je Fläche (`cbmp`-Padding) in Pixeln.
+- **EAC:** Cubemap mit Winkelkorrektur `s' = (4/π)·atan(s)` je Flächenachse (`s ∈ [−1, 1]`; 45° liegen am Flächenrand, 22,5° auf halber Strecke), Layout nach YouTube (siehe oben). Gegen ffmpeg `v360` (`eac`) geprüft, gegen echtes YouTube-Material noch offen.
+- **Fisheye (äquidistant):** `θ = atan2(|dir.xy|, −dir.z)` (Winkel zur Blickachse vorne), Abstand vom Kreismittelpunkt `r = θ / (fov/2)` in Kreisradien, Richtung im Kreis aus `dir.xy` (rechts = +x, oben = +y). `u = centerX + r·(dir.x/|dir.xy|)·radius·H/W`, `v = centerY − r·(dir.y/|dir.xy|)·radius`; Mittelpunkt in Anteilen der Halbbild-Breite und -Höhe, Radius als Anteil der Halbbild-Höhe. Gültig für `θ ≤ fov/2`, sonst Schwarz.
 
-Alle Formeln stehen in `ProjectionMath.cs` und in `projection.hlsl`. Die Unit-Tests prüfen bekannte Richtungen (vorne, links, oben, hinten) gegen erwartete UV.
+Alle Formeln stehen in `ProjectionMath.cs` und in `projection.hlsl`. Die Unit-Tests prüfen bekannte Richtungen (vorne, links, oben, hinten) gegen erwartete UV. `ProjectionFormatShaderTests` vergleicht Shader und C# pixelweise für alle Formate, `ProjectionImageRenderTests` rendert die Testbilder aller Projektionen und vergleicht jede Ansicht mit derselben Ansicht des Equirect-360-Testbilds.
+
+## Formatpfad (M6)
+1. Beim Öffnen (`OpenMediaCommand`) liest der Player-Control-Thread das Sidecar (`SidecarFile.Load`). Die Wahl des Operators (`FormatOverrides`) gilt danach bis zum nächsten Video, auch über Stop und Neustart des Decoders.
+2. Beim Öffnen des Decoders liest `MediaDemuxer.ReadFormatMetadata` die Spherical-Video-Metadaten aus den Side-Data des Videostreams (`AV_PKT_DATA_SPHERICAL`, `AV_PKT_DATA_STEREO3D`; MP4 `sv3d`/`st3d`, Matroska, Frame-Packing-SEI).
+3. `VideoFormatResolver.Resolve` bestimmt jedes Teil des Formats einzeln: `--stereo` (nur Sitzung) vor Sidecar vor Metadaten vor Schätzung aus der Bildgröße. Ergebnis: verwendetes Format, das automatische Format (für „Automatisch (…)“ im Operatorfenster), die Quelle jedes Teils und deutsche Hinweise.
+4. Das Format geht als `VideoFormat` an die `VideoFrameQueue`; jedes `VideoFrame` trägt es zum Render-Thread. Eine Änderung (`SetVideoFormatCommand`) setzt `VideoFrameQueue.PictureFormat` (ein Referenz-Tausch, lock-frei), der Render-Thread sieht sie mit dem nächsten Frame, ohne Neuöffnen.
+5. Der Player speichert jede Änderung sofort im Sidecar und meldet das Format mit Quellen, Hinweisen und Sidecar-Zustand als `VideoFormatStatus` im `PlayerStatus`.
+
+Standbilder (`--image`) bleiben ein Testwerkzeug für Equirect 360 ohne Sidecar.
 
 ## Audio
 Stand M5: nur Stereo-Durchleitung. Räumlicher Ton folgt in M7.
@@ -127,21 +139,29 @@ Stand M5: nur Stereo-Durchleitung. Räumlicher Ton folgt in M7.
 - Maus: Ziehen greift das Bild (Ziehen nach rechts = Blick nach links), Mausrad = vertikales Sichtfeld 30–120° (Start 75°), Pos1 = zurücksetzen.
 - Standbild per `--image <Pfad>` (M1: Equirect 360 Mono). Dekodiert wird mit WIC über WPF in `Orbivo.App`, die Textur entsteht auf einem Worker-Thread und wird dem Render-Thread übergeben.
 - Gleiche Shader und Pipeline (`PanoramaRenderer`), nur andere View/Projection-Quelle: im Vorschaufenster `MouseViewSource` (`IViewSource`), in der Brille liefert `xrLocateViews` die Ansichten direkt im Frame-Loop (sie hängen an der vorhergesagten Anzeigezeit).
-- Video per `--video <Pfad>` (M3), in Vorschau und Brille. Stereo-Layout wird aus der Größe geraten (quadratisch = Top-Bottom) oder mit `--stereo mono|tb|sbs` festgelegt; die Vorschau zeigt das linke Auge.
+- Video per `--video <Pfad>` (M3), in Vorschau und Brille. Das Format kommt aus Metadaten und Sidecar (Formatpfad, M6); `--stereo mono|tb|sbs` legt das Stereo-Layout für die Sitzung fest. Die Vorschau zeigt das linke Auge.
 - Damit lassen sich Decoding, Formate, Sync und UI ohne Brille entwickeln.
 
 ## Sidecar-Format (`<Dateiname mit Endung>.orbivo.json`, z. B. `clip.mp4.orbivo.json`)
-Vorzeichen von `orientationOffsetDeg`: wie überall Rechte-Hand-Regel, Yaw positiv = Drehung nach links.
+Vorzeichen von `orientationOffsetDeg`: wie überall Rechte-Hand-Regel, Yaw positiv = Drehung nach links. Das Bild dreht sich: Yaw +30° legt die bisherige Bildmitte 30° nach links, Pitch + hebt sie an, Roll + kippt das Bild gegen den Uhrzeigersinn (vom Betrachter aus).
 ```json
 {
   "version": 1,
-  "projection": "Equirect360",
+  "projection": "Cubemap",
   "stereoLayout": "TopBottom",
-  "swapEyes": false,
+  "swapEyes": null,
   "fisheye": null,
-  "cubemapLayout": null,
-  "orientationOffsetDeg": { "yaw": 0, "pitch": 0, "roll": 0 },
+  "cubemapLayout": "6x1",
+  "orientationOffsetDeg": { "yaw": 30, "pitch": 0, "roll": 0 },
   "audioMode": { "type": "Ambisonics", "order": 1, "convention": "AmbiX" },
   "externalAudio": null
 }
 ```
+- **`null` oder fehlend = automatisch** (Metadaten, sonst Schätzung). Geschrieben werden immer alle Formatfelder.
+- `projection`: `Equirect360`, `Equirect180`, `Cubemap`, `Eac`, `Fisheye`. `stereoLayout`: `Mono`, `TopBottom`, `SideBySide`. Groß-/Kleinschreibung egal.
+- `cubemapLayout`: Name einer Vorgabe (`3x2`, `6x1`, `1x6`, `eac`) oder ein Objekt `{ "columns": 3, "rows": 2, "faceOrder": "rludfb", "faceRotation": "000000", "padding": 0 }`.
+- `fisheye`: `{ "fovDeg": 180, "centerX": 0.5, "centerY": 0.5, "radius": 0.5 }` (fehlende Felder: diese Standardwerte).
+- `orientationOffsetDeg`: je Achse höchstens ±360°; `null` = keine Drehung.
+- `audioMode` und `externalAudio` (ab M7) und alle unbekannten Felder bleiben beim Speichern erhalten.
+- Speichern: bei jeder Änderung im Operatorfenster, über eine `.tmp`-Datei. Ist nichts mehr eingestellt und gibt es keine fremden Felder, wird die Datei gelöscht.
+- Ungültige Felder werden mit Hinweis ignoriert. Eine Datei, die kein JSON ist, wird gemeldet, ignoriert und vor dem ersten Überschreiben als `.orbivo.json.bak` gesichert. Eine Datei mit `version` > 1 wird gelesen, aber nie überschrieben.
