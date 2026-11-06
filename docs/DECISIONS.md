@@ -74,6 +74,7 @@
 | 2026-11-06 | M4: Timeline: Klick springt an die Stelle, Ziehen sendet jede Position als Seek (der Player behält nur die letzte). Zeiteingabe als Sekunden, `mm:ss` oder `hh:mm:ss`, Nachkommastellen mit Punkt oder Komma (`MediaTime`). Zeiten werden auf ms gerundet angezeigt | Scrubbing in der Brille ohne eigenes Drosseln |
 | 2026-11-06 | M4: Statusanzeige: großes Banner „Brille: …“ (Video läuft / Standbild / letztes Bild / Schwarz / Schwarzbild / Blendet ein oder aus mit %), dazu Statuszeilen „Ausgabe“ und „Playlist“, „springt …“ während eines Seeks | F40: Der Operator sieht jederzeit, was der Proband sieht |
 | 2026-11-06 | M4: `--no-xr`-Lauf mit UI Automation: Zeiteingabe im Zustand Bereit, Play, alle Tastenkürzel, Einzelbild, Blackout, Fade, Datei-Dialog, Weiter/Zurück, Slider, Auto-Advance, Loop, Ende der Playlist, Reihenfolge und Entfernen. Log ohne Warnungen, sauberes Beenden. UI-Tests mit Tastatureingaben nur nach Rücksprache, weil der Rechner parallel genutzt wird | Fertig-Kriterium M4 |
+| 2026-11-06 | M4: Brillen-Test bestanden (alle 13 Punkte der Checkliste): schwarzer Startzustand, Play, Seek per Timeline ohne Schwarzblitz und mit richtiger Stereo-Tiefe, Scrubbing, Einzelbild-Schritte, Zeiteingabe, Sprünge per Pfeiltasten, Blackout mit weiterlaufendem Kopf-Tracking, gleichmäßiger Fade, Auto-Advance, Loop, Stop, sauberes Beenden | Rückmeldung des Projektinhabers mit Varjo XR-3, ohne Beanstandungen (auch der kurze Halt am Loop-Ende stört nicht) |
 
 ## Offene Punkte
 
@@ -86,7 +87,7 @@
 - **Software-Decoder-Fallback (F40):** noch nicht umgesetzt (siehe M3-Entscheidung).
 - **Kopiersperre auf dem Immediate Context:** Falls in der Brille Ruckler beim Kopieren der Frames auftreten, auf Deferred Context oder D3D11.4-Fences umstellen.
 - **DPI des Vorschaufensters:** Die App skaliert nicht pro Monitor. Auf einem zweiten Monitor mit anderer Skalierung kann die Vorschau unscharf wirken. Erst angehen, wenn es stört.
-- **Loop-Hänger:** Am Ende einer Schleife steht das letzte Bild für die Dauer eines Seeks (8K etwa 0,1–0,5 s). In der Brille beurteilen; nahtlos ginge mit Weiterdekodieren und Zeitversatz.
+- **Loop-Hänger:** Am Ende einer Schleife steht das letzte Bild für die Dauer eines Seeks (8K etwa 0,1–0,5 s). Im Brillen-Test von M4 nicht störend; nahtlos ginge mit Weiterdekodieren und Zeitversatz, falls echtes Material es verlangt.
 - **Tastenkürzel im Vorschaufenster:** Hat das Vorschaufenster (`--no-xr`) den Fokus, wirken die Kürzel nicht. Nur relevant für die Entwicklung.
 - **Stop öffnet die Datei neu:** Stop nutzt noch den Neustart des Decoders aus M3. Mit dem Seek aus M4 ginge es schneller (Seek auf 0 und schwarz); erst ändern, wenn es stört.
 - **Playlist speichern** (letzte Playlist beim Start): M9.
