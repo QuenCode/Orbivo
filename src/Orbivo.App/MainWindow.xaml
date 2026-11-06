@@ -61,9 +61,9 @@
             </Style>
           </Grid.Resources>
           <TextBlock Grid.Row="0" Grid.Column="0" Text="Projektion:" />
-          <TextBlock Grid.Row="0" Grid.Column="1" Text="–" />
+          <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ProjectionText}" />
           <TextBlock Grid.Row="1" Grid.Column="0" Text="Stereo-Layout:" />
-          <TextBlock Grid.Row="1" Grid.Column="1" Text="–" />
+          <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding StereoLayoutText}" />
           <TextBlock Grid.Row="2" Grid.Column="0" Text="Augen tauschen:" />
           <TextBlock Grid.Row="2" Grid.Column="1" Text="–" />
           <TextBlock Grid.Row="3" Grid.Column="0" Text="Ausrichtung (Yaw/Pitch/Roll):" />
@@ -71,7 +71,7 @@
           <TextBlock Grid.Row="4" Grid.Column="0" Text="Audio-Modus:" />
           <TextBlock Grid.Row="4" Grid.Column="1" Text="–" />
           <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource PlaceholderText}"
-                     Margin="0,8,0,0" Text="Formateinstellungen folgen in M6." />
+                     Margin="0,8,0,0" Text="Formateinstellungen folgen in M6. Bis dahin: Stereo-Layout per --stereo mono|tb|sbs." />
         </Grid>
       </GroupBox>
 
@@ -111,13 +111,14 @@
       </GroupBox>
     </Grid>
 
-    <!-- Transport (M3/M4) -->
+    <!-- Transport: Play/Pause/Stop from M3; seek, playlist navigation, blackout, fade and recenter follow in M4/M8 -->
     <GroupBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Header="Wiedergabe">
       <StackPanel>
         <DockPanel Margin="0,0,0,8">
           <TextBlock DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
-                     FontFamily="Consolas" Text="00:00:00.000 / 00:00:00.000" />
-          <Slider IsEnabled="False" VerticalAlignment="Center" />
+                     FontFamily="Consolas" Text="{Binding TimeText}" />
+          <Slider IsEnabled="False" VerticalAlignment="Center" Minimum="0" Maximum="1" Value="{Binding Progress, Mode=OneWay}"
+                  ToolTip="Springen folgt in M4" />
         </DockPanel>
         <DockPanel>
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
@@ -127,9 +128,9 @@
           </StackPanel>
           <StackPanel Orientation="Horizontal">
             <Button Content="⏮ Zurück" IsEnabled="False" />
-            <Button Content="▶ Play" IsEnabled="False" />
-            <Button Content="⏸ Pause" IsEnabled="False" />
-            <Button Content="⏹ Stop" IsEnabled="False" />
+            <Button Content="▶ Play" Command="{Binding PlayCommand}" />
+            <Button Content="⏸ Pause" Command="{Binding PauseCommand}" />
+            <Button Content="⏹ Stop" Command="{Binding StopCommand}" ToolTip="Zurück zum Anfang, Brille schwarz" />
             <Button Content="⏭ Weiter" IsEnabled="False" />
             <Separator Margin="6,0,12,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
             <Button Content="Schwarzbild" IsEnabled="False" />

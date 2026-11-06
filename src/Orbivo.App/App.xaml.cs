@@ -2,12 +2,15 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading.Channels;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Orbivo.App.Imaging;
 using Orbivo.App.ViewModels;
 using Orbivo.Audio;
+using Orbivo.Core.Commands;
+using Orbivo.Core.Formats;
 using Orbivo.Core.Logging;
 using Orbivo.Core.Status;
 using Orbivo.Media;
@@ -20,7 +23,8 @@ namespace Orbivo.App;
 
 /// <summary>
 /// Composition root: sets up logging, checks native components and shows the main window.
-/// Then it starts the headset output (OpenXR), or with <c>--no-xr</c> the desktop preview window that stands in for it.
+/// Then it starts the headset output (OpenXR), or with <c>--no-xr</c> the desktop preview window that stands in for it,
+/// and the video player on the same Direct3D 11 device.
 /// </summary>
 public partial class App : Application
 {
@@ -31,6 +35,12 @@ public partial class App : Application
     private GraphicsDevice? _graphicsDevice;
     private DebugViewportHost? _debugViewport;
     private XrHost? _xrHost;
+    private VideoPlayer? _player;
+    private StartupOptions? _options;
+
+    /// <summary>Operator UI → player (CLAUDE.md rule 3).</summary>
+    private readonly Channel<PlayerCommand> _playerCommands =
+        Channel.CreateUnbounded<PlayerCommand>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 
 #if DEBUG
     private const bool RequestDebugLayer = true;
@@ -43,6 +53,7 @@ public partial class App : Application
         base.OnStartup(e);
 
         StartupOptions options = StartupOptions.Parse(e.Args);
+        _options = options;
 
         string logFilePath = LogPaths.CreateSessionFilePath(LogPaths.DefaultDirectory, DateTime.Now);
         _fileLoggerProvider = new FileLoggerProvider(logFilePath);
@@ -70,7 +81,7 @@ public partial class App : Application
             OpenXrLoader.Check(nativeDirectory, _loggerFactory.CreateLogger(typeof(OpenXrLoader).FullName!)),
         ];
 
-        _viewModel = new MainViewModel(options, nativeComponents, logFilePath);
+        _viewModel = new MainViewModel(options, nativeComponents, logFilePath, _playerCommands.Writer);
         var window = new MainWindow
         {
             DataContext = _viewModel,
@@ -78,21 +89,33 @@ public partial class App : Application
         MainWindow = window;
         window.Show();
 
+        if (options.VideoPath is not null)
+        {
+            // Queued until the player runs; the headset stays black until the operator presses Play (F6).
+            _playerCommands.Writer.TryWrite(new OpenMediaCommand(Path.GetFullPath(options.VideoPath)));
+        }
+
+        bool ffmpegAvailable = nativeComponents[0].IsAvailable;
         if (options.NoXr)
         {
-            StartDebugViewport(options.ImagePath, _viewModel, _loggerFactory, _logger);
+            StartDebugViewport(options, ffmpegAvailable, _viewModel, _loggerFactory, _logger);
         }
         else
         {
-            StartHeadset(options.ImagePath, _viewModel, _loggerFactory, _logger);
+            StartHeadset(options, ffmpegAvailable, _viewModel, _loggerFactory, _logger);
         }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
         _viewModel?.StopStatusPolling();
+        _playerCommands.Writer.TryComplete();
+
+        // Render threads first: the player frees the frames they read. Disposing the XR host releases its reference
+        // to the device; the player's textures and FFmpeg keep their own references until the player is disposed.
         _xrHost?.Dispose();
         _debugViewport?.Dispose();
+        _player?.Dispose();
         _graphicsDevice?.Dispose();
         _logger?.LogInformation("Orbivo exiting with code {ExitCode}.", e.ApplicationExitCode);
         ShutDownLogging();
@@ -103,26 +126,58 @@ public partial class App : Application
     /// Starts the XR render thread. It connects to the runtime on its own and keeps retrying;
     /// the image is loaded once the device on the GPU of the headset exists.
     /// </summary>
-    private void StartHeadset(string? imagePath, MainViewModel viewModel, ILoggerFactory loggerFactory, ILogger logger)
+    private void StartHeadset(StartupOptions options, bool ffmpegAvailable, MainViewModel viewModel, ILoggerFactory loggerFactory, ILogger logger)
     {
         _xrHost = new XrHost(loggerFactory, RequestDebugLayer);
+        _xrHost.SetImageLayout(options.StereoLayout ?? StereoLayout.Mono);
         _xrHost.Start();
         viewModel.StartXrPolling(_xrHost.GetStatus);
+        _ = StartWhenDeviceReadyAsync(options, ffmpegAvailable, _xrHost, viewModel, loggerFactory, logger);
+    }
 
-        if (imagePath is not null)
+    /// <summary>The device exists once the headset is found; image and player need it.</summary>
+    private async Task StartWhenDeviceReadyAsync(
+        StartupOptions options,
+        bool ffmpegAvailable,
+        XrHost host,
+        MainViewModel viewModel,
+        ILoggerFactory loggerFactory,
+        ILogger logger)
+    {
+        GraphicsDevice device = await host.GraphicsDeviceReady;
+        StartPlayer(device, ffmpegAvailable, host.SetVideoSource, viewModel, loggerFactory, logger);
+        if (options.ImagePath is not null)
         {
-            XrHost host = _xrHost;
-            _ = LoadImageWhenDeviceReadyAsync(imagePath, host, viewModel, logger);
+            await LoadImageAsync(options.ImagePath, options.StereoLayout, device, host.ShowImage, viewModel, logger);
         }
     }
 
-    private static async Task LoadImageWhenDeviceReadyAsync(string path, XrHost host, MainViewModel viewModel, ILogger logger)
+    /// <summary>
+    /// Starts the player on the renderer's device and hands it to the render thread as video source.
+    /// Without FFmpeg the player does not start; the status says why.
+    /// </summary>
+    private void StartPlayer(
+        GraphicsDevice device,
+        bool ffmpegAvailable,
+        Action<IVideoFrameSource> attach,
+        MainViewModel viewModel,
+        ILoggerFactory loggerFactory,
+        ILogger logger)
     {
-        GraphicsDevice device = await host.GraphicsDeviceReady;
-        await LoadImageAsync(path, device, host.ShowImage, viewModel, logger);
+        if (!ffmpegAvailable)
+        {
+            logger.LogError("The video player is not started because FFmpeg is missing or unusable.");
+            viewModel.ShowPlayerUnavailable("Kein Video möglich: FFmpeg fehlt (siehe Statuszeile FFmpeg)");
+            return;
+        }
+
+        _player = new VideoPlayer(device.Device, _playerCommands.Reader, new VideoPlayerOptions(_options?.StereoLayout), loggerFactory);
+        attach(_player);
+        _player.Start();
+        viewModel.StartPlayerPolling(_player.GetStatus);
     }
 
-    private void StartDebugViewport(string? imagePath, MainViewModel viewModel, ILoggerFactory loggerFactory, ILogger logger)
+    private void StartDebugViewport(StartupOptions options, bool ffmpegAvailable, MainViewModel viewModel, ILoggerFactory loggerFactory, ILogger logger)
     {
         try
         {
@@ -137,12 +192,14 @@ public partial class App : Application
 
         viewModel.ShowGraphicsDevice(_graphicsDevice.AdapterName, _graphicsDevice.DedicatedVideoMemoryBytes);
         _debugViewport = new DebugViewportHost(_graphicsDevice, loggerFactory.CreateLogger<DebugViewportHost>());
+        _debugViewport.SetImageLayout(options.StereoLayout ?? StereoLayout.Mono);
+        StartPlayer(_graphicsDevice, ffmpegAvailable, _debugViewport.SetVideoSource, viewModel, loggerFactory, logger);
         _debugViewport.Start();
         viewModel.StartViewportPolling(_debugViewport.GetStatus);
 
-        if (imagePath is not null)
+        if (options.ImagePath is not null)
         {
-            _ = LoadImageAsync(imagePath, _graphicsDevice, _debugViewport.ShowImage, viewModel, logger);
+            _ = LoadImageAsync(options.ImagePath, options.StereoLayout, _graphicsDevice, _debugViewport.ShowImage, viewModel, logger);
         }
     }
 
@@ -152,6 +209,7 @@ public partial class App : Application
     /// </summary>
     private static async Task LoadImageAsync(
         string path,
+        StereoLayout? layoutOverride,
         GraphicsDevice device,
         Action<StillImageTexture> show,
         MainViewModel viewModel,
@@ -175,12 +233,16 @@ public partial class App : Application
                 width,
                 height,
                 stopwatch.ElapsedMilliseconds);
-            if (width != 2 * height)
+            // The hosts were told the layout before; the guess here only labels it for the operator when none was given.
+            StereoLayout layout = layoutOverride ?? StereoLayout.Mono;
+            if (layoutOverride is null && StereoLayoutDetection.FromSize(width, height) != StereoLayout.Mono)
             {
-                logger.LogWarning("Image {Path} is not 2:1; every image is shown as equirect 360 mono until M6.", fullPath);
+                logger.LogWarning(
+                    "Image {Path} is square and probably top-bottom stereo; it is shown as mono. Start with --stereo tb.",
+                    fullPath);
             }
 
-            viewModel.ShowImageLoaded(fileName, width, height);
+            viewModel.ShowImageLoaded(fileName, width, height, layout, layoutOverride is not null);
         }
         catch (Exception exception)
         {
