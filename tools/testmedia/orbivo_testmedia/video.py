@@ -52,6 +52,8 @@ CODECS = {
     "libsvtav1": Codec("libsvtav1", "av1", 8192, "yuv420p", "yuv420p10le", ("-preset", "8", "-crf", "30")),
     "h264_nvenc": Codec("h264_nvenc", "h264", 4096, "yuv420p", None,
                         ("-preset", "p5", "-tune", "hq", "-rc", "vbr", "-cq", "21", "-b:v", "0"), (), "avc1"),
+    # Software H.264 (in the LGPL build): makes H.264 larger than NVDEC decodes (4096 px), up to level 5.2.
+    "libopenh264": Codec("libopenh264", "h264", 4320, "yuv420p", None, ("-b:v", "40M"), (), "avc1"),
 }
 
 

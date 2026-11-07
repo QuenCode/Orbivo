@@ -88,6 +88,60 @@ public sealed class VideoPlayerTests(HardwareDecodeFixture fixture)
         commands.Writer.Complete();
     }
 
+    [Fact]
+    public void HardwareFailureBeforeTheFirstFrame_FallsBackToSoftware()
+    {
+        GraphicsDevice device = fixture.RequireHardware();
+        string path = TestVideos.H264AboveGpuLimit;
+        var commands = Channel.CreateUnbounded<PlayerCommand>();
+
+        // Without the check the hardware decoder gets the video and rejects it, as if the check had missed it.
+        var options = new VideoPlayerOptions(StereoLayout: null) { CheckHardware = false };
+        using var player = new VideoPlayer(device.Device, commands.Reader, options, TestOutputLoggerFactory.Instance);
+        player.Start();
+
+        try
+        {
+            Send(commands, new OpenMediaCommand(path));
+            WaitForState(player, PlaybackState.Ready);
+            PlayerStatus ready = player.GetStatus();
+            Assert.False(ready.Video?.HardwareDecoding);
+            Assert.Equal("Hardware-Decoder hat das Video abgelehnt", ready.Video?.SoftwareReason);
+            Assert.Null(ready.Error);
+
+            Send(commands, new PlayCommand());
+            WaitForState(player, PlaybackState.Playing);
+            (VideoFrame playing, int distinctFrames) = RenderFor(player, TimeSpan.FromSeconds(1));
+            Assert.InRange(playing.PtsTicks, TimeSpan.FromSeconds(0.8).Ticks, TimeSpan.FromSeconds(1.2).Ticks);
+            Assert.InRange(distinctFrames, 25, 31);
+            Assert.Equal((4320, 2160), (playing.Width, playing.Height));
+
+            Send(commands, new SeekCommand(TimeSpan.FromSeconds(3)));
+            var stopwatch = Stopwatch.StartNew();
+            while (player.GetStatus() is { Seeking: true } or { Position.TotalSeconds: < 2.9 })
+            {
+                // Like the render thread: its calls free the frames of the old position.
+                player.TryGetFrame(Stopwatch.GetTimestamp(), out _);
+                Assert.True(stopwatch.Elapsed < StateTimeout, "seek not done");
+                Thread.Sleep(10);
+            }
+
+            (VideoFrame afterSeek, _) = RenderFor(player, TimeSpan.FromMilliseconds(300));
+            Assert.InRange(afterSeek.PtsTicks, TimeSpan.FromSeconds(2.95).Ticks, TimeSpan.FromSeconds(3.6).Ticks);
+
+            // Stop opens the file again: in software at once, without trying the hardware again.
+            Send(commands, new StopCommand());
+            WaitForState(player, PlaybackState.Ready);
+            Assert.False(player.GetStatus().Video?.HardwareDecoding);
+            Assert.Null(player.GetStatus().Error);
+        }
+        finally
+        {
+            player.ReleaseRenderThread();
+            commands.Writer.Complete();
+        }
+    }
+
     /// <summary>Takes frames like a render loop at about 100 Hz. Returns the last frame and how many different frames were shown.</summary>
     private static (VideoFrame Last, int DistinctFrames) RenderFor(VideoPlayer player, TimeSpan duration)
     {

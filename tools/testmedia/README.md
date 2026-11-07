@@ -26,6 +26,7 @@ python tools/testmedia/make_testmedia.py                                  # alle
 python tools/testmedia/make_testmedia.py --sizes 4k --layouts tb          # nur 4K Top-Bottom
 python tools/testmedia/make_testmedia.py --formats cubemap,eac            # nur Cubemap und EAC
 python tools/testmedia/make_testmedia.py --what audio                     # nur der Ambisonics-Test
+python tools/testmedia/make_testmedia.py --what decoder                   # nur die Videos für den Software-Decoder
 python tools/testmedia/make_testmedia.py --bit-depth 10 --fps 60          # HEVC Main10, 60 fps
 python tools/testmedia/make_testmedia.py --long                           # nur das 10-Minuten-Video für den A/V-Langtest (M5)
 ```
@@ -38,7 +39,7 @@ $env:ORBIVO_LONG_TESTS = '1'; dotnet test --project tests/Orbivo.Media.Tests
 
 | Option | Standard | Bedeutung |
 |---|---|---|
-| `--what` | `images,videos,audio` | Was erzeugt wird |
+| `--what` | `images,videos,audio,decoder` | Was erzeugt wird |
 | `--sizes` | `4k,8k` | Größenklassen (siehe Tabelle unten) |
 | `--layouts` | `mono,tb,sbs` | Stereo-Layouts (nur Equirect 360) |
 | `--formats` | alle | Projektionen: `equirect360`, `equirect180`, `cubemap`, `eac`, `fisheye` |
@@ -88,6 +89,15 @@ Jeweils als `.png` und als `…_hevc_8bit_30fps.mp4`, das Sidecar heißt wie das
 Würfelflächen ohne Drehung sehen aus wie von der Würfelmitte aus gesehen: vorne, hinten, links und rechts aufrecht, bei OBEN zeigt die Oberkante nach hinten, bei UNTEN nach vorne (wie ffmpeg `v360`). Die Layouts folgen der Schreibweise von `v360` (`in_forder`, `in_frot`). Jedes Mono-Bild wird beim Erzeugen mit `ffmpeg -vf v360` aus demselben Equirect-Bild verglichen (mittlere Abweichung im Log, Grenze 6 von 255; gemessen 0,3–1,9).
 
 **Metadaten schreiben:** ffmpeg kann `sv3d`/`st3d` beim Kodieren nicht setzen (der Filter `sidedata` kann sie nur löschen). `orbivo_testmedia/spherical.py` hängt die Boxen deshalb nach dem Kodieren selbst an den Video-Sample-Eintrag (Spherical Video V2, mit `prhd`, `equi`/`cbmp` und `st3d`) und korrigiert Box-Größen und Chunk-Offsets. Geprüft mit `ffprobe` (zeigt „spherical“ und „stereo3d“) und mit den Tests in `Orbivo.Media.Tests`.
+
+### Videos für den Software-Decoder
+
+`--what decoder` erzeugt zwei kurze Equirect-360-Mono-Videos (4 s, 120 Frames, `sv3d`/`st3d` wie oben):
+
+| Datei | Inhalt | Wofür |
+|---|---|---|
+| `equirect360_mono_4320x2160_h264_8bit_30fps_4s.mp4` | H.264 (Constrained Baseline, `libopenh264`) | Größer, als NVDEC H.264 dekodiert (4096): Der Player muss auf Software ausweichen |
+| `equirect360_mono_4096x2048_hevc_10bit_30fps_4s.mp4` | HEVC Main 10 (`hevc_nvenc`) | P010-Pfad; mit `--decoder sw` in Software, Bild bitgenau wie in Hardware |
 
 ## Was auf dem Testbild zu sehen ist
 

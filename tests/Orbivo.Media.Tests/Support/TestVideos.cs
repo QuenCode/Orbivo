@@ -11,6 +11,12 @@ internal static class TestVideos
 
     public static string MonoImage => Require("equirect360_mono_4096x2048.png");
 
+    /// <summary>Frames of the short videos for the software decoder (4 s, <c>make_testmedia.py --what decoder</c>).</summary>
+    public const int DecoderVideoFrameCount = 120;
+
+    /// <summary>H.264 4320 × 2160: larger than NVDEC decodes H.264 (4096), so it needs the software decoder.</summary>
+    public static string H264AboveGpuLimit => Require("equirect360_mono_4320x2160_h264_8bit_30fps_4s.mp4");
+
     /// <summary>10 minutes, for the A/V long test (<c>make_testmedia.py --long</c>).</summary>
     public static string Mono4KLong => Require("equirect360_mono_4096x2048_hevc_8bit_30fps_600s.mp4");
 

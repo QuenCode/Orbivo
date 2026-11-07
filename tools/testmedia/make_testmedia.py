@@ -1,6 +1,7 @@
 """Generates Orbivo test media: equirect 360 test images and videos (mono, top-bottom, side-by-side;
 4K and 8K), the other projections (VR180, cubemap, EAC, fisheye) with Spherical Video V2 metadata and
-sidecar files, and a first-order Ambisonics direction test (AmbiX and FuMa). See README.md."""
+sidecar files, a first-order Ambisonics direction test (AmbiX and FuMa), and short videos for the software
+decoder. See README.md."""
 
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ DEFAULT_FFMPEG = REPO_ROOT / "native" / "win-x64" / "ffmpeg.exe"
 DEFAULT_OUT = TOOL_DIR / "out"
 DEFAULT_DURATION_S = 20.0
 LONG_DURATION_S = 600.0
+DECODER_DURATION_S = 4.0
 V360_LIMIT = 6.0  # mean absolute difference (0-255) to ffmpeg's v360 that still counts as the same picture
 
 
@@ -33,7 +35,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="output directory (default: %(default)s)")
     parser.add_argument("--ffmpeg", type=Path, default=DEFAULT_FFMPEG, help="ffmpeg.exe (default: %(default)s)")
-    parser.add_argument("--what", default="images,videos,audio", help="images, videos, audio (comma separated)")
+    parser.add_argument("--what", default="images,videos,audio,decoder",
+                        help="images, videos, audio, decoder (comma separated)")
     parser.add_argument("--sizes", default="4k,8k", help="4k, 8k (comma separated)")
     parser.add_argument("--layouts", default="mono,tb,sbs", help="equirect 360 only: mono, tb, sbs (comma separated)")
     parser.add_argument("--formats", default=",".join(variants.PROJECTION_KEYS),
@@ -166,6 +169,43 @@ def generate_equirect360(args, what, sizes, layouts, settings, manifest) -> None
                 still.unlink()
 
 
+def generate_decoder_cases(args, manifest) -> None:
+    """Short videos for the software decoder (docs/DECISIONS.md): H.264 larger than NVDEC decodes (the player has to
+    fall back to software) and HEVC Main 10 (P010 upload, played with --decoder sw)."""
+    if not args.ffmpeg.exists():
+        sys.exit(f"ffmpeg not found: {args.ffmpeg} (see native/README.md or pass --ffmpeg)")
+    cases = [
+        ("libopenh264", 8, 4320, 2160, "H.264 4320x2160, larger than NVDEC decodes H.264 (4096): software fallback"),
+        ("hevc_nvenc", 10, 4096, 2048, "HEVC Main 10: P010 upload of the software decoder"),
+    ]
+    encoders = video.available_encoders(args.ffmpeg)
+    layout = equirect.LAYOUTS["mono"]
+    work = args.out / "_work"
+    work.mkdir(exist_ok=True)
+    for codec_key, bit_depth, width, height, description in cases:
+        codec = video.CODECS[codec_key]
+        if codec.name not in encoders:
+            log(f"skip decoder video {width}x{height} {codec.short}: encoder {codec.name} is not available")
+            continue
+        settings = video.VideoSettings(codec, bit_depth, args.fps, DECODER_DURATION_S)
+        stem = f"equirect360_mono_{width}x{height}"
+        still = work / f"{stem}.png"
+        Image.fromarray(equirect.render_frame(layout, width, height)).save(still, compress_level=3)
+        name = f"{stem}_{codec.short}_{bit_depth}bit_{args.fps}fps_{DECODER_DURATION_S:g}s.mp4"
+        output = args.out / name
+        elapsed = video.encode(args.ffmpeg, still, output, layout, width, height, settings)
+        still.unlink()
+        metadata = spherical.SphericalMetadata("mono", "equirect")
+        tag(output, metadata)
+        write_sidecar(output, None)
+        log(f"{name} ({elapsed:.0f} s, {description})")
+        entry = video_entry(name, settings, args, projection="equirect360", layout="mono", description=description,
+                            width=width, height=height, eye_width=width, eye_height=height,
+                            metadata=metadata.describe())
+        entry["duration_s"] = DECODER_DURATION_S
+        manifest["videos"].append(entry)
+
+
 def render_variant_frame(variant: variants.Variant, width: int, height: int,
                          masters: list | None = None) -> np.ndarray:
     layout = equirect.LAYOUTS[variant.layout]
@@ -282,7 +322,7 @@ def generate_audio(args, manifest) -> None:
 
 def main() -> None:
     args = parse_args()
-    what = split(args.what, {"images", "videos", "audio"}, "--what")
+    what = split(args.what, {"images", "videos", "audio", "decoder"}, "--what")
     sizes = split(args.sizes, {"4k", "8k"}, "--sizes")
     layouts = split(args.layouts, set(equirect.LAYOUTS), "--layouts")
     formats = split(args.formats, set(variants.PROJECTION_KEYS), "--formats")
@@ -305,6 +345,8 @@ def main() -> None:
         generate_variants(args, what, sizes, formats, settings, manifest)
     if "audio" in what:
         generate_audio(args, manifest)
+    if "decoder" in what:
+        generate_decoder_cases(args, manifest)
 
     # Keep the entries of files that were not generated this time (e.g. the short videos when only --long ran).
     if manifest_path.exists():
