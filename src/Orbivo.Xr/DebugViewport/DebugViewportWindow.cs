@@ -148,6 +148,11 @@ internal sealed unsafe class DebugViewportWindow : IDisposable
                 hInstance = instance,
                 hCursor = LoadCursorW(0, IDC_ARROW),
                 lpszClassName = className,
+
+                // The app icon from the executable; 0 (Windows default icon) if the host has none, e.g. in tests.
+                // LR_SHARED: the system owns the handles, nothing to destroy.
+                hIcon = LoadImageW(instance, APPLICATION_ICON_ID, IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_SHARED),
+                hIconSm = LoadImageW(instance, APPLICATION_ICON_ID, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED),
             };
 
             if (RegisterClassExW(windowClass) == 0)

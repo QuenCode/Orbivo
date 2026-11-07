@@ -7,7 +7,15 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>Orbivo</AssemblyName>
     <RootNamespace>Orbivo.App</RootNamespace>
+    <!-- Embedded as Win32 resource: Explorer, taskbar and the native debug viewport window use it. -->
+    <ApplicationIcon>Assets\orbivo.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WPF resource for the operator window's title bar. orbivo.svg and orbivo-512.png are the source artwork. -->
+    <Resource Include="Assets\orbivo.ico" />
+    <None Include="Assets\orbivo.svg;Assets\orbivo-512.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />

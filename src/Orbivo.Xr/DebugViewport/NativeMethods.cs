@@ -31,6 +31,15 @@ internal static unsafe partial class NativeMethods
     public const nint SIZE_MINIMIZED = 1;
     public const nint VK_HOME = 0x24;
     public const nint IDC_ARROW = 32512;
+
+    /// <summary>Resource id under which the C# compiler embeds the project's ApplicationIcon in the executable.</summary>
+    public const nint APPLICATION_ICON_ID = 32512;
+    public const uint IMAGE_ICON = 1;
+    public const uint LR_SHARED = 0x8000;
+    public const int SM_CXICON = 11;
+    public const int SM_CYICON = 12;
+    public const int SM_CXSMICON = 49;
+    public const int SM_CYSMICON = 50;
     public const nint HTTRANSPARENT = -1;
     public const int BLACK_BRUSH = 4;
 
@@ -136,6 +145,12 @@ internal static unsafe partial class NativeMethods
 
     [LibraryImport("user32.dll")]
     public static partial nint LoadCursorW(nint instance, nint cursorName);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial nint LoadImageW(nint instance, nint name, uint type, int width, int height, uint load);
+
+    [LibraryImport("user32.dll")]
+    public static partial int GetSystemMetrics(int index);
 
     [LibraryImport("user32.dll")]
     public static partial nint SetCapture(nint window);
