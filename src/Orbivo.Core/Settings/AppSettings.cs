@@ -4,12 +4,15 @@ using System.Text.Json.Serialization;
 namespace Orbivo.Core.Settings;
 
 /// <summary>
-/// Operator settings that survive a restart (docs/DECISIONS.md, M5): sound output device and volume. Mute is not kept
+/// Operator settings that survive a restart (docs/DECISIONS.md, M5): sound output device, volume and their lock. Mute is not kept
 /// on purpose: after a restart the sound is on. M9 adds more (format per video, last playlist).
 /// </summary>
 /// <param name="AudioDeviceId">Windows endpoint id of the sound output, null = Windows default.</param>
 /// <param name="Volume">Volume level 0–1 (before the loudness curve).</param>
-public sealed record AppSettings(string? AudioDeviceId = null, float Volume = AppSettings.DefaultVolume)
+/// <param name="SoundLocked">
+/// True: output device and volume are locked in the operator window until the operator unlocks them.
+/// </param>
+public sealed record AppSettings(string? AudioDeviceId = null, float Volume = AppSettings.DefaultVolume, bool SoundLocked = false)
 {
     public const float DefaultVolume = 0.8f;
 

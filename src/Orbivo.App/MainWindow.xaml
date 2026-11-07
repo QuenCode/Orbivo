@@ -23,65 +23,66 @@
       <ColumnDefinition Width="3*" MinWidth="420" />
     </Grid.ColumnDefinitions>
 
-    <!-- Playlist (F1–F3): file dialog, drag and drop from Explorer, order, auto-advance, loop -->
-    <GroupBox Grid.Row="0" Grid.Column="0" Header="Playlist">
-      <DockPanel>
-        <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
-          <WrapPanel>
-            <Button Content="Hinzufügen …" Click="OnAddFilesClick" Margin="0,0,6,4"
-                    ToolTip="Videos auswählen. Dateien und Ordner können auch aus dem Explorer hierher gezogen werden." />
-            <Button Content="Laden" Command="{Binding LoadSelectedCommand}" Margin="0,0,6,4"
-                    ToolTip="Ausgewähltes Video laden (Doppelklick). Läuft gerade ein Video, startet es sofort, sonst bleibt die Brille schwarz bis Play." />
-            <Button Content="Entfernen" Command="{Binding RemoveSelectedCommand}" Margin="0,0,6,4" ToolTip="Entf" />
-            <Button Content="▲" MinWidth="36" Command="{Binding MoveSelectedUpCommand}" Margin="0,0,6,4" ToolTip="Nach oben" />
-            <Button Content="▼" MinWidth="36" Command="{Binding MoveSelectedDownCommand}" Margin="0,0,6,4" ToolTip="Nach unten" />
-          </WrapPanel>
-          <CheckBox Content="Automatisch weiter zum nächsten Video" IsChecked="{Binding AutoAdvance}" Margin="0,4,0,0" />
-          <CheckBox Content="Aktuelles Video wiederholen (Loop)" IsChecked="{Binding Loop}" Margin="0,4,0,0" />
-        </StackPanel>
-        <Grid>
-          <ListBox x:Name="PlaylistBox" ItemsSource="{Binding Playlist.Entries}" SelectedItem="{Binding SelectedEntry}"
-                   AllowDrop="True" Drop="OnPlaylistDrop" DragOver="OnPlaylistDragOver"
-                   MouseDoubleClick="OnPlaylistDoubleClick" KeyDown="OnPlaylistKeyDown"
-                   HorizontalContentAlignment="Stretch">
-            <ListBox.ItemTemplate>
-              <DataTemplate>
-                <DockPanel ToolTip="{Binding Path}">
-                  <TextBlock x:Name="Marker" DockPanel.Dock="Left" Width="18" Text="" />
-                  <TextBlock x:Name="Name" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
-                </DockPanel>
-                <DataTemplate.Triggers>
-                  <DataTrigger Binding="{Binding IsCurrent}" Value="True">
-                    <Setter TargetName="Marker" Property="Text" Value="▶" />
-                    <Setter TargetName="Name" Property="FontWeight" Value="Bold" />
-                  </DataTrigger>
-                </DataTemplate.Triggers>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
-          <TextBlock Style="{StaticResource PlaceholderText}" Margin="12" IsHitTestVisible="False"
-                     Text="Noch keine Videos. „Hinzufügen …“ oder Dateien und Ordner aus dem Explorer hierher ziehen.">
-            <TextBlock.Visibility>
-              <Binding Path="Playlist.Entries.Count">
-                <Binding.Converter>
-                  <local:ZeroToVisibleConverter />
-                </Binding.Converter>
-              </Binding>
-            </TextBlock.Visibility>
-          </TextBlock>
-        </Grid>
-      </DockPanel>
-    </GroupBox>
-
-    <Grid Grid.Row="0" Grid.Column="1">
+    <Grid Grid.Row="0" Grid.Column="0">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
         <RowDefinition Height="Auto" />
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
 
+      <!-- Playlist (F1–F3), compact: usually one to three videos. File dialog, drag and drop from Explorer, order, auto-advance, loop -->
+      <GroupBox Grid.Row="0" Header="Playlist">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+            <WrapPanel>
+              <Button Content="Hinzufügen …" Click="OnAddFilesClick" Margin="0,0,6,4"
+                      ToolTip="Videos auswählen. Dateien und Ordner können auch aus dem Explorer hierher gezogen werden." />
+              <Button Content="Laden" Command="{Binding LoadSelectedCommand}" Margin="0,0,6,4"
+                      ToolTip="Ausgewähltes Video laden (Doppelklick). Läuft gerade ein Video, startet es sofort, sonst bleibt die Brille schwarz bis Play." />
+              <Button Content="Entfernen" Command="{Binding RemoveSelectedCommand}" Margin="0,0,6,4" ToolTipService.ShowOnDisabled="True"
+                      ToolTip="Aus der Playlist entfernen (Entf). Das geladene Video erst nach Stop; danach ist die Datei frei." />
+              <Button Content="▲" MinWidth="36" Command="{Binding MoveSelectedUpCommand}" Margin="0,0,6,4" ToolTip="Nach oben" />
+              <Button Content="▼" MinWidth="36" Command="{Binding MoveSelectedDownCommand}" Margin="0,0,6,4" ToolTip="Nach unten" />
+            </WrapPanel>
+            <CheckBox Content="Automatisch weiter zum nächsten Video" IsChecked="{Binding AutoAdvance}" Margin="0,4,0,0" />
+            <CheckBox Content="Aktuelles Video wiederholen (Loop)" IsChecked="{Binding Loop}" Margin="0,4,0,0" />
+          </StackPanel>
+          <Grid>
+            <ListBox x:Name="PlaylistBox" Height="112" ItemsSource="{Binding Playlist.Entries}" SelectedItem="{Binding SelectedEntry}"
+                     AllowDrop="True" Drop="OnPlaylistDrop" DragOver="OnPlaylistDragOver"
+                     MouseDoubleClick="OnPlaylistDoubleClick" KeyDown="OnPlaylistKeyDown"
+                     HorizontalContentAlignment="Stretch">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <DockPanel ToolTip="{Binding Path}">
+                    <TextBlock x:Name="Marker" DockPanel.Dock="Left" Width="18" Text="" />
+                    <TextBlock x:Name="Name" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
+                  </DockPanel>
+                  <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                      <Setter TargetName="Marker" Property="Text" Value="▶" />
+                      <Setter TargetName="Name" Property="FontWeight" Value="Bold" />
+                    </DataTrigger>
+                  </DataTemplate.Triggers>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Style="{StaticResource PlaceholderText}" Margin="12" IsHitTestVisible="False"
+                       Text="Noch keine Videos. „Hinzufügen …“ oder Dateien und Ordner aus dem Explorer hierher ziehen.">
+              <TextBlock.Visibility>
+                <Binding Path="Playlist.Entries.Count">
+                  <Binding.Converter>
+                    <local:ZeroToVisibleConverter />
+                  </Binding.Converter>
+                </Binding>
+              </TextBlock.Visibility>
+            </TextBlock>
+          </Grid>
+        </DockPanel>
+      </GroupBox>
+
       <!-- Format (M6, F10–F14): applied at once and stored in <video>.orbivo.json -->
-      <GroupBox Grid.Row="0" Header="Format" DataContext="{Binding Format}">
+      <GroupBox Grid.Row="1" Header="Format" DataContext="{Binding Format}">
         <Grid IsEnabled="{Binding IsAvailable}">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
@@ -224,15 +225,24 @@
                      Foreground="DarkGoldenrod" Margin="0,6,0,0" />
         </Grid>
       </GroupBox>
+    </Grid>
+
+    <Grid Grid.Row="0" Grid.Column="1">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+
 
       <!-- Sound (M5): mode and output device (F24) -->
-      <GroupBox Grid.Row="1" Header="Ton">
+      <GroupBox Grid.Row="0" Header="Ton">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
           </Grid.ColumnDefinitions>
           <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
           </Grid.RowDefinitions>
@@ -243,13 +253,17 @@
             <Button DockPanel.Dock="Right" Content="Aktualisieren" Command="{Binding RefreshAudioDevicesCommand}" Margin="6,0,0,0"
                     ToolTip="Geräteliste neu einlesen (z. B. nach dem Einstecken eines Kopfhörers)" />
             <ComboBox ItemsSource="{Binding AudioDevices}" SelectedItem="{Binding SelectedAudioDevice}" Focusable="False"
+                      IsEnabled="{Binding SoundSettingsEditable}"
                       ToolTip="Gerät für die Kopfhörer. Windows-Standard folgt dem Standardgerät; ein fest gewähltes Gerät wird nie automatisch gewechselt." />
           </DockPanel>
+          <CheckBox Grid.Row="2" Grid.Column="1" Content="Tonausgabe und Lautstärke sperren" IsChecked="{Binding SoundLocked}"
+                    Focusable="False" Margin="0,4,0,2"
+                    ToolTip="Schützt Gerät und Lautstärke vor versehentlichem Verstellen. Bleibt nach einem Neustart erhalten. Stumm (M) geht weiter." />
         </Grid>
       </GroupBox>
 
       <!-- Status (F40/F41, filled from M2 on) -->
-      <GroupBox Grid.Row="2" Header="Status">
+      <GroupBox Grid.Row="1" Header="Status">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <ItemsControl ItemsSource="{Binding StatusEntries}">
             <ItemsControl.ItemTemplate>
@@ -316,8 +330,9 @@
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
             <TextBlock Text="Lautstärke" VerticalAlignment="Center" Margin="0,0,8,0" />
             <Slider Width="140" VerticalAlignment="Center" Minimum="0" Maximum="100" Value="{Binding VolumePercent}"
+                    IsEnabled="{Binding SoundSettingsEditable}" ToolTipService.ShowOnDisabled="True"
                     IsMoveToPointEnabled="True" Focusable="False" SmallChange="1" LargeChange="10"
-                    ToolTip="Lautstärke der Kopfhörer (nur Orbivo, nicht die Windows-Lautstärke)" />
+                    ToolTip="Lautstärke der Kopfhörer (nur Orbivo, nicht die Windows-Lautstärke). Gesperrt, solange „Tonausgabe und Lautstärke sperren“ an ist." />
             <TextBlock Text="{Binding VolumeText}" Width="40" VerticalAlignment="Center" TextAlignment="Right" />
             <ToggleButton Content="{Binding MuteButtonText}" IsChecked="{Binding Muted}" MinWidth="90" Margin="8,0,0,0" Focusable="False"
                           ToolTip="Ton aus und wieder an, weich ohne Knacken (Taste M)" />

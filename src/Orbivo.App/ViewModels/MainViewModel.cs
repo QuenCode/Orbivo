@@ -56,6 +56,7 @@ public sealed class MainViewModel : ObservableObject
     private AudioDeviceChoice? _selectedAudioDevice;
     private double _volumePercent;
     private bool _muted;
+    private bool _soundLocked;
     private bool _updatingDevices;
     private string _audioModeText = "–";
     private readonly Stopwatch _sinceSeekSent = new();
@@ -95,6 +96,7 @@ public sealed class MainViewModel : ObservableObject
         _listAudioDevices = listAudioDevices;
         Format = new FormatViewModel(Send);
         _volumePercent = Math.Round(settings.Volume * 100);
+        _soundLocked = settings.SoundLocked;
         Playlist = new Playlist();
         ((System.Collections.Specialized.INotifyCollectionChanged)Playlist.Entries).CollectionChanged += (_, _) => OnPlaylistChanged();
 
@@ -112,7 +114,7 @@ public sealed class MainViewModel : ObservableObject
         NextCommand = new RelayCommand(() => LoadEntry(Playlist.MoveNext()), () => Playlist.HasNext);
         PreviousCommand = new RelayCommand(() => LoadEntry(Playlist.MovePrevious()), () => Playlist.HasPrevious);
         LoadSelectedCommand = new RelayCommand(LoadSelected, () => SelectedEntry is not null);
-        RemoveSelectedCommand = new RelayCommand(RemoveSelected, () => SelectedEntry is not null);
+        RemoveSelectedCommand = new RelayCommand(RemoveSelected, () => SelectedEntry is { } entry && CanRemove(entry));
         MoveSelectedUpCommand = new RelayCommand(() => MoveSelected(-1), () => SelectedEntry is not null && Playlist.Entries.IndexOf(SelectedEntry) > 0);
         MoveSelectedDownCommand = new RelayCommand(
             () => MoveSelected(+1),
@@ -123,7 +125,7 @@ public sealed class MainViewModel : ObservableObject
         ToggleBlackoutCommand = new RelayCommand(ToggleBlackout, () => _playerRunning);
         ToggleFadeCommand = new RelayCommand(ToggleFade, () => _playerRunning);
         ToggleMuteCommand = new RelayCommand(() => Muted = !Muted);
-        RefreshAudioDevicesCommand = new RelayCommand(RefreshAudioDevices);
+        RefreshAudioDevicesCommand = new RelayCommand(RefreshAudioDevices, () => !SoundLocked);
 
         Title = options.NoXr ? "Orbivo – Operator (ohne Brille)" : "Orbivo – Operator";
 
@@ -199,8 +201,28 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>The operator changed the output device; the app saves the settings.</summary>
     public event EventHandler? SettingsChanged;
 
-    /// <summary>Settings to keep: output device and volume (not mute).</summary>
-    public AppSettings CurrentSettings => new(SelectedAudioDevice?.Id, (float)(VolumePercent / 100));
+    /// <summary>Settings to keep: output device, volume and their lock (not mute).</summary>
+    public AppSettings CurrentSettings => new(SelectedAudioDevice?.Id, (float)(VolumePercent / 100), SoundLocked);
+
+    /// <summary>
+    /// Locks output device and volume against a slip (kept across restarts). Mute stays usable, as an emergency stop.
+    /// </summary>
+    public bool SoundLocked
+    {
+        get => _soundLocked;
+        set
+        {
+            if (SetProperty(ref _soundLocked, value))
+            {
+                OnPropertyChanged(nameof(SoundSettingsEditable));
+                RefreshAudioDevicesCommand.NotifyCanExecuteChanged();
+                SettingsChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary>True while device and volume may be changed (not <see cref="SoundLocked"/>).</summary>
+    public bool SoundSettingsEditable => !SoundLocked;
 
     /// <summary>"Windows-Standard" and the active output devices (F24).</summary>
     public ObservableCollection<AudioDeviceChoice> AudioDevices { get; } = [];
@@ -210,7 +232,19 @@ public sealed class MainViewModel : ObservableObject
         get => _selectedAudioDevice;
         set
         {
-            if (value is null || !SetProperty(ref _selectedAudioDevice, value) || _updatingDevices)
+            if (value is null)
+            {
+                return;
+            }
+
+            if (SoundLocked && !_updatingDevices)
+            {
+                // Locked: the list goes back to the kept device.
+                OnPropertyChanged(nameof(SelectedAudioDevice));
+                return;
+            }
+
+            if (!SetProperty(ref _selectedAudioDevice, value) || _updatingDevices)
             {
                 return;
             }
@@ -226,6 +260,13 @@ public sealed class MainViewModel : ObservableObject
         get => _volumePercent;
         set
         {
+            if (SoundLocked)
+            {
+                // Locked: the slider goes back to the kept volume.
+                OnPropertyChanged(nameof(VolumePercent));
+                return;
+            }
+
             if (SetProperty(ref _volumePercent, Math.Clamp(Math.Round(value), 0, 100)))
             {
                 Send(new SetVolumeCommand((float)(_volumePercent / 100)));
@@ -600,9 +641,31 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
+        if (!CanRemove(entry))
+        {
+            return;
+        }
+
+        bool loaded = entry == Playlist.Current;
         int index = Playlist.Entries.IndexOf(entry);
         Playlist.Remove(entry);
+        if (loaded)
+        {
+            // Close the file, so it can be moved or deleted, and empty the status.
+            Send(new CloseMediaCommand());
+        }
+
         SelectedEntry = Playlist.Entries.Count == 0 ? null : Playlist.Entries[Math.Min(index, Playlist.Entries.Count - 1)];
+    }
+
+    /// <summary>
+    /// The loaded video cannot be removed while it plays, pauses, opens or shows its last frame: the participant
+    /// would lose the picture by a slip. After Stop (black, ready) it can.
+    /// </summary>
+    private bool CanRemove(PlaylistEntry entry)
+    {
+        return entry != Playlist.Current
+            || _playbackState is not (PlaybackState.Opening or PlaybackState.Playing or PlaybackState.Paused or PlaybackState.Ended);
     }
 
     private void MoveSelected(int direction)
@@ -779,6 +842,7 @@ public sealed class MainViewModel : ObservableObject
             SeekRelativeCommand.NotifyCanExecuteChanged();
             StepFrameCommand.NotifyCanExecuteChanged();
             GoToTimeCommand.NotifyCanExecuteChanged();
+            RemoveSelectedCommand.NotifyCanExecuteChanged();
             OnPropertyChanged(nameof(IsSeekable));
             if (status.State == PlaybackState.Ended && before == PlaybackState.Playing)
             {
@@ -875,6 +939,7 @@ public sealed class MainViewModel : ObservableObject
             PlaybackState.Playing => "Video läuft",
             PlaybackState.Paused => "Standbild (Pause)",
             PlaybackState.Ended => "Letztes Bild (Ende)",
+            PlaybackState.NoMedia => "Schwarz (kein Video geladen)",
             _ => "Schwarz (kein Video freigegeben)",
         };
 
@@ -956,7 +1021,7 @@ public sealed class MainViewModel : ObservableObject
         string clock = status.ClockSource == PlaybackClockSource.Audio ? "Takt: Ton" : "Takt: Systemuhr";
         if (sync.WindowFrames == 0)
         {
-            _avSyncEntry.Update($"– ({clock})", StatusLevel.Neutral);
+            _avSyncEntry.Update(status.Video is null ? "–" : $"– ({clock})", StatusLevel.Neutral);
         }
         else
         {

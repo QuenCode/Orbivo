@@ -36,6 +36,24 @@ public sealed class AppSettingsTests : IDisposable
         Assert.False(File.Exists(FilePath + ".tmp"));
     }
 
+    [Fact]
+    public void SaveAndLoad_KeepTheSoundLock()
+    {
+        new AppSettings(null, 0.5f, SoundLocked: true).Save(FilePath);
+        Assert.True(AppSettings.Load(FilePath, out _).SoundLocked);
+    }
+
+    [Fact]
+    public void OlderFileWithoutTheLock_IsUnlocked()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+        File.WriteAllText(FilePath, """{ "AudioDeviceId": null, "Volume": 0.5 }""");
+        AppSettings settings = AppSettings.Load(FilePath, out string? problem);
+        Assert.Null(problem);
+        Assert.False(settings.SoundLocked);
+        Assert.Equal(0.5f, settings.Volume);
+    }
+
     [Theory]
     [InlineData("{ not json")]
     [InlineData("null")]

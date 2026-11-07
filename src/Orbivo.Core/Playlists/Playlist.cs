@@ -138,7 +138,10 @@ public sealed class Playlist
         return added;
     }
 
-    /// <summary>Removes the entry. If it is the current one, nothing is current afterwards; the player keeps its video.</summary>
+    /// <summary>
+    /// Removes the entry. If it is the current one, nothing is current afterwards; the operator window then closes the
+    /// video in the player (<c>CloseMediaCommand</c>), and allows this only while the headset does not show it.
+    /// </summary>
     public void Remove(PlaylistEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
