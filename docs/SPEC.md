@@ -40,7 +40,7 @@ Wiedergabe von 360°/180°-Videos mit räumlichem Ton auf einer Varjo XR-3 für 
 ### Status und Monitoring (Operator)
 - F40 Anzeige: Brille verbunden, OpenXR-Session-Zustand, Tracking ok, Render-fps, verworfene Frames, Decoder (Hardware/Software), Video-/Audio-Zeit und A/V-Abweichung
 - F41 Aktuelle Blickrichtung des Probanden (Yaw/Pitch) als einfache Anzeige
-- F42 *(später)* Mirror-Vorschau: was der Proband sieht, als kleines Fenster
+- F42 Live-Ansicht: was der Proband sieht, aus seinem Blickwinkel, im Operatorfenster. An- und abschaltbar (Standard aus), reduzierte Auflösung genügt
 
 ### Logging
 - F50 Pro Sitzung eine CSV-Datei: Zeitstempel (UTC, monoton), Videodatei, Video-Zeit, Wiedergabestatus, Kopforientierung (Quaternion und Yaw/Pitch/Roll), mit 90 Hz oder konfigurierbar reduziert

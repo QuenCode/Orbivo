@@ -48,6 +48,13 @@ Jeder Meilenstein endet mit: grünem Build, grünen Tests, Commit und der **Chec
 - Unit-Tests für alle Projektionen
 - **Brillen-Test:** Jedes Testvideo korrekt orientiert, Stereo-Tiefe korrekt (nicht vertauscht)
 
+## M6.5 – Live-Ansicht (F42)
+- Der XR-Render-Thread rendert jedes 3. Bild zusätzlich eine kleine Mitten-Ansicht (etwa 720 px hoch) aus der Kopfdrehung beider Augen, mit Fade und Schwarzbild. Er wartet nie: Ist die Anzeige nicht bereit, wird das Bild übersprungen
+- Anzeige im Operatorfenster (Platz links unter „Format“), Schalter „Live-Ansicht“, bei jedem Start aus
+- Ohne Session oder bei `--no-xr`: Hinweis statt Bild (die Vorschau zeigt es dann schon)
+- **Fertig, wenn:** Mit Live-Ansicht an bleibt die Brille bei 90 fps (8K-TB-Video), die Render-Schleife allokiert nicht, abgeschaltet kostet sie nichts
+- **Brillen-Test:** Kopf drehen, die Live-Ansicht folgt ohne spürbare Verzögerung in die gleiche Richtung; Fade und Schwarzbild sind sichtbar
+
 ## M7 – Räumlicher Ton
 - Steam-Audio-Interop, AmbisonicsProcessor (Ordnung 1–3), FuMa→AmbiX, Surround über virtuelle Lautsprecher, Binaural-Passthrough
 - Head-Pose-Snapshot vom Render-Thread, Rotation im Audio-Callback
@@ -56,12 +63,13 @@ Jeder Meilenstein endet mit: grünem Build, grünen Tests, Commit und der **Chec
 
 ## M8 – Recenter, Logging, Robustheit
 - Recenter (F30/F31) für Bild und Ton
+- Leerlauf-Ansicht (F7, `DECISIONS.md` 2026-11-07): Schwarz, See-through (`ALPHA_BLEND`) oder Standbild, wenn kein Video läuft; im UI wählbar und gespeichert. Regel 7 in `CLAUDE.md` und F6 anpassen
 - SessionLogger (CSV, F50) und EventLog (F51), im UI steuerbar
 - Brille trennen und neu verbinden, Varjo Base neu starten: App erholt sich (N3)
 - **Fertig, wenn:** Ein 30-minütiger Durchlauf mit mehreren Videos läuft ohne Fehler, die Logs sind vollständig
+- **Brillen-Test (Leerlauf):** See-through zeigt das Kamerabild vor Play und nach Stop, „Bild“ zeigt das gewählte Standbild richtig orientiert, Play wechselt sauber ins Video, Schwarzbild (B) bleibt schwarz
 
 ## M9 – Feinschliff und Auslieferung
 - Self-contained Publish (`dotnet publish -r win-x64 --self-contained`), native DLLs im Paket
 - Einstellungen persistieren (Ausgabegerät, Logging-Ordner, letzte Playlist)
-- Optional: Mirror-Vorschau im UI (F42)
 - Kurze Bedienungsanleitung für Operatoren (`docs/OPERATOR.md`)

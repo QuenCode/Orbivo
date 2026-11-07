@@ -7,7 +7,7 @@ Directory.Build.props          # Nullable, TreatWarningsAsErrors, LangVersion, x
 Directory.Packages.props       # zentrale, gepinnte Paketversionen
 src/
   Orbivo.Core/            # keine UI-, XR- oder Native-Abhängigkeiten
-    Commands/                  # PlayerCommand-Records (Open, Play, Pause, Stop, Seek, Loop, Blackout, Fade, SetVideoFormat; später Recenter …)
+    Commands/                  # PlayerCommand-Records (Open, Close, Play, Pause, Stop, Seek, Loop, Blackout, Fade, SetVideoFormat; später Recenter …)
     Playback/                  # PlaybackStateMachine, SystemPlaybackClock, FramePacer, OutputFader (Blackout/Fade), MediaTime
     Playlists/                 # Playlist (Reihenfolge, aktuelles Video, Weiter/Zurück, Dateien aus Drag & Drop)
     Formats/                   # ProjectionType, StereoLayout, CubemapLayout, FisheyeParameters, VideoFormat, FormatOverrides,
@@ -106,7 +106,7 @@ Stand M5: nur Stereo-Durchleitung. Räumlicher Ton folgt in M7.
 - `IAudioEndpoint` kapselt ein Gerät: `WasapiAudioEndpoint` (Shared Mode, ereignisgesteuert, 20 ms Puffer, Position über `IAudioClock` mit QPC-Zeitstempel), `NullAudioEndpoint` (stiller Ersatz mit Systemtakt) und `SimulatedAudioEndpoint` (für Tests: Drift, Latenz, Aufnahme, Erkennung von Tönen).
 - `WasapiEndpointProvider` listet Geräte und meldet Änderungen (`IMMNotificationClient`). „Windows-Standard“ folgt dem Standardgerät; ein fest gewähltes Gerät wird nie automatisch gewechselt.
 - Fehlt das Gerät oder fällt es aus (Fehler oder 500 ms ohne Periode), läuft `NullAudioEndpoint` weiter; neuer Versuch alle 2 s und bei jeder Geräteänderung.
-- `settings.json` (`%LOCALAPPDATA%\Orbivo`) speichert Gerät und Lautstärke, nicht Stumm (`AppSettings`, Core).
+- `settings.json` (`%LOCALAPPDATA%\Orbivo`) speichert Gerät, Lautstärke und die Ton-Sperre, nicht Stumm (`AppSettings`, Core).
 
 ### Ab M7 (geplant)
 - Die Kanal-Layout-Erkennung bestimmt den `AudioMode`: `Stereo`, `Surround`, `Ambisonics(order, convention)`, `Binaural`.
