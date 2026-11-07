@@ -15,7 +15,15 @@ namespace Orbivo.Media;
 /// Stereo layout from the command line (<c>--stereo</c>): wins over sidecar and metadata, this session only. Null = automatic.
 /// </param>
 /// <param name="FrameSlots">Number of decoded frames on the GPU (docs/ARCHITECTURE.md: 6–8).</param>
-public sealed record VideoPlayerOptions(StereoLayout? StereoLayout, int FrameSlots = 6);
+/// <param name="Decoder">
+/// <c>--decoder auto|hw|sw</c>. Auto: hardware if the GPU can decode the video, else software; software as well if the
+/// hardware fails before the first frame.
+/// </param>
+public sealed record VideoPlayerOptions(StereoLayout? StereoLayout, int FrameSlots = 6, DecoderPreference Decoder = DecoderPreference.Auto)
+{
+    /// <summary>False skips the hardware check before opening, so the fallback after a hardware failure can be tested.</summary>
+    internal bool CheckHardware { get; init; } = true;
+}
 
 /// <summary>
 /// The player control thread (docs/ARCHITECTURE.md, "Threads"): reads <see cref="PlayerCommand"/>s from the UI,
@@ -66,6 +74,9 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     private long _avSyncLoggedWindow;
     private long _avSyncLogTimestamp;
     private string? _filePath;
+
+    /// <summary>Why the loaded file is decoded in software after its hardware decoder failed; null otherwise.</summary>
+    private string? _softwareFallbackReason;
 
     // Format of the loaded file (F10–F14), control thread only.
     private SidecarFile? _sidecar;
@@ -324,6 +335,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         {
             case OpenMediaCommand open:
                 _filePath = Path.GetFullPath(open.Path);
+                _softwareFallbackReason = null;
                 LoadSidecar(_filePath);
                 Apply(_machine.Open());
                 if (open.Play)
@@ -386,6 +398,12 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
 
         if (decoder.ErrorMessage is { } error && _machine.State != PlaybackState.Failed)
         {
+            if (decoder.HardwareFailedBeforeFirstFrame && _options.Decoder == DecoderPreference.Auto && _softwareFallbackReason is null)
+            {
+                FallBackToSoftware(error);
+                return;
+            }
+
             Fail(error);
             return;
         }
@@ -439,6 +457,23 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
                 Apply(_machine.EndReached());
             }
         }
+    }
+
+    /// <summary>
+    /// The hardware decoder rejected the video before its first frame (the check before opening did not catch it):
+    /// open it again with software decoding, for the rest of this file. A seek that was waiting starts again.
+    /// </summary>
+    private void FallBackToSoftware(string hardwareError)
+    {
+        _logger.LogWarning("Hardware decoding of {Path} failed before the first frame ({Error}); opening it again with software decoding.", _filePath, hardwareError);
+        _softwareFallbackReason = "Hardware-Decoder hat das Video abgelehnt";
+        OpenDecoder();
+        if (_machine.Seeking && _decoder is { } decoder)
+        {
+            decoder.RequestSeek(_seekPosition.Ticks);
+        }
+
+        PublishStatus(error: null);
     }
 
     /// <summary>
@@ -663,7 +698,17 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             _metadata = demuxer.ReadFormatMetadata();
             _videoSize = demuxer.VideoSize;
             ResolveFormat();
-            video = VideoDecoder.Open(demuxer, ownsDemuxer: false, _device, _context, _resolvedFormat!.Format, _options.FrameSlots, _logger);
+            video = VideoDecoder.Open(
+                demuxer,
+                ownsDemuxer: false,
+                _device,
+                _context,
+                _resolvedFormat!.Format,
+                _options.FrameSlots,
+                _logger,
+                _softwareFallbackReason is null ? _options.Decoder : DecoderPreference.Software,
+                _softwareFallbackReason,
+                _options.CheckHardware);
             AudioDecoder? audio = null;
             if (withAudio && demuxer.AudioStreamIndex >= 0)
             {

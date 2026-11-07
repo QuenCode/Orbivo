@@ -1,4 +1,5 @@
 using Orbivo.Core.Formats;
+using Orbivo.Media;
 
 namespace Orbivo.App;
 
@@ -17,18 +18,24 @@ namespace Orbivo.App;
 /// <param name="StereoLayout">
 /// <c>--stereo mono|tb|sbs</c>: stereo layout of image and video. Without it, square images are top-bottom, all others mono.
 /// </param>
+/// <param name="Decoder">
+/// <c>--decoder auto|hw|sw</c>: auto (default) decodes in hardware if the GPU can, else in software; hw only in
+/// hardware (the video fails otherwise); sw always in software (for comparisons).
+/// </param>
 /// <param name="UnknownArguments">Arguments that were not recognized; they are logged as a warning.</param>
 public sealed record StartupOptions(
     bool NoXr,
     string? ImagePath,
     string? VideoPath,
     StereoLayout? StereoLayout,
+    DecoderPreference Decoder,
     IReadOnlyList<string> UnknownArguments)
 {
     public const string NoXrSwitch = "--no-xr";
     public const string ImageOption = "--image";
     public const string VideoOption = "--video";
     public const string StereoOption = "--stereo";
+    public const string DecoderOption = "--decoder";
 
     public static StartupOptions Parse(IReadOnlyList<string> args)
     {
@@ -38,6 +45,7 @@ public sealed record StartupOptions(
         string? imagePath = null;
         string? videoPath = null;
         StereoLayout? stereoLayout = null;
+        DecoderPreference decoder = DecoderPreference.Auto;
         var unknown = new List<string>();
         for (int i = 0; i < args.Count; i++)
         {
@@ -66,13 +74,29 @@ public sealed record StartupOptions(
                     }
                 }
             }
+            else if (Is(arg, DecoderOption))
+            {
+                string? value = TakeValue(args, ref i, DecoderOption, unknown);
+                if (value is not null)
+                {
+                    DecoderPreference? parsed = ParseDecoder(value);
+                    if (parsed is null)
+                    {
+                        unknown.Add($"{DecoderOption} {value} (expected auto, hw or sw)");
+                    }
+                    else
+                    {
+                        decoder = parsed.Value;
+                    }
+                }
+            }
             else
             {
                 unknown.Add(arg);
             }
         }
 
-        return new StartupOptions(noXr, imagePath, videoPath, stereoLayout, unknown);
+        return new StartupOptions(noXr, imagePath, videoPath, stereoLayout, decoder, unknown);
     }
 
     private static StereoLayout? ParseStereoLayout(string value)
@@ -82,6 +106,17 @@ public sealed record StartupOptions(
             "mono" => Core.Formats.StereoLayout.Mono,
             "tb" or "topbottom" or "top-bottom" => Core.Formats.StereoLayout.TopBottom,
             "sbs" or "sidebyside" or "side-by-side" => Core.Formats.StereoLayout.SideBySide,
+            _ => null,
+        };
+    }
+
+    private static DecoderPreference? ParseDecoder(string value)
+    {
+        return value.ToLowerInvariant() switch
+        {
+            "auto" => DecoderPreference.Auto,
+            "hw" or "hardware" => DecoderPreference.Hardware,
+            "sw" or "software" => DecoderPreference.Software,
             _ => null,
         };
     }

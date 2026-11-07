@@ -5,6 +5,7 @@ using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Status;
+using SharpGen.Runtime;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
 using DxgiFormat = Vortice.DXGI.Format;
@@ -16,11 +17,16 @@ using VideoColor = Orbivo.Core.Formats.VideoColor;
 namespace Orbivo.Media;
 
 /// <summary>
-/// D3D11VA hardware decoding of the video stream on the shared device, on its own decode thread
-/// (docs/ARCHITECTURE.md, "Datenfluss Video"). Packets come from the video queue of a <see cref="MediaDemuxer"/>.
-/// Each decoded frame is copied into a slot of <see cref="Queue"/> and released at once, so the decoder's own
+/// Decoding of the video stream on its own decode thread (docs/ARCHITECTURE.md, "Datenfluss Video"). Packets come
+/// from the video queue of a <see cref="MediaDemuxer"/>. Normally D3D11VA hardware decoding on the shared device: each
+/// decoded frame is copied into a slot of <see cref="Queue"/> on the GPU and released at once, so the decoder's own
 /// texture pool never runs dry.
 /// </summary>
+/// <remarks>
+/// Software fallback (docs/DECISIONS.md): if the GPU cannot decode the stream, FFmpeg decodes on the CPU (4:2:0 with
+/// 8 or 10 bit only). swscale writes each picture as NV12/P010 straight into a mapped staging texture, which the GPU
+/// then copies into the slot. The only place where frames go from the CPU to the GPU.
+/// </remarks>
 /// <remarks>
 /// Disposing stops the thread and frees FFmpeg; the <see cref="Queue"/> is owned by the caller, because the render
 /// thread may still be showing one of its frames.
@@ -46,8 +52,13 @@ internal sealed unsafe class VideoDecoder : IDisposable
     /// </summary>
     private static readonly long SeekSnapTicks = TimeSpan.TicksPerMillisecond;
 
+    /// <summary>Upload textures of the software path: one can be filled while the GPU still copies from the other.</summary>
+    private const int StagingTextureCount = 2;
+
     private readonly ILogger _logger;
+    private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _context;
+    private readonly bool _software;
     private readonly string _path;
     private readonly MediaDemuxer _demuxer;
     private readonly bool _ownsDemuxer;
@@ -60,6 +71,16 @@ internal sealed unsafe class VideoDecoder : IDisposable
     private AVFrame* _frame;
     private ID3D11Texture2D? _decoderTexture;
 
+    // Software path, decode thread only.
+    private SwsContext* _scaler;
+    private ID3D11Texture2D[]? _staging;
+    private int _nextStaging;
+    private AVPixelFormat _softwareFrameFormat = AVPixelFormat.AV_PIX_FMT_NONE;
+    private readonly byte*[] _scaleSource = new byte*[4];
+    private readonly int[] _scaleSourceStride = new int[4];
+    private readonly byte*[] _scaleTarget = new byte*[4];
+    private readonly int[] _scaleTargetStride = new int[4];
+
     private volatile bool _stopRequested;
     private bool _disposed;
 
@@ -67,6 +88,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
     private long _firstPtsTicks = long.MinValue;
     private long _lastPtsTicks = long.MinValue;
     private int _endOfStream;
+    private int _hardwareFailedBeforeFirstFrame;
     private string? _errorMessage;
     private double _decodedFramesPerSecond;
     private VideoStreamInfo _info;
@@ -85,8 +107,10 @@ internal sealed unsafe class VideoDecoder : IDisposable
         MediaDemuxer demuxer,
         bool ownsDemuxer,
         VideoFrameQueue queue,
+        ID3D11Device device,
         ID3D11DeviceContext context,
         AVCodecContext* codec,
+        bool software,
         VideoStreamInfo info,
         TimeSpan duration,
         long frameDurationTicks,
@@ -96,8 +120,10 @@ internal sealed unsafe class VideoDecoder : IDisposable
         _ownsDemuxer = ownsDemuxer;
         _path = demuxer.Path;
         Queue = queue;
+        _device = device;
         _context = context;
         _codec = codec;
+        _software = software;
         AVStream* stream = demuxer.Format->streams[demuxer.VideoStreamIndex];
         _streamTimeBase = stream->time_base;
         _streamStartPts = stream->start_time == ffmpeg.AV_NOPTS_VALUE ? 0 : stream->start_time;
@@ -138,6 +164,12 @@ internal sealed unsafe class VideoDecoder : IDisposable
 
     /// <summary>German error text for the operator if decoding (or reading the file) failed, else null.</summary>
     public string? ErrorMessage => Volatile.Read(ref _errorMessage) ?? _demuxer.ErrorMessage;
+
+    /// <summary>
+    /// The hardware decoder failed before it delivered a frame (set before <see cref="ErrorMessage"/>). The player may
+    /// open the video again with software decoding then.
+    /// </summary>
+    public bool HardwareFailedBeforeFirstFrame => Volatile.Read(ref _hardwareFailedBeforeFirstFrame) != 0;
 
     /// <summary>
     /// Frames decoded per second, measured over about one second of wall-clock time. While the buffer is full this
@@ -197,7 +229,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
     }
 
     /// <summary>
-    /// Opens <paramref name="path"/> with a demuxer of its own (video only) and prepares hardware decoding.
+    /// Opens <paramref name="path"/> with a demuxer of its own (video only) and prepares decoding.
     /// Throws <see cref="MediaOpenException"/> if the file cannot be played. Call <see cref="Start"/> afterwards.
     /// </summary>
     public static VideoDecoder Open(
@@ -206,12 +238,13 @@ internal sealed unsafe class VideoDecoder : IDisposable
         ID3D11DeviceContext context,
         VideoFormat format,
         int slotCount,
-        ILogger logger)
+        ILogger logger,
+        DecoderPreference preference = DecoderPreference.Auto)
     {
         MediaDemuxer demuxer = MediaDemuxer.Open(path, withAudio: false, logger);
         try
         {
-            return Open(demuxer, ownsDemuxer: true, device, context, format, slotCount, logger);
+            return Open(demuxer, ownsDemuxer: true, device, context, format, slotCount, logger, preference);
         }
         catch
         {
@@ -221,8 +254,9 @@ internal sealed unsafe class VideoDecoder : IDisposable
     }
 
     /// <summary>
-    /// Prepares hardware decoding of the video stream of <paramref name="demuxer"/> on <paramref name="device"/>.
-    /// Throws <see cref="MediaOpenException"/> if the video cannot be played. Call <see cref="Start"/> afterwards.
+    /// Prepares decoding of the video stream of <paramref name="demuxer"/>: D3D11VA on <paramref name="device"/> if the
+    /// GPU can decode it (<see cref="HardwareDecodeSupport"/>), else in software unless <paramref name="preference"/>
+    /// forbids it. Throws <see cref="MediaOpenException"/> if the video cannot be played. Call <see cref="Start"/> afterwards.
     /// </summary>
     /// <param name="demuxer">The opened file, not started yet.</param>
     /// <param name="ownsDemuxer">True: this decoder starts and disposes the demuxer.</param>
@@ -231,6 +265,12 @@ internal sealed unsafe class VideoDecoder : IDisposable
     /// <param name="format">Format to show the frames with (changeable later through <see cref="VideoFrameQueue.PictureFormat"/>).</param>
     /// <param name="slotCount">Number of frame textures.</param>
     /// <param name="logger">Receives open details and errors.</param>
+    /// <param name="preference">Hardware, software, or hardware with software fallback.</param>
+    /// <param name="softwareReason">
+    /// Why software decoding is used, for the operator, when <paramref name="preference"/> is software (e.g. after the
+    /// hardware failed). Null: the command line asked for it.
+    /// </param>
+    /// <param name="checkHardware">False skips the check before opening (tests of the fallback after a hardware failure).</param>
     public static VideoDecoder Open(
         MediaDemuxer demuxer,
         bool ownsDemuxer,
@@ -238,7 +278,10 @@ internal sealed unsafe class VideoDecoder : IDisposable
         ID3D11DeviceContext context,
         VideoFormat format,
         int slotCount,
-        ILogger logger)
+        ILogger logger,
+        DecoderPreference preference = DecoderPreference.Auto,
+        string? softwareReason = null,
+        bool checkHardware = true)
     {
         ArgumentNullException.ThrowIfNull(demuxer);
         ArgumentNullException.ThrowIfNull(device);
@@ -257,34 +300,84 @@ internal sealed unsafe class VideoDecoder : IDisposable
             string codecName = ffmpeg.avcodec_get_name(parameters->codec_id) ?? "unknown";
             string profile = ffmpeg.avcodec_profile_name(parameters->codec_id, parameters->profile) ?? string.Empty;
 
-            AVCodec* decoder = FindHardwareDecoder(parameters->codec_id);
-            if (decoder is null)
+            int width = parameters->width;
+            int height = parameters->height;
+            var streamPixelFormat = (AVPixelFormat)parameters->format;
+            AVPixFmtDescriptor* pixelFormat = ffmpeg.av_pix_fmt_desc_get(streamPixelFormat);
+            int bitDepth = pixelFormat is null ? 8 : pixelFormat->comp[0].depth;
+            bool chroma420 = pixelFormat is null || (pixelFormat->nb_components >= 3 && pixelFormat->log2_chroma_w == 1 && pixelFormat->log2_chroma_h == 1);
+
+            bool software = preference == DecoderPreference.Software;
+            string? reason = software ? softwareReason ?? "Software-Dekodierung eingestellt (--decoder sw)" : null;
+            AVCodec* decoder = software ? null : FindHardwareDecoder(parameters->codec_id);
+            if (!software)
             {
-                throw new MediaOpenException(
-                    $"No FFmpeg decoder with D3D11VA support for codec {codecName}.",
-                    $"Für den Codec {codecName} gibt es keinen Hardware-Decoder");
+                if (decoder is null)
+                {
+                    reason = $"Für den Codec {codecName} gibt es keinen Hardware-Decoder";
+                }
+                else if (checkHardware)
+                {
+                    HardwareDecodeSupport.CanDecode(device, parameters->codec_id, parameters->profile, bitDepth, chroma420, width, height, logger, out reason);
+                }
+
+                if (reason is not null)
+                {
+                    if (preference == DecoderPreference.Hardware)
+                    {
+                        throw new MediaOpenException($"The GPU cannot decode {codecName} {width}x{height}: {reason}.", reason);
+                    }
+
+                    logger.LogWarning("{Path}: decoding in software. {Reason}.", path, reason);
+                    software = true;
+                }
+            }
+
+            if (software)
+            {
+                decoder = ffmpeg.avcodec_find_decoder(parameters->codec_id);
+                if (decoder is null)
+                {
+                    throw new MediaOpenException($"No FFmpeg decoder for codec {codecName}.", $"Für den Codec {codecName} gibt es keinen Decoder");
+                }
+
+                if (streamPixelFormat != AVPixelFormat.AV_PIX_FMT_NONE && SoftwareUpload(streamPixelFormat) is null)
+                {
+                    string name = pixelFormat is null ? streamPixelFormat.ToString() : Marshal.PtrToStringUTF8((nint)pixelFormat->name) ?? "?";
+                    throw new MediaOpenException(
+                        $"Software decoding supports 4:2:0 with 8 or 10 bit only, not {name}.",
+                        $"{reason}. Software-Dekodierung kann nur 4:2:0 mit 8 oder 10 Bit (dieses Video: {name})");
+                }
             }
 
             codec = ffmpeg.avcodec_alloc_context3(decoder);
             FFmpegError.Check(ffmpeg.avcodec_parameters_to_context(codec, parameters), "avcodec_parameters_to_context");
             codec->pkt_timebase = stream->time_base;
-            codec->hw_device_ctx = CreateHardwareDevice(device);
-            codec->get_format = new AVCodecContext_get_format_func
+            if (software)
             {
-                Pointer = (nint)(delegate* unmanaged[Cdecl]<AVCodecContext*, AVPixelFormat*, AVPixelFormat>)&ChooseHardwareFormat,
-            };
+                // All cores (frame and slice threads); costs a few frames of latency, which the frame ring hides.
+                codec->thread_count = 0;
+            }
+            else
+            {
+                codec->hw_device_ctx = CreateHardwareDevice(device);
+                codec->get_format = new AVCodecContext_get_format_func
+                {
+                    Pointer = (nint)(delegate* unmanaged[Cdecl]<AVCodecContext*, AVPixelFormat*, AVPixelFormat>)&ChooseHardwareFormat,
+                };
 
-            // Hardware decoding does its work on the GPU; frame threading would only add latency and surfaces.
-            codec->thread_count = 1;
+                // Hardware decoding does its work on the GPU; frame threading would only add latency and surfaces.
+                codec->thread_count = 1;
+            }
+
             FFmpegError.Check(ffmpeg.avcodec_open2(codec, decoder, null), "avcodec_open2");
 
-            int width = parameters->width;
-            int height = parameters->height;
-            AVPixFmtDescriptor* pixelFormat = ffmpeg.av_pix_fmt_desc_get((AVPixelFormat)parameters->format);
-            int bitDepth = pixelFormat is null ? 8 : pixelFormat->comp[0].depth;
+            // yuvj420p is full range even if the stream does not say so.
+            YuvRange? range = ToRange(parameters->color_range)
+                ?? (streamPixelFormat == AVPixelFormat.AV_PIX_FMT_YUVJ420P ? YuvRange.Full : null);
             VideoColorFormat color = VideoColor.ResolveUnspecified(
                 ToMatrix(parameters->color_space),
-                ToRange(parameters->color_range),
+                range,
                 ToPrimaries(parameters->color_primaries),
                 height,
                 bitDepth > 8 ? 10 : 8);
@@ -306,10 +399,11 @@ internal sealed unsafe class VideoDecoder : IDisposable
                 height,
                 framesPerSecond,
                 color,
-                HardwareDecoding: true);
+                HardwareDecoding: !software,
+                SoftwareReason: reason);
 
             logger.LogInformation(
-                "Opened {Path}: {Codec} {Profile} {Width}x{Height}, {Fps:0.###} fps, {PixelFormat}, {Duration}, color {Matrix}/{Range}/{Primaries}, format {Projection} {Layout}. Using hardware decode (D3D11VA) with FFmpeg decoder '{Decoder}'.",
+                "Opened {Path}: {Codec} {Profile} {Width}x{Height}, {Fps:0.###} fps, {PixelFormat}, {Duration}, color {Matrix}/{Range}/{Primaries}, format {Projection} {Layout}. Using {Mode} with FFmpeg decoder '{Decoder}'.",
                 path,
                 codecName,
                 profile,
@@ -323,10 +417,11 @@ internal sealed unsafe class VideoDecoder : IDisposable
                 color.Primaries,
                 format.Projection,
                 format.Layout,
+                software ? "software decode (CPU, upload as NV12/P010)" : "hardware decode (D3D11VA)",
                 Marshal.PtrToStringUTF8((nint)decoder->name));
 
             queue = new VideoFrameQueue(device, slotCount, format);
-            var result = new VideoDecoder(demuxer, ownsDemuxer, queue, context, codec, info, duration, frameDurationTicks, logger);
+            var result = new VideoDecoder(demuxer, ownsDemuxer, queue, device, context, codec, software, info, duration, frameDurationTicks, logger);
             codec = null;
             return result;
         }
@@ -374,6 +469,18 @@ internal sealed unsafe class VideoDecoder : IDisposable
 
         _decoderTexture?.Dispose();
         _decoderTexture = null;
+        if (_staging is not null)
+        {
+            foreach (ID3D11Texture2D? texture in _staging)
+            {
+                texture?.Dispose();
+            }
+
+            _staging = null;
+        }
+
+        ffmpeg.sws_freeContext(_scaler);
+        _scaler = null;
         AVFrame* frame = _frame;
         ffmpeg.av_frame_free(&frame);
         _frame = null;
@@ -395,6 +502,11 @@ internal sealed unsafe class VideoDecoder : IDisposable
         catch (Exception exception)
         {
             _logger.LogError(exception, "Decoding {Path} failed.", _path);
+            if (!_software && !HasFirstFrame && _demuxer.ErrorMessage is null)
+            {
+                Volatile.Write(ref _hardwareFailedBeforeFirstFrame, 1);
+            }
+
             Volatile.Write(ref _errorMessage, DescribeDecodeError(exception));
         }
     }
@@ -553,9 +665,12 @@ internal sealed unsafe class VideoDecoder : IDisposable
     {
         try
         {
-            if (_frame->format != (int)AVPixelFormat.AV_PIX_FMT_D3D11)
+            bool hardwareFrame = _frame->format == (int)AVPixelFormat.AV_PIX_FMT_D3D11;
+            if (hardwareFrame == _software)
             {
-                throw new InvalidOperationException($"The decoder returned {(AVPixelFormat)_frame->format} instead of D3D11 frames.");
+                throw new InvalidOperationException(_software
+                    ? "The software decoder returned D3D11 frames."
+                    : $"The decoder returned {(AVPixelFormat)_frame->format} instead of D3D11 frames.");
             }
 
             int slot;
@@ -576,10 +691,27 @@ internal sealed unsafe class VideoDecoder : IDisposable
 
             if (!Queue.HasTextures)
             {
-                CreateQueueTextures();
+                if (_software)
+                {
+                    CreateSoftwareTextures();
+                }
+                else
+                {
+                    CreateQueueTextures();
+                }
             }
 
-            CopyToSlot(slot);
+            if (_software)
+            {
+                if (!UploadToSlot(slot))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                CopyToSlot(slot);
+            }
             if (!HasFirstFrame)
             {
                 Volatile.Write(ref _firstPtsTicks, pts);
@@ -653,6 +785,145 @@ internal sealed unsafe class VideoDecoder : IDisposable
         var box = new Box(0, 0, 0, Queue.Width, Queue.Height, 1);
         _context.CopySubresourceRegion(Queue.GetTexture(slot), 0, 0, 0, 0, _decoderTexture, arrayIndex, box);
     }
+
+    /// <summary>
+    /// Software path, first frame: frame textures, upload textures and the swscale repacker for the picture format of
+    /// the decoder (planar 4:2:0 → NV12 or P010, same size, no scaling or color conversion).
+    /// </summary>
+    private void CreateSoftwareTextures()
+    {
+        var frameFormat = (AVPixelFormat)_frame->format;
+        (DxgiFormat format, int bitDepth, AVPixelFormat source, AVPixelFormat target) = SoftwareUpload(frameFormat)
+            ?? throw new NotSupportedException($"Software decoded picture format {frameFormat} is not supported (only 4:2:0 with 8 or 10 bit).");
+
+        // NV12/P010 need even sizes.
+        int width = _frame->width & ~1;
+        int height = _frame->height & ~1;
+        VideoColorFormat color = _colorHint with { BitDepth = bitDepth };
+        Queue.CreateTextures(format, width, height, VideoColor.CreateConstants(color));
+
+        // yuvj420p is read as yuv420p (same memory layout), so swscale leaves the full range alone; the shader
+        // converts it with the range from the color description.
+        _scaler = ffmpeg.sws_getContext(width, height, source, width, height, target, (int)SwsFlags.SWS_POINT, null, null, null);
+        if (_scaler is null)
+        {
+            throw new NotSupportedException($"swscale cannot convert {source} to {target}.");
+        }
+
+        var description = new Texture2DDescription(
+            format,
+            (uint)width,
+            (uint)height,
+            arraySize: 1,
+            mipLevels: 1,
+            bindFlags: BindFlags.None,
+            usage: ResourceUsage.Staging,
+            cpuAccessFlags: CpuAccessFlags.Write);
+        _staging = new ID3D11Texture2D[StagingTextureCount];
+        for (int i = 0; i < _staging.Length; i++)
+        {
+            _staging[i] = _device.CreateTexture2D(description);
+        }
+
+        _softwareFrameFormat = frameFormat;
+        Volatile.Write(ref _info, _info with { Width = width, Height = height, Color = color });
+
+        _logger.LogWarning(
+            "First frame of {Path}: {Width}x{Height} {PixelFormat}, decoded in software ({Threads} threads) and uploaded as {Format}. {Slots} frame textures, about {MiB} MiB of video memory, plus {Staging} upload textures.",
+            _path,
+            width,
+            height,
+            frameFormat,
+            _codec->thread_count,
+            format,
+            Queue.Pacer.SlotCount,
+            Queue.TextureBytes(format) / (1024 * 1024),
+            StagingTextureCount);
+    }
+
+    /// <summary>
+    /// Software path: repacks the decoded picture into the next upload texture and lets the GPU copy it into the slot.
+    /// Map does not wait for the GPU (DoNotWait), so the shared immediate context is held only for the short calls
+    /// and the render thread never waits for the copy (CLAUDE.md rule 1). Returns false when stopping.
+    /// </summary>
+    private bool UploadToSlot(int slot)
+    {
+        if ((AVPixelFormat)_frame->format != _softwareFrameFormat || (_frame->width & ~1) != Queue.Width || (_frame->height & ~1) != Queue.Height)
+        {
+            throw new NotSupportedException(
+                $"The picture changed from {Queue.Width}x{Queue.Height} {_softwareFrameFormat} to {_frame->width}x{_frame->height} {(AVPixelFormat)_frame->format} during the video.");
+        }
+
+        ID3D11Texture2D staging = _staging![_nextStaging];
+        _nextStaging = (_nextStaging + 1) % _staging.Length;
+
+        MappedSubresource mapped;
+        while (true)
+        {
+            Result result = _context.Map(staging, 0, MapMode.Write, MapFlags.DoNotWait, out mapped);
+            if (result.Success)
+            {
+                break;
+            }
+
+            if (result != Vortice.DXGI.ResultCode.WasStillDrawing)
+            {
+                result.CheckError();
+            }
+
+            if (_stopRequested)
+            {
+                return false;
+            }
+
+            // The GPU still copies from this texture: hand it the queued work and wait without holding the context.
+            _context.Flush();
+            Thread.Sleep(1);
+        }
+
+        try
+        {
+            // Mapped NV12/P010: the luma rows, then the interleaved chroma rows at RowPitch × Height.
+            byte* luma = (byte*)mapped.DataPointer;
+            int rowPitch = (int)mapped.RowPitch;
+            _scaleTarget[0] = luma;
+            _scaleTarget[1] = luma + ((long)rowPitch * Queue.Height);
+            _scaleTargetStride[0] = rowPitch;
+            _scaleTargetStride[1] = rowPitch;
+            for (uint plane = 0; plane < 3; plane++)
+            {
+                _scaleSource[plane] = _frame->data[plane];
+                _scaleSourceStride[plane] = _frame->linesize[plane];
+            }
+
+            int lines = ffmpeg.sws_scale(_scaler, _scaleSource, _scaleSourceStride, 0, Queue.Height, _scaleTarget, _scaleTargetStride);
+            if (lines != Queue.Height)
+            {
+                throw new InvalidOperationException($"sws_scale wrote {lines} of {Queue.Height} lines.");
+            }
+        }
+        finally
+        {
+            _context.Unmap(staging, 0);
+        }
+
+        var box = new Box(0, 0, 0, Queue.Width, Queue.Height, 1);
+        _context.CopySubresourceRegion(Queue.GetTexture(slot), 0, 0, 0, 0, staging, 0, box);
+        return true;
+    }
+
+    /// <summary>
+    /// Software path: texture format, bit depth and swscale formats for a decoded picture format; null if the
+    /// picture cannot be uploaded (only 4:2:0 with 8 or 10 bit, docs/DECISIONS.md).
+    /// </summary>
+    private static (DxgiFormat Format, int BitDepth, AVPixelFormat Source, AVPixelFormat Target)? SoftwareUpload(AVPixelFormat format) => format switch
+    {
+        AVPixelFormat.AV_PIX_FMT_YUV420P or AVPixelFormat.AV_PIX_FMT_YUVJ420P =>
+            (DxgiFormat.NV12, 8, AVPixelFormat.AV_PIX_FMT_YUV420P, AVPixelFormat.AV_PIX_FMT_NV12),
+        AVPixelFormat.AV_PIX_FMT_YUV420P10LE =>
+            (DxgiFormat.P010, 10, AVPixelFormat.AV_PIX_FMT_YUV420P10LE, AVPixelFormat.AV_PIX_FMT_P010LE),
+        _ => null,
+    };
 
     /// <summary>Media time of the frame: ticks from the start of the video stream (<see cref="MediaDemuxer.OriginTicks"/>).</summary>
     private long PresentationTicks()
@@ -757,10 +1028,12 @@ internal sealed unsafe class VideoDecoder : IDisposable
         return false;
     }
 
-    private static string DescribeDecodeError(Exception exception)
+    private string DescribeDecodeError(Exception exception)
     {
         return exception switch
         {
+            FFmpegException ffmpegException when _software && ffmpegException.Message.Contains("avcodec", StringComparison.Ordinal) =>
+                "Software-Decoder kann das Video nicht dekodieren (Details im Log)",
             FFmpegException ffmpegException when ffmpegException.Message.Contains("avcodec", StringComparison.Ordinal) =>
                 "Hardware-Decoder lehnt das Video ab (Profil oder Auflösung zu groß für die GPU?). Details im Log",
             NotSupportedException => "Bildformat des Decoders wird nicht unterstützt (Details im Log)",

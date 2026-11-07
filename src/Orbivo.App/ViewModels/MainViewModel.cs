@@ -837,7 +837,7 @@ public sealed class MainViewModel : ObservableObject
 
         string decoderText = string.Create(
             culture,
-            $"{(video.HardwareDecoding ? "Hardware (D3D11VA)" : "Software")}, {status.DecodedFramesPerSecond:0} fps dekodiert, Puffer {status.QueuedFrames}/{status.QueueCapacity}, verworfen {status.DroppedFrames}");
+            $"{(video.HardwareDecoding ? "Hardware (D3D11VA)" : $"Software-Dekodierung ({video.SoftwareReason ?? "ohne Angabe"})")}, {status.DecodedFramesPerSecond:0} fps dekodiert, Puffer {status.QueuedFrames}/{status.QueueCapacity}, verworfen {status.DroppedFrames}");
 
         // While playing, the buffer stays nearly full if the decoder keeps up. Running empty means stutter.
         bool starving = status.State == PlaybackState.Playing && status.QueuedFrames <= 1 && status.Position < status.Duration - TimeSpan.FromSeconds(1);

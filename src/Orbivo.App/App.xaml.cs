@@ -66,11 +66,12 @@ public partial class App : Application
         RegisterGlobalExceptionHandlers();
 
         _logger.LogInformation(
-            "Orbivo {Version} starting. OS: {Os}, runtime: {Runtime}, XR: {XrMode}.",
+            "Orbivo {Version} starting. OS: {Os}, runtime: {Runtime}, XR: {XrMode}, video decoder: {Decoder}.",
             Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown",
             RuntimeInformation.OSDescription,
             RuntimeInformation.FrameworkDescription,
-            options.NoXr ? "disabled (--no-xr)" : "enabled");
+            options.NoXr ? "disabled (--no-xr)" : "enabled",
+            options.Decoder);
         if (options.UnknownArguments.Count > 0)
         {
             _logger.LogWarning("Ignoring unknown command line arguments: {Arguments}", string.Join(" ", options.UnknownArguments));
@@ -194,7 +195,7 @@ public partial class App : Application
             return;
         }
 
-        _player = new VideoPlayer(device.Device, _playerCommands.Reader, new VideoPlayerOptions(_options?.StereoLayout), loggerFactory, _audioOutput);
+        _player = new VideoPlayer(device.Device, _playerCommands.Reader, new VideoPlayerOptions(_options?.StereoLayout, Decoder: _options?.Decoder ?? DecoderPreference.Auto), loggerFactory, _audioOutput);
         attach(_player);
         _player.Start();
         viewModel.StartPlayerPolling(_player.GetStatus);

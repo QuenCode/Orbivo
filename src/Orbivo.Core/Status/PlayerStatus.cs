@@ -12,6 +12,7 @@ namespace Orbivo.Core.Status;
 /// <param name="FrameRate">Nominal frames per second, 0 if unknown.</param>
 /// <param name="Color">Color description used for the conversion.</param>
 /// <param name="HardwareDecoding">True for D3D11VA hardware decoding.</param>
+/// <param name="SoftwareReason">Why the video is decoded in software (German, for the operator); null for hardware.</param>
 public sealed record VideoStreamInfo(
     string Codec,
     string Profile,
@@ -19,7 +20,8 @@ public sealed record VideoStreamInfo(
     int Height,
     double FrameRate,
     VideoColorFormat Color,
-    bool HardwareDecoding);
+    bool HardwareDecoding,
+    string? SoftwareReason = null);
 
 /// <summary>The format the loaded video is shown with, and where it comes from (F10–F14).</summary>
 /// <param name="Format">Format in use.</param>
