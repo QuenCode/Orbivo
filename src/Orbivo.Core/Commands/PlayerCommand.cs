@@ -23,6 +23,12 @@ public sealed record PauseCommand : PlayerCommand;
 public sealed record StopCommand : PlayerCommand;
 
 /// <summary>
+/// Closes the loaded video: decoders and file are closed (the file can be moved or deleted then), the headset shows
+/// black and the status is empty again (no video).
+/// </summary>
+public sealed record CloseMediaCommand : PlayerCommand;
+
+/// <summary>
 /// Jumps to <paramref name="Position"/> (time from the start of the video). The headset keeps the last frame until the
 /// new one is decoded; the transport state stays (Ended becomes Paused). Seeks in quick succession are merged.
 /// </summary>

@@ -51,6 +51,26 @@ public sealed class AvSyncMeterTests
     }
 
     [Fact]
+    public void Reset_ClearsTheStatistics_UntilTheNextWindowIsComplete()
+    {
+        var meter = new AvSyncMeter(Frequency);
+        long t = Frequency;
+        meter.Record(t, 5 * TimeSpan.TicksPerMillisecond);
+        meter.Record(t + Frequency, 5 * TimeSpan.TicksPerMillisecond);
+        Assert.NotEqual(0, meter.Current.WindowFrames);
+
+        // No frame shown after the reset (video closed): the old values are gone at once.
+        meter.Reset();
+        Assert.Equal(AvSyncStats.None, meter.Current);
+
+        // The first frame after the reset starts a new window; until it is complete there is nothing to show.
+        meter.Record(t + (2 * Frequency), 0);
+        Assert.Equal(AvSyncStats.None, meter.Current);
+        meter.Record(t + (3 * Frequency), 0);
+        Assert.Equal(2, meter.Current.TotalFrames);
+    }
+
+    [Fact]
     public void Record_DoesNotAllocate()
     {
         var meter = new AvSyncMeter(Frequency);

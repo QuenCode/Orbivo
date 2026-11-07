@@ -74,6 +74,54 @@ public sealed class VideoPlayerTests(HardwareDecodeFixture fixture)
     }
 
     [Fact]
+    public void Close_ReleasesTheFile_AndEmptiesTheStatus()
+    {
+        GraphicsDevice device = fixture.RequireHardware();
+        string copy = Path.Combine(Path.GetTempPath(), $"orbivo-close-{Guid.NewGuid():N}.mp4");
+        File.Copy(TestVideos.Mono4K, copy);
+        var commands = Channel.CreateUnbounded<PlayerCommand>();
+        using var player = new VideoPlayer(device.Device, commands.Reader, new VideoPlayerOptions(StereoLayout: null), TestOutputLoggerFactory.Instance);
+        player.Start();
+
+        try
+        {
+            Send(commands, new OpenMediaCommand(copy));
+            WaitForState(player, PlaybackState.Ready);
+            Send(commands, new PlayCommand());
+            WaitForState(player, PlaybackState.Playing);
+            RenderFor(player, TimeSpan.FromSeconds(1.5));
+            Assert.NotEqual(0, player.GetStatus().AvSync.WindowFrames);
+
+            Send(commands, new CloseMediaCommand());
+            WaitForState(player, PlaybackState.NoMedia);
+            PlayerStatus closed = player.GetStatus();
+            Assert.Null(closed.FilePath);
+            Assert.Null(closed.Video);
+            Assert.Null(closed.Format);
+            Assert.Null(closed.Audio);
+            Assert.Null(closed.Error);
+            Assert.Equal(TimeSpan.Zero, closed.Position);
+            Assert.Equal(TimeSpan.Zero, closed.Duration);
+            Assert.Equal(0, closed.AvSync.WindowFrames);
+            Assert.False(player.TryGetFrame(Stopwatch.GetTimestamp(), out _), "black after closing");
+
+            // The file is free: Explorer could delete it now.
+            File.Delete(copy);
+            Assert.False(File.Exists(copy));
+
+            // Play without a video does nothing.
+            Send(commands, new PlayCommand());
+            Thread.Sleep(100);
+            Assert.Equal(PlaybackState.NoMedia, player.GetStatus().State);
+        }
+        finally
+        {
+            player.ReleaseRenderThread();
+            commands.Writer.Complete();
+        }
+    }
+
+    [Fact]
     public void MissingFile_FailsWithAnOperatorMessage()
     {
         GraphicsDevice device = fixture.RequireHardware();

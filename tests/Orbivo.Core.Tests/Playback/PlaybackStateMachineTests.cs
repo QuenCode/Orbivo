@@ -238,17 +238,77 @@ public sealed class PlaybackStateMachineTests
         Assert.Equal(PlaybackActions.None, machine.SeekCompleted());
     }
 
-    private static PlaybackStateMachine MachineIn(PlaybackState state)
+    [Theory]
+    [InlineData(PlaybackState.Opening)]
+    [InlineData(PlaybackState.Ready)]
+    [InlineData(PlaybackState.Playing)]
+    [InlineData(PlaybackState.Paused)]
+    [InlineData(PlaybackState.Ended)]
+    [InlineData(PlaybackState.Failed)]
+    public void Close_FromAnyState_ClosesTheFileAndShowsBlack(PlaybackState state)
     {
-        PlaybackStateMachine machine = ReadyMachine();
-        if (state is PlaybackState.Playing or PlaybackState.Paused)
+        PlaybackStateMachine machine = MachineIn(state);
+        if (state == PlaybackState.Opening)
         {
             machine.Play();
         }
 
-        if (state == PlaybackState.Paused)
+        PlaybackActions actions = machine.Close();
+
+        Assert.Equal(PlaybackActions.CloseMedia | PlaybackActions.HideVideo | PlaybackActions.StopClock, actions);
+        Assert.Equal(PlaybackState.NoMedia, machine.State);
+        Assert.False(machine.PlayPending);
+        Assert.False(machine.Seeking);
+    }
+
+    [Fact]
+    public void Close_WithoutMedia_DoesNothing()
+    {
+        var machine = new PlaybackStateMachine();
+        Assert.Equal(PlaybackActions.None, machine.Close());
+        Assert.Equal(PlaybackState.NoMedia, machine.State);
+    }
+
+    [Fact]
+    public void Close_DuringASeek_EndsTheSeek()
+    {
+        PlaybackStateMachine machine = ReadyMachine();
+        machine.Play();
+        machine.Seek();
+        machine.Close();
+
+        Assert.False(machine.Seeking);
+        Assert.Equal(PlaybackActions.None, machine.SeekCompleted());
+        Assert.Equal(PlaybackActions.None, machine.MediaReady());
+        Assert.Equal(PlaybackState.NoMedia, machine.State);
+    }
+
+    private static PlaybackStateMachine MachineIn(PlaybackState state)
+    {
+        var machine = new PlaybackStateMachine();
+        machine.Open();
+        switch (state)
         {
-            machine.Pause();
+            case PlaybackState.Ready:
+                machine.MediaReady();
+                break;
+            case PlaybackState.Playing:
+                machine.MediaReady();
+                machine.Play();
+                break;
+            case PlaybackState.Paused:
+                machine.MediaReady();
+                machine.Play();
+                machine.Pause();
+                break;
+            case PlaybackState.Ended:
+                machine.MediaReady();
+                machine.Play();
+                machine.EndReached();
+                break;
+            case PlaybackState.Failed:
+                machine.MediaFailed();
+                break;
         }
 
         Assert.Equal(state, machine.State);

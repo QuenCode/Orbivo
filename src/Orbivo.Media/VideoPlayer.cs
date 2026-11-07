@@ -357,6 +357,9 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             case StopCommand:
                 Apply(_machine.Stop());
                 break;
+            case CloseMediaCommand:
+                Apply(_machine.Close());
+                break;
             case SeekCommand seek:
                 SeekTo(seek.Position);
                 break;
@@ -608,6 +611,11 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             _clock.Stop();
         }
 
+        if (actions.HasFlag(PlaybackActions.CloseMedia))
+        {
+            CloseMedia();
+        }
+
         if (actions.HasFlag(PlaybackActions.OpenMedia) || actions.HasFlag(PlaybackActions.RestartMedia))
         {
             OpenDecoder();
@@ -738,6 +746,27 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         }
     }
 
+    /// <summary>
+    /// Closes the file and forgets everything about it: the render thread gets no queue (black), the status has no
+    /// video, format or A/V values. Blackout, fade and loop stay; they belong to the session, not to the video.
+    /// </summary>
+    private void CloseMedia()
+    {
+        _logger.LogInformation("Closing {Path}.", _filePath);
+        CloseDecoder();
+        PublishQueue(null);
+        _filePath = null;
+        _softwareFallbackReason = null;
+        _sidecar = null;
+        _overrides = FormatOverrides.None;
+        _metadata = null;
+        _videoSize = default;
+        _resolvedFormat = null;
+        _sidecarError = null;
+        _formatStatus = null;
+        _avSync.Reset();
+    }
+
     private void CloseDecoder()
     {
         // Decoders first: they read the demuxer's queues.
@@ -792,6 +821,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         _clock.Stop();
         _machine.MediaFailed();
         CloseDecoder();
+        _avSync.Reset();
         PublishStatus(message);
     }
 

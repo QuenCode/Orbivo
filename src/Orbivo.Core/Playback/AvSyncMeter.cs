@@ -68,10 +68,11 @@ public sealed class AvSyncMeter
         ResetWindow(0);
     }
 
-    /// <summary>The latest statistics. Any thread.</summary>
-    public AvSyncStats Current => _published.Read();
+    /// <summary>The latest statistics; none after <see cref="Reset"/> until the next window is complete. Any thread.</summary>
+    public AvSyncStats Current =>
+        Volatile.Read(ref _resetRequests) != Volatile.Read(ref _resetsSeen) ? AvSyncStats.None : _published.Read();
 
-    /// <summary>Any thread: the totals start again with the next frame (new video, seek).</summary>
+    /// <summary>Any thread: the totals start again with the next frame (new video, seek, video closed).</summary>
     public void Reset() => Interlocked.Increment(ref _resetRequests);
 
     /// <summary>Render thread: a frame is shown for the first time at <paramref name="timestamp"/>.</summary>
@@ -82,7 +83,9 @@ public sealed class AvSyncMeter
         int resets = Volatile.Read(ref _resetRequests);
         if (resets != _resetsSeen)
         {
-            _resetsSeen = resets;
+            // Clear the published statistics before the reset counts as seen, so no reader gets the old ones again.
+            _published.Write(AvSyncStats.None);
+            Volatile.Write(ref _resetsSeen, resets);
             ResetTotals();
             ResetWindow(timestamp);
         }

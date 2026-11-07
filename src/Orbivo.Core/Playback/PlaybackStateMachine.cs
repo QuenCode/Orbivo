@@ -57,6 +57,9 @@ public enum PlaybackActions
     /// The headset keeps the last frame until the new one is ready.
     /// </summary>
     SeekMedia = 1 << 8,
+
+    /// <summary>Close decoders and file; nothing is loaded afterwards.</summary>
+    CloseMedia = 1 << 9,
 }
 
 /// <summary>
@@ -83,6 +86,20 @@ public sealed class PlaybackStateMachine
         PlayPending = false;
         Seeking = false;
         return PlaybackActions.OpenMedia | PlaybackActions.HideVideo | PlaybackActions.StopClock;
+    }
+
+    /// <summary>The operator closes the video (playlist entry removed). Allowed in every state, also while opening.</summary>
+    public PlaybackActions Close()
+    {
+        if (State == PlaybackState.NoMedia)
+        {
+            return PlaybackActions.None;
+        }
+
+        State = PlaybackState.NoMedia;
+        PlayPending = false;
+        Seeking = false;
+        return PlaybackActions.CloseMedia | PlaybackActions.HideVideo | PlaybackActions.StopClock;
     }
 
     public PlaybackActions Play()
