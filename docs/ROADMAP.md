@@ -51,7 +51,7 @@ Jeder Meilenstein endet mit: grünem Build, grünen Tests, Commit und der **Chec
 ## M6.5 – Live-Ansicht (F42)
 - Der XR-Render-Thread rendert jedes 3. Bild zusätzlich eine kleine Mitten-Ansicht (etwa 720 px hoch) aus der Kopfdrehung beider Augen, mit Fade und Schwarzbild. Er wartet nie: Ist die Anzeige nicht bereit, wird das Bild übersprungen
 - Anzeige im Operatorfenster (Platz links unter „Format“), Schalter „Live-Ansicht“, bei jedem Start aus
-- Ohne Session oder bei `--no-xr`: Hinweis statt Bild (die Vorschau zeigt es dann schon)
+- Ohne Session: Hinweis „Kein Bild“. Bei `--no-xr` zeigt sie das Vorschaubild (so lässt sie sich ohne Brille prüfen)
 - **Fertig, wenn:** Mit Live-Ansicht an bleibt die Brille bei 90 fps (8K-TB-Video), die Render-Schleife allokiert nicht, abgeschaltet kostet sie nichts
 - **Brillen-Test:** Kopf drehen, die Live-Ansicht folgt ohne spürbare Verzögerung in die gleiche Richtung; Fade und Schwarzbild sind sichtbar
 

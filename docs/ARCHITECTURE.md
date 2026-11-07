@@ -23,6 +23,7 @@ src/
     Rendering/                 # PanoramaRenderer, IViewSource, Standbild-Textur
     Shaders/                   # *.hlsl, als Ressource eingebettet und beim Start kompiliert
     DebugViewport/             # Vorschaufenster für --no-xr (eigenes Win32-Fenster, eigener Render-Thread)
+    LiveView/                  # Live-Ansicht (F42): LiveViewFrames (3 Slot-Texturen), LiveViewPresenter (Thread), LiveViewWindow (Kindfenster)
   Orbivo.App/             # WPF-Operator-UI (MVVM), Composition Root, Settings
 tests/
   Orbivo.Core.Tests/      # ProjectionMath, Sidecar, Clock/Sync-Logik, Zustandsautomat
@@ -46,6 +47,7 @@ docs/
 | Audio-Out (`AudioOutput`, MMCSS „Pro Audio“) | wartet auf das WASAPI-Ereignis, liest Befehle, Geräteposition → `AudioClockTracker` → `ClockSnapshot`; `AudioRenderer` füllt den Puffer aus dem Ringpuffer (ab M7 über den AmbisonicsProcessor). Geräte öffnen und Wiederholung laufen zwischen den Perioden, nie darin | **nein** in der Periode (wartet nur auf das Geräte-Ereignis) |
 | XR-Render (`XrHost`) | OpenXR-Frame-Loop, wählt Frame nach Clock, rendert beide Augen, liest Head-Pose. Ohne laufende Session: Verbindungsaufbau und Wiederholung; holt dabei fällige Video-Frames ab, damit der Decoder mit der Uhr mitläuft | **nein** im Frame-Loop (wartet nur in `xrWaitFrame`); ohne Session darf er warten |
 | Vorschau-Render (nur `--no-xr`) | Fensternachrichten und Maus, rendert ein Auge ins Vorschaufenster | **nein** (wartet nur auf den Frame-Takt der Swapchain, wie `xrWaitFrame`) |
+| Live-Ansicht (`LiveViewPresenter`, nur wenn eingeschaltet) | kopiert das neueste Bild der Live-Ansicht ins Kindfenster im Operatorfenster und zeigt es an | ja (wartet auf den Frame-Takt seiner Swapchain); der Render-Thread wartet nie auf ihn |
 
 Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC-Queues, `Volatile`/`Interlocked`). Die aktuelle Kopforientierung wird vom Render-Thread als atomarer Snapshot (Quaternion und Zeitstempel) publiziert und vom Audio-Callback gelesen.
 
@@ -71,6 +73,13 @@ Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC
 - Außerhalb des gültigen Bereichs (z. B. Rückseite bei VR180, außerhalb des Fisheye-Kreises) wird Schwarz ausgegeben.
 - Fade und Blackout sind ein Multiplikator im Shader (`Brightness`), bei 0 wird nur gelöscht. Der Faktor kommt pro Frame aus `OutputFader` (über den Player) und ist `level^2,2`, damit der Fade in wahrgenommener Helligkeit gleichmäßig läuft.
 - Varjo-spezifisch: Zuerst Standard-Stereo (`PRIMARY_STEREO`). Quad-Views (`XR_VARJO_quad_views`) sind eine spätere Optimierung.
+
+## Live-Ansicht (F42, M6.5)
+- **Blickwinkel:** In der Brille rechnet `CombinedView` (Core) aus beiden Augen eine Ansicht: Richtung = Mitte der Augen (Kopf), Sichtfeld vom linken Rand des linken Auges bis zum rechten Rand des rechten Auges, oben und unten jeweils das Größere; jede Kante höchstens 80° von der Achse. Gezeigt wird das linke Halbbild (bei Stereo). In `--no-xr` zeigt sie das Bild der Vorschau.
+- **Render-Thread:** `LiveViewFrames.RenderIfDue` zeichnet nach den Augen, höchstens alle 30 ms (90 Hz: jedes 3. Bild), mit Fade und Schwarzbild, in eine von drei Slot-Texturen (1920 × 1080, B8G8R8A8, sRGB-View). Größe: das Seitenverhältnis des Sichtfelds, eingepasst in die Fläche im Operatorfenster. Die Übergabe läuft über `TripleBufferIndex` (Core, lock-frei, das neueste gewinnt). Ist die Live-Ansicht aus, zeichnet der Render-Thread nichts zusätzlich.
+- **Anzeige-Thread:** `LiveViewPresenter` kopiert das neueste Bild mittig in die Swapchain eines Win32-Kindfensters (WPF `HwndHost`, `LiveViewHost`) und zeigt es an. Flip-Model mit Frame-Latency-Handle, sonst das ältere Copy-Model.
+- **Geteilter Immediate Context:** Der Anzeige-Thread benutzt nur Befehle, die keinen Pipeline-Zustand ändern (Löschen, Kopieren, Present, Flush; kein `ClearState`). Ein eigener Draw würde dem Render-Thread mitten im Bild Shader und Ziele verstellen. Weil beide Threads in denselben Context schreiben, kommt die Kopie eines Slots auf der GPU immer nach dem Zeichnen hinein.
+- Das Kindfenster lässt Mausklicks zum Operatorfenster durch (`HTTRANSPARENT`) und nimmt nie den Tastaturfokus. Es wird auf dem UI-Thread erzeugt; vor dem Zerstören wird der Anzeige-Thread beendet.
 
 ## Projektionsmathematik (Referenz)
 Konvention: +Y oben, −Z vorne, +X rechts. `dir` normalisiert.

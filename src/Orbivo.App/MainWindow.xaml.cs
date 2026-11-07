@@ -17,6 +17,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // The live view presenter draws into the child window from its own thread: it starts once the window exists
+        // and stops before the window goes away.
+        LiveViewPanel.WindowCreated += (_, _) => ViewModel.SetLiveViewWindow(LiveViewPanel.WindowHandle);
+        LiveViewPanel.WindowDestroying += (_, _) => ViewModel.SetLiveViewWindow(0);
     }
 
     private MainViewModel ViewModel => (MainViewModel)DataContext;

@@ -6,6 +6,7 @@ using System.Threading.Channels;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Orbivo.App.LiveView;
 using Orbivo.Audio.Output;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Commands;
@@ -15,6 +16,7 @@ using Orbivo.Core.Playlists;
 using Orbivo.Core.Settings;
 using Orbivo.Core.Status;
 using Orbivo.Xr.DebugViewport;
+using Orbivo.Xr.LiveView;
 using Orbivo.Xr.OpenXr;
 
 namespace Orbivo.App.ViewModels;
@@ -57,6 +59,10 @@ public sealed class MainViewModel : ObservableObject
     private double _volumePercent;
     private bool _muted;
     private bool _soundLocked;
+    private readonly bool _noXr;
+    private LiveViewController? _liveView;
+    private bool _liveViewEnabled;
+    private string _liveViewStatusText = "Aus";
     private bool _updatingDevices;
     private string _audioModeText = "–";
     private readonly Stopwatch _sinceSeekSent = new();
@@ -93,6 +99,7 @@ public sealed class MainViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(listAudioDevices);
         _commands = commands;
+        _noXr = options.NoXr;
         _listAudioDevices = listAudioDevices;
         Format = new FormatViewModel(Send);
         _volumePercent = Math.Round(settings.Volume * 100);
@@ -305,6 +312,26 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public string Title { get; }
+
+    /// <summary>Live view (F42): what the participant sees, in the operator window. Off at every start.</summary>
+    public bool LiveViewEnabled
+    {
+        get => _liveViewEnabled;
+        set
+        {
+            if (SetProperty(ref _liveViewEnabled, value))
+            {
+                _liveView?.SetEnabled(value);
+                ShowLiveViewStatus();
+            }
+        }
+    }
+
+    public string LiveViewStatusText
+    {
+        get => _liveViewStatusText;
+        private set => SetProperty(ref _liveViewStatusText, value);
+    }
 
     public IReadOnlyList<StatusEntry> StatusEntries { get; }
 
@@ -538,6 +565,21 @@ public sealed class MainViewModel : ObservableObject
     public void ShowPlayerUnavailable(string reason)
     {
         _playbackEntry.Update(reason, StatusLevel.Error);
+    }
+
+    /// <summary>The live view controller; its state is shown ten times per second.</summary>
+    public void AttachLiveView(LiveViewController controller)
+    {
+        ArgumentNullException.ThrowIfNull(controller);
+        _liveView = controller;
+        controller.SetEnabled(LiveViewEnabled);
+        AddRefresher(ShowLiveViewStatus);
+    }
+
+    /// <summary>The child window of the live view was created (handle) or is about to be destroyed (0).</summary>
+    public void SetLiveViewWindow(nint window)
+    {
+        _liveView?.SetWindow(window);
     }
 
     /// <summary>Refreshes the preview window and view direction four times per second.</summary>
@@ -1165,6 +1207,47 @@ public sealed class MainViewModel : ObservableObject
                     $"{DescribeDirection(status.YawDegrees, status.PitchDegrees)}: Yaw {status.YawDegrees:+0;-0;0}°, Pitch {status.PitchDegrees:+0;-0;0}°, Sichtfeld {status.VerticalFovDegrees:0}°"),
                 StatusLevel.Neutral);
         }
+    }
+
+    private void ShowLiveViewStatus()
+    {
+        if (!LiveViewEnabled)
+        {
+            LiveViewStatusText = "Aus";
+            return;
+        }
+
+        if (_liveView is not { IsAvailable: true } controller)
+        {
+            LiveViewStatusText = _noXr ? "Wartet auf die Grafikkarte …" : "Wartet auf die Brille …";
+            return;
+        }
+
+        LiveViewStatus? status = controller.GetStatus();
+        if (status is not { } current || current.State == LiveViewState.Starting)
+        {
+            LiveViewStatusText = "Startet …";
+            return;
+        }
+
+        if (current.State == LiveViewState.Failed)
+        {
+            LiveViewStatusText = $"Fehler: {current.Error} (Details im Log)";
+            return;
+        }
+
+        double age = current.LastFrameTimestamp == 0
+            ? double.MaxValue
+            : (Stopwatch.GetTimestamp() - current.LastFrameTimestamp) / (double)Stopwatch.Frequency;
+        if (age > 1.0)
+        {
+            LiveViewStatusText = _noXr
+                ? "Kein Bild: Vorschaufenster ist minimiert"
+                : "Kein Bild: Die Brille zeigt gerade nichts (Session nicht sichtbar)";
+            return;
+        }
+
+        LiveViewStatusText = string.Create(CultureInfo.CurrentCulture, $"{current.FramesPerSecond:0} Bilder/s");
     }
 
     /// <summary>Rough direction in words. Yaw positive = left (docs/DECISIONS.md).</summary>

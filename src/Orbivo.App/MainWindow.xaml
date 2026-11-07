@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:Orbivo.App.ViewModels"
         xmlns:local="clr-namespace:Orbivo.App"
+        xmlns:lv="clr-namespace:Orbivo.App.LiveView"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="{Binding Title}"
@@ -12,6 +13,10 @@
         WindowStartupLocation="CenterScreen"
         AllowDrop="True" Drop="OnPlaylistDrop" DragOver="OnPlaylistDragOver"
         PreviewKeyDown="OnWindowPreviewKeyDown">
+
+  <Window.Resources>
+    <BooleanToVisibilityConverter x:Key="VisibleIfTrue" />
+  </Window.Resources>
 
   <Grid Margin="6">
     <Grid.RowDefinitions>
@@ -224,6 +229,31 @@
           <TextBlock Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource HintText}" Text="{Binding WarningText}"
                      Foreground="DarkGoldenrod" Margin="0,6,0,0" />
         </Grid>
+      </GroupBox>
+
+      <!-- Live view (F42): what the participant sees, copied from the render thread about 30 times per second -->
+      <GroupBox Grid.Row="2" Header="Live-Ansicht (was der Proband sieht)">
+        <DockPanel>
+          <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+            <CheckBox Content="Anzeigen" IsChecked="{Binding LiveViewEnabled}" Focusable="False" VerticalAlignment="Center"
+                      ToolTip="Zeigt das Bild der Brille aus dem Blickwinkel des Probanden (beide Augen zusammen, linkes Halbbild). Bei jedem Start aus; abgeschaltet kostet es keine Rechenzeit." />
+            <TextBlock Text="{Binding LiveViewStatusText}" Margin="12,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+          </DockPanel>
+          <Grid Background="Black" MinHeight="120">
+            <lv:LiveViewHost x:Name="LiveViewPanel" Visibility="{Binding LiveViewEnabled, Converter={StaticResource VisibleIfTrue}}" />
+            <TextBlock Text="Aus" Foreground="Gray" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding LiveViewEnabled}" Value="True">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+          </Grid>
+        </DockPanel>
       </GroupBox>
     </Grid>
 

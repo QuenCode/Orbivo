@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Orbivo.App.Imaging;
+using Orbivo.App.LiveView;
 using Orbivo.App.ViewModels;
 using Orbivo.Audio;
 using Orbivo.Audio.Output;
@@ -18,6 +19,7 @@ using Orbivo.Core.Status;
 using Orbivo.Media;
 using Orbivo.Xr.DebugViewport;
 using Orbivo.Xr.Graphics;
+using Orbivo.Xr.LiveView;
 using Orbivo.Xr.OpenXr;
 using Orbivo.Xr.Rendering;
 
@@ -39,6 +41,8 @@ public partial class App : Application
     private XrHost? _xrHost;
     private VideoPlayer? _player;
     private AudioOutput? _audioOutput;
+    private LiveViewController? _liveView;
+    private LiveViewFrames? _liveViewFrames;
     private StartupOptions? _options;
 
     /// <summary>Operator UI → player (CLAUDE.md rule 3).</summary>
@@ -102,6 +106,8 @@ public partial class App : Application
             settings,
             () => AudioDeviceCatalog.ListOutputs(deviceLogger));
         _viewModel.SettingsChanged += (_, _) => SaveSettings();
+        _liveView = new LiveViewController(_loggerFactory.CreateLogger<LiveViewPresenter>());
+        _viewModel.AttachLiveView(_liveView);
         var window = new MainWindow
         {
             DataContext = _viewModel,
@@ -136,8 +142,11 @@ public partial class App : Application
         // Render threads first: the player frees the frames they read. Disposing the XR host releases its reference
         // to the device; the player's textures and FFmpeg keep their own references until the player is disposed.
         // The sound output goes after the player, whose decoders write into its ring buffer.
+        // The live view presenter stopped with its window; its slot textures go once no render thread draws into them.
+        _liveView?.Dispose();
         _xrHost?.Dispose();
         _debugViewport?.Dispose();
+        _liveViewFrames?.Dispose();
         _player?.Dispose();
         _audioOutput?.Dispose();
         _graphicsDevice?.Dispose();
@@ -169,6 +178,7 @@ public partial class App : Application
         ILogger logger)
     {
         GraphicsDevice device = await host.GraphicsDeviceReady;
+        AttachLiveView(device, host.SetLiveView, logger);
         StartPlayer(device, ffmpegAvailable, host.SetVideoSource, viewModel, loggerFactory, logger);
         if (options.ImagePath is not null)
         {
@@ -217,6 +227,7 @@ public partial class App : Application
         viewModel.ShowGraphicsDevice(_graphicsDevice.AdapterName, _graphicsDevice.DedicatedVideoMemoryBytes);
         _debugViewport = new DebugViewportHost(_graphicsDevice, loggerFactory.CreateLogger<DebugViewportHost>());
         _debugViewport.SetImageLayout(options.StereoLayout ?? StereoLayout.Mono);
+        AttachLiveView(_graphicsDevice, _debugViewport.SetLiveView, logger);
         StartPlayer(_graphicsDevice, ffmpegAvailable, _debugViewport.SetVideoSource, viewModel, loggerFactory, logger);
         _debugViewport.Start();
         viewModel.StartViewportPolling(_debugViewport.GetStatus);
@@ -225,6 +236,26 @@ public partial class App : Application
         {
             _ = LoadImageAsync(options.ImagePath, options.StereoLayout, _graphicsDevice, _debugViewport.ShowImage, viewModel, logger);
         }
+    }
+
+    /// <summary>
+    /// Creates the live view textures (F42) on the render thread's device and hands them to the render thread and the
+    /// live view controller. Without them the app runs on; the live view then says it is unavailable.
+    /// </summary>
+    private void AttachLiveView(GraphicsDevice device, Action<LiveViewFrames> attach, ILogger logger)
+    {
+        try
+        {
+            _liveViewFrames = new LiveViewFrames(device);
+        }
+        catch (Exception exception) when (exception is SharpGen.Runtime.SharpGenException or OutOfMemoryException)
+        {
+            logger.LogError(exception, "Creating the live view textures failed; the live view is not available.");
+            return;
+        }
+
+        attach(_liveViewFrames);
+        _liveView?.Attach(device, _liveViewFrames);
     }
 
     /// <summary>
