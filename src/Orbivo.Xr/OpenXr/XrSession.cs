@@ -4,6 +4,7 @@ using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
 using Orbivo.Media;
 using Orbivo.Xr.Graphics;
+using Orbivo.Xr.LiveView;
 using Orbivo.Xr.Rendering;
 using Silk.NET.OpenXR;
 using Vortice.DXGI;
@@ -138,7 +139,13 @@ internal sealed unsafe class XrSession : IDisposable
     /// <param name="video">Video frames; a due frame wins over <paramref name="image"/>. Null without a player.</param>
     /// <param name="image">Image to show if there is no video frame, or null for black.</param>
     /// <param name="imageFormat">Format of <paramref name="image"/>.</param>
-    public XrFrameResult RenderFrame(PanoramaRenderer renderer, IVideoFrameSource? video, StillImageTexture? image, VideoFormat imageFormat)
+    /// <param name="liveView">Live view for the operator (F42), or null.</param>
+    public XrFrameResult RenderFrame(
+        PanoramaRenderer renderer,
+        IVideoFrameSource? video,
+        StillImageTexture? image,
+        VideoFormat imageFormat,
+        LiveViewFrames? liveView)
     {
         var waitInfo = new FrameWaitInfo(type: StructureType.FrameWaitInfo);
         var frameState = new FrameState(type: StructureType.FrameState);
@@ -163,8 +170,17 @@ internal sealed unsafe class XrSession : IDisposable
             {
                 PanoramaSource source = hasVideoFrame ? PanoramaSource.FromVideo(frame) : PanoramaSource.FromImage(image, imageFormat);
                 // Blackout and fade (F5) also cover the still image; without a player there is nothing to dim.
-                RenderEyes(renderer, source, video?.GetOutputBrightness(displayTimestamp) ?? 1f);
+                float brightness = video?.GetOutputBrightness(displayTimestamp) ?? 1f;
+                RenderEyes(renderer, source, brightness);
                 layerCount = 1;
+                if (liveView is { Enabled: true })
+                {
+                    ViewParameters combined = CombinedView.Create(
+                        XrConversions.ToViewParameters(_views[0], orientationValid: true, Quaternion.Identity),
+                        XrConversions.ToViewParameters(_views[1], orientationValid: true, Quaternion.Identity));
+                    liveView.RenderIfDue(renderer, _device.ImmediateContext, combined, source, brightness, displayTimestamp);
+                }
+
                 head = Quaternion.Slerp(
                     XrConversions.ToQuaternion(_views[0].Pose.Orientation),
                     XrConversions.ToQuaternion(_views[1].Pose.Orientation),

@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace Orbivo.Xr.DebugViewport;
 
-/// <summary>The few Win32 calls the debug viewport window needs.</summary>
+/// <summary>The few Win32 calls the debug viewport window and the live view window need.</summary>
 internal static unsafe partial class NativeMethods
 {
     public const uint CS_VREDRAW = 0x0001;
@@ -10,6 +10,9 @@ internal static unsafe partial class NativeMethods
     public const uint CS_NOCLOSE = 0x0200;
 
     public const uint WS_OVERLAPPEDWINDOW = 0x00CF0000;
+    public const uint WS_CHILD = 0x40000000;
+    public const uint WS_VISIBLE = 0x10000000;
+    public const uint WS_CLIPSIBLINGS = 0x04000000;
     public const int CW_USEDEFAULT = unchecked((int)0x80000000);
     public const int SW_SHOWNOACTIVATE = 4;
 
@@ -17,6 +20,7 @@ internal static unsafe partial class NativeMethods
     public const uint WM_SIZE = 0x0005;
     public const uint WM_CLOSE = 0x0010;
     public const uint WM_ERASEBKGND = 0x0014;
+    public const uint WM_NCHITTEST = 0x0084;
     public const uint WM_KEYDOWN = 0x0100;
     public const uint WM_MOUSEMOVE = 0x0200;
     public const uint WM_LBUTTONDOWN = 0x0201;
@@ -27,6 +31,8 @@ internal static unsafe partial class NativeMethods
     public const nint SIZE_MINIMIZED = 1;
     public const nint VK_HOME = 0x24;
     public const nint IDC_ARROW = 32512;
+    public const nint HTTRANSPARENT = -1;
+    public const int BLACK_BRUSH = 4;
 
     public const uint PM_REMOVE = 0x0001;
     public const uint QS_ALLINPUT = 0x04FF;
@@ -152,6 +158,12 @@ internal static unsafe partial class NativeMethods
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool CloseHandle(nint handle);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    public static partial uint WaitForSingleObject(nint handle, uint milliseconds);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial nint GetStockObject(int index);
 
     /// <summary>Signed low word, e.g. the x coordinate of a mouse message (negative on the left of the primary monitor).</summary>
     public static int SignedLowWord(nint value) => (short)((long)value & 0xFFFF);

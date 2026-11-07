@@ -5,6 +5,7 @@ using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
 using Orbivo.Media;
 using Orbivo.Xr.Graphics;
+using Orbivo.Xr.LiveView;
 using Orbivo.Xr.Rendering;
 using Silk.NET.OpenXR;
 
@@ -39,6 +40,7 @@ public sealed class XrHost : IDisposable
     private GraphicsDevice? _device;
     private StillImageTexture? _pendingImage;
     private IVideoFrameSource? _videoSource;
+    private LiveViewFrames? _liveView;
     private VideoFormat _imageFormat = VideoFormat.Default;
     private volatile bool _stopRequested;
 
@@ -89,6 +91,12 @@ public sealed class XrHost : IDisposable
     public void SetVideoSource(IVideoFrameSource? source)
     {
         Volatile.Write(ref _videoSource, source);
+    }
+
+    /// <summary>Draws the live view for the operator (F42) into <paramref name="frames"/> while it is on. Any thread.</summary>
+    public void SetLiveView(LiveViewFrames? frames)
+    {
+        Volatile.Write(ref _liveView, frames);
     }
 
     /// <summary>Stereo layout of the images passed to <see cref="ShowImage"/>. Any thread, before <see cref="ShowImage"/>.</summary>
@@ -367,7 +375,8 @@ public sealed class XrHost : IDisposable
                 renderer,
                 Volatile.Read(ref _videoSource),
                 image,
-                Volatile.Read(ref _imageFormat));
+                Volatile.Read(ref _imageFormat),
+                Volatile.Read(ref _liveView));
             frame++;
             framesInInterval++;
             PublishFrame(result);

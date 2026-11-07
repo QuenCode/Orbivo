@@ -4,6 +4,7 @@ using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
 using Orbivo.Media;
 using Orbivo.Xr.Graphics;
+using Orbivo.Xr.LiveView;
 using Orbivo.Xr.Rendering;
 
 namespace Orbivo.Xr.DebugViewport;
@@ -55,6 +56,7 @@ public sealed class DebugViewportHost : IDisposable
     private volatile bool _stopRequested;
     private StillImageTexture? _pendingImage;
     private IVideoFrameSource? _videoSource;
+    private LiveViewFrames? _liveView;
     private VideoFormat _imageFormat = VideoFormat.Default;
 
     // Status, written by the render thread, read by the UI.
@@ -93,6 +95,15 @@ public sealed class DebugViewportHost : IDisposable
     public void SetVideoSource(IVideoFrameSource? source)
     {
         Volatile.Write(ref _videoSource, source);
+    }
+
+    /// <summary>
+    /// Draws the live view (F42) into <paramref name="frames"/> while it is on: without a headset it shows what the
+    /// preview shows, so the live view can be checked on the desktop. Any thread.
+    /// </summary>
+    public void SetLiveView(LiveViewFrames? frames)
+    {
+        Volatile.Write(ref _liveView, frames);
     }
 
     /// <summary>Stereo layout of the images passed to <see cref="ShowImage"/>; the preview shows the left eye. Any thread.</summary>
@@ -229,6 +240,7 @@ public sealed class DebugViewportHost : IDisposable
                 : PanoramaSource.FromImage(image, Volatile.Read(ref _imageFormat));
             float brightness = video?.GetOutputBrightness(displayTimestamp) ?? 1f;
             renderer.Render(_device.ImmediateContext, swapChain.RenderTargetView, swapChain.Width, swapChain.Height, views[0], Eye.Left, source, brightness);
+            Volatile.Read(ref _liveView)?.RenderIfDue(renderer, _device.ImmediateContext, views[0], source, brightness, displayTimestamp);
             swapChain.Present();
 
             frame++;
