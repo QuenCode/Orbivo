@@ -1,9 +1,9 @@
 """Stereo direction test video for sound fixed to the picture (M7).
 
-The player plays the two stereo channels from two virtual speakers in the picture, at +-60 deg from the front
+The player plays the two stereo channels from two virtual speakers in the picture, at +-75 deg from the front
 (default width). This video marks those two places on the horizon and plays noise bursts in a 6 s cycle:
-    0-2 s  left channel only   -> the box "L" (60 deg left of the front) lights up
-    2-4 s  right channel only  -> the box "R" (60 deg right of the front) lights up
+    0-2 s  left channel only   -> the box "L" (75 deg left of the front) lights up
+    2-4 s  right channel only  -> the box "R" (75 deg right of the front) lights up
     4-6 s  both channels, the same noise -> both boxes light up, the sound comes from the front
 With the sound fixed to the picture, the bursts must come from the lit box wherever the head points.
 """
@@ -21,7 +21,7 @@ from .faces import FONT_BOLD
 from .video import VideoSettings, _ff_path
 
 SAMPLE_RATE = 48_000
-SPEAKER_DEG = 60.0  # yaw of the left speaker (positive = left), the player's default width
+SPEAKER_DEG = 75.0  # yaw of the left speaker (positive = left), the player's default width
 CYCLE_S = 6.0
 SEGMENT_S = 2.0
 DURATION_S = 36.0
@@ -88,7 +88,7 @@ def _filter_graph(width: int, height: int, settings: VideoSettings) -> str:
         f"loop=loop=-1:size=1:start=0,setpts=N/({fps}*TB)"
     ]
     font = _ff_path(FONT_BOLD)
-    # Speaker "L" sits at yaw +60 (left), which is longitude -60 in the equirect image.
+    # Speaker "L" sits at yaw +75 (left), which is longitude -75 in the equirect image.
     for name, lon, segments in (("L", -SPEAKER_DEG, (0, 2)), ("R", SPEAKER_DEG, (1, 2))):
         x, y = equirect_pixel(lon, 0.0, width, height)
         x0, y0 = round(x - box_w / 2), round(y - box_h / 2)

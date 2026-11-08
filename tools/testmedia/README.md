@@ -141,7 +141,7 @@ Der Player spielt Ambisonics noch nicht ab (für später geplant, siehe docs/ROA
 
 ## Stereo-Richtungstest (M7)
 
-`--what stereo` erzeugt `stereo_richtungstest_equirect360_mono_4096x2048_hevc_8bit_30fps.mp4`: 4K Equirect 360 Mono, 36 s, das normale Testbild mit zwei Kästen auf dem Horizont an den Stellen der virtuellen Lautsprecher bei Standardbreite (**L** 60° links, **R** 60° rechts von VORNE). Der Ton (AAC Stereo, 48 kHz) besteht aus weißen Rauschimpulsen (0,3 s an, 0,2 s Pause) im 6-Sekunden-Takt:
+`--what stereo` erzeugt `stereo_richtungstest_equirect360_mono_4096x2048_hevc_8bit_30fps.mp4`: 4K Equirect 360 Mono, 36 s, das normale Testbild mit zwei Kästen auf dem Horizont an den Stellen der virtuellen Lautsprecher bei Standardbreite (**L** 75° links, **R** 75° rechts von VORNE). Der Ton (AAC Stereo, 48 kHz) besteht aus weißen Rauschimpulsen (0,3 s an, 0,2 s Pause) im 6-Sekunden-Takt:
 
 | Zeit im Takt | Ton | Im Bild |
 |---|---|---|
@@ -167,4 +167,4 @@ Alle Vorzeichen stehen an einer Stelle: `orbivo_testmedia/conventions.py`. Kurzf
 - Die Testvideos haben keine Grundausrichtung (`prhd` = 0); der Player würde sie nur anzeigen, nicht anwenden
 - 8192×8192 HEVC liegt über HEVC-Level 6.2. NVDEC dekodiert es trotzdem (RTX 3070, reine Dekodierung: etwa 54 fps)
 - Ambisonics nur 1. Ordnung, noch kein Video mit eingebettetem Ambisonics-Ton (Ambisonics im Player ist für später geplant)
-- Die Kästen im Stereo-Richtungstest gelten für die Standardbreite 60°; bei anderer Breite stehen die virtuellen Lautsprecher weiter innen oder außen
+- Die Kästen im Stereo-Richtungstest gelten für die Standardbreite 75°; bei anderer Breite stehen die virtuellen Lautsprecher weiter innen oder außen

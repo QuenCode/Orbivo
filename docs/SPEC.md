@@ -26,7 +26,7 @@ Wiedergabe von 360°/180°-Videos mit räumlichem Ton auf einer Varjo XR-3 für 
 - F15 Video: mindestens 8K, H.264/HEVC/AV1, 8 und 10 Bit, Farbräume BT.709 und BT.2020 (SDR)
 
 ### Ton
-- F20 **Stereo „Ton fest am Bild“** (M7): Linker und rechter Kanal kommen binaural von zwei virtuellen Lautsprechern im Video (Standard 60° links und rechts der Bildmitte), **kopfgetrackt**: Dreht der Proband den Kopf, wandert der Ton mit dem Bild. Pro Video im UI und Sidecar abschaltbar, Breite einstellbar. Mono bleibt ohne Richtung, Mehrkanal wird auf Stereo gemischt
+- F20 **Stereo „Ton fest am Bild“** (M7): Linker und rechter Kanal kommen binaural von zwei virtuellen Lautsprechern im Video (Standard 75° links und rechts der Bildmitte), **kopfgetrackt**: Dreht der Proband den Kopf, wandert der Ton mit dem Bild. Pro Video im UI und Sidecar abschaltbar, Breite einstellbar. Mono bleibt ohne Richtung, Mehrkanal wird auf Stereo gemischt
 - F21 *(später)* Ambisonics, Ordnung 1 bis 3, AmbiX (ACN/SN3D) und FuMa, kopfgetrackt binaural; 5.1/7.1 über virtuelle Lautsprecher
 - F22 Bereits binaurales Material: Durchreichen ohne Verarbeitung (manuell wählbar: „Ton fest am Bild“ aus)
 - F23 Audio-Modus wird automatisch erkannt (Kanalzahl, später Metadaten) und ist im UI und Sidecar übersteuerbar

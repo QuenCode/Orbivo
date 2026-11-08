@@ -288,7 +288,7 @@
             <TextBlock Text="Breite:" VerticalAlignment="Center" Margin="16,0,6,0" />
             <ComboBox ItemsSource="{Binding Format.StereoWidths}" SelectedItem="{Binding Format.SelectedStereoWidth}"
                       IsEnabled="{Binding Format.CanChooseStereoWidth}" Focusable="False" MinWidth="110" HorizontalAlignment="Left"
-                      ToolTip="Winkel der beiden virtuellen Lautsprecher links und rechts von der Bildmitte. 60° entspricht einer üblichen Stereo-Aufstellung; größer klingt breiter, kleiner enger." />
+                      ToolTip="Winkel der beiden virtuellen Lautsprecher links und rechts von der Bildmitte. Standard 75°; größer klingt breiter, kleiner enger (eine übliche Stereo-Aufstellung hätte 30°)." />
           </DockPanel>
           <TextBlock Grid.Row="2" Grid.Column="0" Text="Tonausgabe:" VerticalAlignment="Center" Margin="0,2,16,2" />
           <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,2,0,2">

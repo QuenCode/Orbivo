@@ -59,7 +59,7 @@ Jeder Meilenstein endet mit: grünem Build, grünen Tests, Commit und der **Chec
 Neu zugeschnitten am 2026-11-08 (`DECISIONS.md`): Der Ton der Videos ist Stereo, er soll zum Bild passen. Ambisonics und Surround kommen später.
 - Steam-Audio-Interop (Binaural-Effekt mit eingebauter HRTF), `AudioCoordinates` mit Unit-Tests
 - Kopfrichtung im Bildsystem vom Render-Thread (Brille) bzw. von der Maus (Vorschau) als lock-freier Snapshot, Verarbeitung im Audio-Thread in 256er-Blöcken ohne Versatz zur Uhr
-- Zwei virtuelle Lautsprecher bei ±Breite (Standard 60°); Schalter „Ton fest am Bild“ und Breite pro Video im Operatorfenster und Sidecar, Standard an. Mono bleibt kopffest, Mehrkanal wird auf Stereo gemischt
+- Zwei virtuelle Lautsprecher bei ±Breite (Standard 75°); Schalter „Ton fest am Bild“ und Breite pro Video im Operatorfenster und Sidecar, Standard an. Mono bleibt kopffest, Mehrkanal wird auf Stereo gemischt
 - Testvideo `stereo_richtungstest_…` (`make_testmedia.py --what stereo`)
 - **Fertig, wenn:** Richtung (Pegelunterschied der Ohren) mit echter `phonon.dll` gemessen, keine Knackser beim Drehen, A/V unverändert, Audio-Thread allokiert nicht, Last unter 1 % ✔
 - **Hör-Test:** Stereo-Richtungstest: Der Ton kommt aus dem leuchtenden Kasten, auch beim Kopfdrehen. Mitte vorne, nicht im Kopf. Schalter aus: links bleibt links. Keine Knackser, kein spürbares Nachziehen.

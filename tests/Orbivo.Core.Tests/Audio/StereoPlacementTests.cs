@@ -19,7 +19,7 @@ public sealed class StereoPlacementTests : IDisposable
         StereoPlacement placement = StereoPlacement.From(FormatOverrides.None);
 
         Assert.True(placement.FixedToPicture);
-        Assert.Equal(60, placement.WidthDegrees);
+        Assert.Equal(75, placement.WidthDegrees);
         Assert.Equal(StereoPlacement.Default, placement);
     }
 
@@ -35,7 +35,7 @@ public sealed class StereoPlacementTests : IDisposable
     [Theory]
     [InlineData(10, 30)]
     [InlineData(120, 90)]
-    [InlineData(double.NaN, 60)]
+    [InlineData(double.NaN, 75)]
     public void From_ClampsTheWidth(double width, double expected)
     {
         Assert.Equal(expected, StereoPlacement.From(new FormatOverrides(StereoWidthDegrees: width)).WidthDegrees);

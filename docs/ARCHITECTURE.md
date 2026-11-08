@@ -119,7 +119,7 @@ Stand M7: Stereo direkt oder „fest am Bild“ (zwei virtuelle Lautsprecher, bi
 - `settings.json` (`%LOCALAPPDATA%\Orbivo`) speichert Gerät, Lautstärke und die Ton-Sperre, nicht Stumm (`AppSettings`, Core).
 
 ### Ton fest am Bild (M7)
-- **Wahl:** `StereoPlacement` (Core) = fest am Bild ja/nein und Breite (30–90°, Standard an, 60°), aus dem Sidecar (`audioFixedToPicture`, `stereoWidthDeg`). Der Player schickt sie beim Öffnen, nach jedem Neuöffnen des Ton-Decoders und bei jeder Änderung im Operatorfenster über `IAudioOutput.SetStereoPlacement` (lock-freie Befehlsqueue). Mono-Spuren bekommen immer „direkt“.
+- **Wahl:** `StereoPlacement` (Core) = fest am Bild ja/nein und Breite (30–90°, Standard an, 75°), aus dem Sidecar (`audioFixedToPicture`, `stereoWidthDeg`). Der Player schickt sie beim Öffnen, nach jedem Neuöffnen des Ton-Decoders und bei jeder Änderung im Operatorfenster über `IAudioOutput.SetStereoPlacement` (lock-freie Befehlsqueue). Mono-Spuren bekommen immer „direkt“.
 - **Kopfrichtung:** `ListenerOrientation` (siehe Threads) = Kopf im Bildsystem, `OrientationOffset.ApplyToView(Kopf)`, dieselbe Rechnung wie für das Bild. Recenter (M8) muss dort mit eingehen.
 - **Lautsprecher:** `AudioCoordinates.StereoSpeakers(Breite, Kopf)` liefert die Richtungen der beiden Lautsprecher (Yaw ±Breite auf dem Horizont des Bilds) relativ zum Kopf: `normalize(conj(Kopf)·Richtung)`. Steam Audio nutzt dieselben Achsen wie OpenXR (+X rechts, +Y oben, −Z vorne), es gibt keine weitere Umrechnung.
 - **Verarbeitung:** `SpatialStage` (Orbivo.Audio, gehört dem Audio-Thread) arbeitet in Blöcken zu 256 Frames: Kopfrichtung lesen, `SteamStereoSpatializer` (je Kanal ein `iplBinauralEffect` mit eingebauter HRTF, bilinear, Ohrsignale addiert × 0,6). Die Stufe verzögert um genau einen Block; `AudioRenderer` liest den Ringpuffer um diesen Block voraus, damit das Gehörte zur Medienposition passt (Uhr und A/V unverändert). Nach Start, Seek, Flush und Umschalten füllt der Renderer die Verzögerungsleitung neu. Umschalten während der Wiedergabe läuft über die 5-ms-Transportrampe.
@@ -170,7 +170,7 @@ Vorzeichen von `orientationOffsetDeg`: wie überall Rechte-Hand-Regel, Yaw posit
   "cubemapLayout": "6x1",
   "orientationOffsetDeg": { "yaw": 30, "pitch": 0, "roll": 0 },
   "audioFixedToPicture": null,
-  "stereoWidthDeg": 75
+  "stereoWidthDeg": 60
 }
 ```
 - **`null` oder fehlend = automatisch** (Metadaten, sonst Schätzung). Geschrieben werden immer alle Formatfelder.
@@ -178,7 +178,7 @@ Vorzeichen von `orientationOffsetDeg`: wie überall Rechte-Hand-Regel, Yaw posit
 - `cubemapLayout`: Name einer Vorgabe (`3x2`, `6x1`, `1x6`, `eac`) oder ein Objekt `{ "columns": 3, "rows": 2, "faceOrder": "rludfb", "faceRotation": "000000", "padding": 0 }`.
 - `fisheye`: `{ "fovDeg": 180, "centerX": 0.5, "centerY": 0.5, "radius": 0.5 }` (fehlende Felder: diese Standardwerte).
 - `orientationOffsetDeg`: je Achse höchstens ±360°; `null` = keine Drehung.
-- `audioFixedToPicture` (M7): `true`/`false`, `null` = an (Ton fest am Bild). `stereoWidthDeg`: 30–90, `null` = 60.
+- `audioFixedToPicture` (M7): `true`/`false`, `null` = an (Ton fest am Bild). `stereoWidthDeg`: 30–90, `null` = 75.
 - Geplante Felder (`audioMode`, `externalAudio`) und alle unbekannten Felder bleiben beim Speichern erhalten.
 - Speichern: bei jeder Änderung im Operatorfenster, über eine `.tmp`-Datei. Ist nichts mehr eingestellt und gibt es keine fremden Felder, wird die Datei gelöscht.
 - Ungültige Felder werden mit Hinweis ignoriert. Eine Datei, die kein JSON ist, wird gemeldet, ignoriert und vor dem ersten Überschreiben als `.orbivo.json.bak` gesichert. Eine Datei mit `version` > 1 wird gelesen, aber nie überschrieben.

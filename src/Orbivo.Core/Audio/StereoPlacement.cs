@@ -13,9 +13,9 @@ public readonly record struct StereoPlacement(bool FixedToPicture, double WidthD
 {
     public const double MinWidthDegrees = 30;
     public const double MaxWidthDegrees = 90;
-    public const double DefaultWidthDegrees = 60;
+    public const double DefaultWidthDegrees = 75;
 
-    /// <summary>Fixed to the picture, 60°: the setting of a video without sidecar choices.</summary>
+    /// <summary>Fixed to the picture, 75°: the setting of a video without sidecar choices.</summary>
     public static StereoPlacement Default => new(true, DefaultWidthDegrees);
 
     /// <summary>Plain stereo on the headphones (also used for mono tracks, which have no direction).</summary>
@@ -37,7 +37,7 @@ public readonly record struct StereoPlacement(bool FixedToPicture, double WidthD
     public static double ClampWidth(double degrees) =>
         double.IsFinite(degrees) ? Math.Clamp(degrees, MinWidthDegrees, MaxWidthDegrees) : DefaultWidthDegrees;
 
-    /// <summary>German text for the operator, e.g. "fest am Bild, Lautsprecher bei ±60°".</summary>
+    /// <summary>German text for the operator, e.g. "fest am Bild, Lautsprecher bei ±75°".</summary>
     public string Describe() => FixedToPicture
         ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"fest am Bild, Lautsprecher bei ±{WidthDegrees:0}°")
         : "Stereo direkt (dreht mit dem Kopf)";

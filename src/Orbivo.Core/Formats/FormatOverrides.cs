@@ -12,7 +12,7 @@ namespace Orbivo.Core.Formats;
 /// <param name="Fisheye">Fisheye circle, or null for automatic (180°, centered).</param>
 /// <param name="Offset">Orientation offset, or null for none.</param>
 /// <param name="AudioFixedToPicture">Stereo sound fixed to the picture (M7), or null for the default (on).</param>
-/// <param name="StereoWidthDegrees">Angle of the virtual stereo speakers, or null for the default (60°).</param>
+/// <param name="StereoWidthDegrees">Angle of the virtual stereo speakers, or null for the default (75°).</param>
 public sealed record FormatOverrides(
     ProjectionType? Projection = null,
     StereoLayout? Layout = null,
