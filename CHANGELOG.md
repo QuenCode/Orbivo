@@ -7,6 +7,8 @@ Was sich von Version zu Version für Operatoren und Auswertung ändert. Neue Ein
 
 ## Unveröffentlicht
 
+## 1.0.0 – 2026-11-08
+
 Erste ausgelieferte Version.
 
 - Wiedergabe von 360°- und 180°-Videos bis 8K in der Varjo XR-3, Mono und Stereo (Top-Bottom, Side-by-Side), Projektionen Equirect 360°/180°, Cubemap, EAC und Fisheye; Format aus den Metadaten oder pro Video einstellbar (Sidecar `*.orbivo.json`)

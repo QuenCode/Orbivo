@@ -26,7 +26,7 @@
     <Product>Orbivo</Product>
     <Company>Orbivo</Company>
     <!-- Version of the last release. Only release.ps1 changes it (docs/RELEASE.md). -->
-    <Version>0.1.0</Version>
+    <Version>1.0.0</Version>
     <!-- Builds outside release.ps1 are marked "-dev" in the title bar, the log and the recordings. -->
     <InformationalVersion Condition="'$(OrbivoRelease)' != 'true'">$(Version)-dev</InformationalVersion>
     <NeutralLanguage>en</NeutralLanguage>
