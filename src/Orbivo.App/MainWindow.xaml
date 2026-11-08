@@ -407,11 +407,14 @@
             <TextBox x:Name="FadeSecondsBox" Width="48" VerticalContentAlignment="Center"
                      Text="{Binding FadeSecondsText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Fade-Dauer in Sekunden (0,1 bis 30)" />
             <TextBlock Text="s" VerticalAlignment="Center" Margin="4,0,12,0" />
-            <Button Content="Recenter" IsEnabled="False" ToolTip="Folgt in M8 (Taste R)" />
+            <Button Content="Recenter" Command="{Binding RecenterCommand}" MinWidth="90"
+                    ToolTip="Die aktuelle Blickrichtung des Probanden wird die Vorderseite des Videos, für Bild und Ton (Taste R). Gilt auch für die nächsten Videos" />
+            <Button Content="Recenter zurücksetzen" Command="{Binding ResetRecenterCommand}"
+                    ToolTip="Wieder die Vorderseite des Videos (Shift+R)" />
           </WrapPanel>
         </DockPanel>
         <TextBlock Style="{StaticResource PlaceholderText}" Margin="0,8,0,0" FontStyle="Normal"
-                   Text="Tasten: Leertaste Play/Pause · ←/→ ±5 s · Shift+←/→ ±30 s · , / . Einzelbild · Bild↑/Bild↓ Video zurück/weiter · B Schwarzbild · F Fade · M Stumm" />
+                   Text="Tasten: Leertaste Play/Pause · ←/→ ±5 s · Shift+←/→ ±30 s · , / . Einzelbild · Bild↑/Bild↓ Video zurück/weiter · B Schwarzbild · F Fade · M Stumm · R Recenter · Shift+R Recenter zurücksetzen" />
       </StackPanel>
     </GroupBox>
   </Grid>

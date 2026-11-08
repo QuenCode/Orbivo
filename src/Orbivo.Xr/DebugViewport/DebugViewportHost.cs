@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Numerics;
 using Microsoft.Extensions.Logging;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Formats;
@@ -21,12 +22,13 @@ public enum DebugViewportState
 /// <summary>Snapshot of the debug viewport for the operator UI.</summary>
 /// <param name="State">Life cycle state.</param>
 /// <param name="FramesPerSecond">Presented frames per second, averaged over about one second.</param>
-/// <param name="YawDegrees">View yaw, positive = left.</param>
+/// <param name="YawDegrees">View yaw relative to the front after recenter, positive = left.</param>
 /// <param name="PitchDegrees">View pitch, positive = up.</param>
 /// <param name="VerticalFovDegrees">Vertical field of view.</param>
 /// <param name="HasImage">True once an image is shown.</param>
 /// <param name="RenderLoopAllocates">True if the render loop allocated after warm-up (CLAUDE.md rule 1, details in the log).</param>
 /// <param name="Error">Error message if <paramref name="State"/> is <see cref="DebugViewportState.Failed"/>.</param>
+/// <param name="Recenter">Recenter state (F30), carried out with the mouse view.</param>
 public readonly record struct DebugViewportStatus(
     DebugViewportState State,
     float FramesPerSecond,
@@ -35,7 +37,8 @@ public readonly record struct DebugViewportStatus(
     float VerticalFovDegrees,
     bool HasImage,
     bool RenderLoopAllocates,
-    string? Error);
+    string? Error,
+    RecenterStatus Recenter = default);
 
 /// <summary>
 /// Desktop window that stands in for the headset in <c>--no-xr</c> mode (docs/ARCHITECTURE.md).
@@ -59,6 +62,7 @@ public sealed class DebugViewportHost : IDisposable
     private IVideoFrameSource? _videoSource;
     private LiveViewFrames? _liveView;
     private ListenerOrientation? _listener;
+    private RecenterControl? _recenter;
     private VideoFormat _imageFormat = VideoFormat.Default;
 
     // Status, written by the render thread, read by the UI.
@@ -117,6 +121,14 @@ public sealed class DebugViewportHost : IDisposable
         Volatile.Write(ref _listener, listener);
     }
 
+    /// <summary>
+    /// Carries out recenter requests (F30) with the mouse view, like the headset does with the head. Any thread.
+    /// </summary>
+    public void SetRecenter(RecenterControl? recenter)
+    {
+        Volatile.Write(ref _recenter, recenter);
+    }
+
     /// <summary>Stereo layout of the images passed to <see cref="ShowImage"/>; the preview shows the left eye. Any thread.</summary>
     public void SetImageLayout(StereoLayout layout)
     {
@@ -143,7 +155,8 @@ public sealed class DebugViewportHost : IDisposable
             Volatile.Read(ref _verticalFovDegrees),
             Volatile.Read(ref _hasImage) != 0,
             Volatile.Read(ref _renderLoopAllocates) != 0,
-            Volatile.Read(ref _error));
+            Volatile.Read(ref _error),
+            RecenterStatus.Of(Volatile.Read(ref _recenter)));
     }
 
     public void Dispose()
@@ -242,6 +255,8 @@ public sealed class DebugViewportHost : IDisposable
             }
 
             view.GetViews(views);
+            Quaternion correction = Volatile.Read(ref _recenter)?.Update(views[0].Orientation, headTracked: true) ?? Quaternion.Identity;
+            views[0] = RecenterControl.Apply(views[0], correction);
 
             // Flip model with one frame of latency: the frame appears with the next vertical blank, close enough to now.
             IVideoFrameSource? video = Volatile.Read(ref _videoSource);
@@ -257,7 +272,7 @@ public sealed class DebugViewportHost : IDisposable
 
             frame++;
             framesInInterval++;
-            PublishView(view);
+            PublishView(view, views[0].Orientation);
 
             long now = Stopwatch.GetTimestamp();
             if (now - intervalStart >= Stopwatch.Frequency)
@@ -279,10 +294,13 @@ public sealed class DebugViewportHost : IDisposable
         }
     }
 
-    private void PublishView(MouseViewSource view)
+    /// <param name="view">Mouse control (field of view).</param>
+    /// <param name="recentered">View orientation after recenter: the direction relative to the front (F41).</param>
+    private void PublishView(MouseViewSource view, Quaternion recentered)
     {
-        Volatile.Write(ref _yawDegrees, float.RadiansToDegrees(view.Yaw));
-        Volatile.Write(ref _pitchDegrees, float.RadiansToDegrees(view.Pitch));
+        (float yaw, float pitch) = OrientationMath.ToYawPitch(recentered);
+        Volatile.Write(ref _yawDegrees, float.RadiansToDegrees(yaw));
+        Volatile.Write(ref _pitchDegrees, float.RadiansToDegrees(pitch));
         Volatile.Write(ref _verticalFovDegrees, view.VerticalFovDegrees);
     }
 }

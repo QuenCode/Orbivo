@@ -11,6 +11,7 @@ using Orbivo.Audio.Output;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
+using Orbivo.Core.Geometry;
 using Orbivo.Core.Playback;
 using Orbivo.Core.Playlists;
 using Orbivo.Core.Settings;
@@ -70,6 +71,8 @@ public sealed class MainViewModel : ObservableObject
     private PlayerStatus _lastStatus = PlayerStatus.Empty;
     private PlaybackState _playbackState = PlaybackState.NoMedia;
     private bool _playerRunning;
+    private RecenterStatus _recenter;
+    private readonly StatusEntry _recenterEntry = new("Recenter", "Aus (Vorderseite des Videos)", StatusLevel.Neutral);
     private string _timeText = MediaTime.Format(TimeSpan.Zero) + " / " + MediaTime.Format(TimeSpan.Zero);
     private double _timelineSeconds;
     private double _durationSeconds;
@@ -131,6 +134,10 @@ public sealed class MainViewModel : ObservableObject
         GoToTimeCommand = new RelayCommand(GoToTime, () => CanSeek);
         ToggleBlackoutCommand = new RelayCommand(ToggleBlackout, () => _playerRunning);
         ToggleFadeCommand = new RelayCommand(ToggleFade, () => _playerRunning);
+        RecenterCommand = new RelayCommand(() => Send(new Core.Commands.RecenterCommand()), () => _playerRunning && _recenter.Available);
+        ResetRecenterCommand = new RelayCommand(
+            () => Send(new Core.Commands.ResetRecenterCommand()),
+            () => _playerRunning && _recenter.Available && (_recenter.IsActive || _recenter.Pending));
         ToggleMuteCommand = new RelayCommand(() => Muted = !Muted);
         RefreshAudioDevicesCommand = new RelayCommand(RefreshAudioDevices, () => !SoundLocked);
 
@@ -175,6 +182,7 @@ public sealed class MainViewModel : ObservableObject
                 _soundOutputEntry,
                 _avSyncEntry,
                 _viewEntry,
+                _recenterEntry,
             ]);
         }
         else
@@ -186,7 +194,7 @@ public sealed class MainViewModel : ObservableObject
             entries.AddRange(
             [
                 _headsetEntry, _sessionEntry, _xrRenderEntry, _gpuEntry, _playbackEntry, _outputEntry, _playlistEntry,
-                _videoEntry, _decoderEntry, _soundEntry, _soundOutputEntry, _avSyncEntry, _viewEntry,
+                _videoEntry, _decoderEntry, _soundEntry, _soundOutputEntry, _avSyncEntry, _viewEntry, _recenterEntry,
             ]);
         }
 
@@ -368,6 +376,12 @@ public sealed class MainViewModel : ObservableObject
 
     public IRelayCommand ToggleFadeCommand { get; }
 
+    /// <summary>The test person's viewing direction becomes the front of the video (F30, key R).</summary>
+    public IRelayCommand RecenterCommand { get; }
+
+    /// <summary>The video's own front applies again (Shift+R).</summary>
+    public IRelayCommand ResetRecenterCommand { get; }
+
     public Playlist Playlist { get; }
 
     /// <summary>The entry selected in the list (not necessarily the loaded one).</summary>
@@ -527,6 +541,8 @@ public sealed class MainViewModel : ObservableObject
         _playerRunning = true;
         ToggleBlackoutCommand.NotifyCanExecuteChanged();
         ToggleFadeCommand.NotifyCanExecuteChanged();
+        RecenterCommand.NotifyCanExecuteChanged();
+        ResetRecenterCommand.NotifyCanExecuteChanged();
         AddRefresher(() => ShowPlayerStatus(getStatus()));
     }
 
@@ -1208,6 +1224,40 @@ public sealed class MainViewModel : ObservableObject
                     $"{DescribeDirection(status.HeadYawDegrees, status.HeadPitchDegrees)}: Yaw {status.HeadYawDegrees:+0;-0;0}°, Pitch {status.HeadPitchDegrees:+0;-0;0}°"),
                 StatusLevel.Ok);
         }
+
+        ShowRecenter(status.Recenter, waitingText: "wartet auf Kopf-Tracking");
+    }
+
+    /// <summary>Recenter line and buttons (F30). The yaw is the turn of the video's front, positive = to the left.</summary>
+    private void ShowRecenter(RecenterStatus recenter, string waitingText)
+    {
+        bool changed = recenter != _recenter;
+        _recenter = recenter;
+        if (!changed)
+        {
+            return;
+        }
+
+        CultureInfo culture = CultureInfo.CurrentCulture;
+        if (recenter.Pending)
+        {
+            _recenterEntry.Update($"Angefordert, {waitingText}", StatusLevel.Warning);
+        }
+        else if (!recenter.IsActive)
+        {
+            _recenterEntry.Update("Aus (Vorderseite des Videos)", StatusLevel.Neutral);
+        }
+        else
+        {
+            float yaw = recenter.YawDegrees;
+            string side = yaw > 0f ? "links" : "rechts";
+            _recenterEntry.Update(
+                string.Create(culture, $"Vorne liegt {Math.Abs(yaw):0}° {side} der Vorderseite des Videos (Yaw {yaw:+0;-0;0}°)"),
+                StatusLevel.Ok);
+        }
+
+        RecenterCommand.NotifyCanExecuteChanged();
+        ResetRecenterCommand.NotifyCanExecuteChanged();
     }
 
     private void ShowViewportStatus(DebugViewportStatus status)
@@ -1242,6 +1292,8 @@ public sealed class MainViewModel : ObservableObject
                     $"{DescribeDirection(status.YawDegrees, status.PitchDegrees)}: Yaw {status.YawDegrees:+0;-0;0}°, Pitch {status.PitchDegrees:+0;-0;0}°, Sichtfeld {status.VerticalFovDegrees:0}°"),
                 StatusLevel.Neutral);
         }
+
+        ShowRecenter(status.Recenter, waitingText: "wartet auf das Vorschaufenster");
     }
 
     private void ShowLiveViewStatus()

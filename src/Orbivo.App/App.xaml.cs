@@ -14,6 +14,7 @@ using Orbivo.Audio.Output;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
+using Orbivo.Core.Geometry;
 using Orbivo.Core.Logging;
 using Orbivo.Core.Settings;
 using Orbivo.Core.Status;
@@ -52,6 +53,9 @@ public partial class App : Application
 
     /// <summary>Head direction in the picture's frame, render thread → audio thread (sound fixed to the picture, M7).</summary>
     private readonly ListenerOrientation _listener = new();
+
+    /// <summary>Recenter (F30): requested by the player, carried out by the render thread. Not saved (docs/DECISIONS.md, M8).</summary>
+    private readonly RecenterControl _recenter = new();
 
 #if DEBUG
     private const bool RequestDebugLayer = true;
@@ -170,6 +174,7 @@ public partial class App : Application
         _xrHost = new XrHost(loggerFactory, RequestDebugLayer);
         _xrHost.SetImageLayout(options.StereoLayout ?? StereoLayout.Mono);
         _xrHost.SetListener(_listener);
+        _xrHost.SetRecenter(_recenter);
         _xrHost.Start();
         viewModel.StartXrPolling(_xrHost.GetStatus);
         _ = StartWhenDeviceReadyAsync(options, ffmpegAvailable, _xrHost, viewModel, loggerFactory, logger);
@@ -212,7 +217,7 @@ public partial class App : Application
             return;
         }
 
-        _player = new VideoPlayer(device.Device, _playerCommands.Reader, new VideoPlayerOptions(_options?.StereoLayout, Decoder: _options?.Decoder ?? DecoderPreference.Auto), loggerFactory, _audioOutput);
+        _player = new VideoPlayer(device.Device, _playerCommands.Reader, new VideoPlayerOptions(_options?.StereoLayout, Decoder: _options?.Decoder ?? DecoderPreference.Auto) { Recenter = _recenter }, loggerFactory, _audioOutput);
         attach(_player);
         _player.Start();
         viewModel.StartPlayerPolling(_player.GetStatus);
@@ -235,6 +240,7 @@ public partial class App : Application
         _debugViewport = new DebugViewportHost(_graphicsDevice, loggerFactory.CreateLogger<DebugViewportHost>());
         _debugViewport.SetImageLayout(options.StereoLayout ?? StereoLayout.Mono);
         _debugViewport.SetListener(_listener);
+        _debugViewport.SetRecenter(_recenter);
         AttachLiveView(_graphicsDevice, _debugViewport.SetLiveView, logger);
         StartPlayer(_graphicsDevice, ffmpegAvailable, _debugViewport.SetVideoSource, viewModel, loggerFactory, logger);
         _debugViewport.Start();

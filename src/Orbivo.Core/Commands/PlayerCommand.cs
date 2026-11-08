@@ -62,3 +62,12 @@ public sealed record SetAudioDeviceCommand(string? DeviceId) : PlayerCommand;
 /// (<c>&lt;video&gt;.orbivo.json</c>). Fields left null are automatic again (metadata or guess).
 /// </summary>
 public sealed record SetVideoFormatCommand(FormatOverrides Overrides) : PlayerCommand;
+
+/// <summary>
+/// Recenter (F30/F31): the test person's current viewing direction becomes the front of the video (yaw only), for
+/// picture and sound. Carried out by the render thread with the head pose of its next frame; kept across videos.
+/// </summary>
+public sealed record RecenterCommand : PlayerCommand;
+
+/// <summary>Takes back the recenter: the video's own front applies again.</summary>
+public sealed record ResetRecenterCommand : PlayerCommand;

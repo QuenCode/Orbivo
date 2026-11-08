@@ -22,7 +22,21 @@ namespace Orbivo.Xr.OpenXr;
 /// <param name="HeadInContent">Head orientation in the shown picture's frame (orientation offset applied), for the sound.</param>
 /// <param name="DisplayTimestamp">Predicted display time as Stopwatch timestamp.</param>
 /// <param name="PredictedDisplayPeriod">Frame period in nanoseconds.</param>
-internal readonly record struct XrFrameResult(bool Submitted, bool HeadTracked, Quaternion Head, Quaternion HeadInContent, long DisplayTimestamp, long PredictedDisplayPeriod);
+/// <param name="Submitted">True if a layer was submitted.</param>
+/// <param name="HeadTracked">True if this frame's head orientation is valid.</param>
+/// <param name="TrackedHead">Head orientation as tracked in the LOCAL space.</param>
+/// <param name="Head">Head orientation after recenter (F30): identity = looking at the front.</param>
+/// <param name="HeadInContent">Head in the video's own frame (recenter and orientation offset), as the renderer looks into it.</param>
+/// <param name="DisplayTimestamp">Stopwatch timestamp of the predicted display time.</param>
+/// <param name="PredictedDisplayPeriod">Frame period of the headset in nanoseconds.</param>
+internal readonly record struct XrFrameResult(
+    bool Submitted,
+    bool HeadTracked,
+    Quaternion TrackedHead,
+    Quaternion Head,
+    Quaternion HeadInContent,
+    long DisplayTimestamp,
+    long PredictedDisplayPeriod);
 
 /// <summary>
 /// A session with its LOCAL reference space and one swapchain per eye (docs/ARCHITECTURE.md, "OpenXR-Lebenszyklus").
@@ -151,7 +165,8 @@ internal sealed unsafe class XrSession : IDisposable
         IVideoFrameSource? video,
         StillImageTexture? image,
         VideoFormat imageFormat,
-        LiveViewFrames? liveView)
+        LiveViewFrames? liveView,
+        RecenterControl? recenter)
     {
         var waitInfo = new FrameWaitInfo(type: StructureType.FrameWaitInfo);
         var frameState = new FrameState(type: StructureType.FrameState);
@@ -167,7 +182,8 @@ internal sealed unsafe class XrSession : IDisposable
         bool hasVideoFrame = video is not null && video.TryGetFrame(displayTimestamp, out frame);
 
         bool headTracked = false;
-        Quaternion head = Quaternion.Identity;
+        Quaternion trackedHead = Quaternion.Identity;
+        Quaternion correction = Quaternion.Identity;
         OrientationOffset offset = OrientationOffset.Zero;
         uint layerCount = 0;
         if (frameState.ShouldRender != 0)
@@ -175,24 +191,26 @@ internal sealed unsafe class XrSession : IDisposable
             headTracked = LocateViews(frameState.PredictedDisplayTime);
             if (_hasValidViews)
             {
+                trackedHead = Quaternion.Normalize(Quaternion.Slerp(
+                    XrConversions.ToQuaternion(_views[0].Pose.Orientation),
+                    XrConversions.ToQuaternion(_views[1].Pose.Orientation),
+                    0.5f));
+
+                // Recenter turns every view the same way (F31: picture, live view and sound).
+                correction = recenter?.Update(trackedHead, headTracked) ?? Quaternion.Identity;
                 PanoramaSource source = hasVideoFrame ? PanoramaSource.FromVideo(frame) : PanoramaSource.FromImage(image, imageFormat);
                 offset = source.Format.Offset;
                 // Blackout and fade (F5) also cover the still image; without a player there is nothing to dim.
                 float brightness = video?.GetOutputBrightness(displayTimestamp) ?? 1f;
-                RenderEyes(renderer, source, brightness);
+                RenderEyes(renderer, source, brightness, correction);
                 layerCount = 1;
                 if (liveView is { Enabled: true })
                 {
                     ViewParameters combined = CombinedView.Create(
-                        XrConversions.ToViewParameters(_views[0], orientationValid: true, Quaternion.Identity),
-                        XrConversions.ToViewParameters(_views[1], orientationValid: true, Quaternion.Identity));
+                        RecenterControl.Apply(XrConversions.ToViewParameters(_views[0], orientationValid: true, Quaternion.Identity), correction),
+                        RecenterControl.Apply(XrConversions.ToViewParameters(_views[1], orientationValid: true, Quaternion.Identity), correction));
                     liveView.RenderIfDue(renderer, _device.ImmediateContext, combined, source, brightness, displayTimestamp);
                 }
-
-                head = Quaternion.Slerp(
-                    XrConversions.ToQuaternion(_views[0].Pose.Orientation),
-                    XrConversions.ToQuaternion(_views[1].Pose.Orientation),
-                    0.5f);
             }
         }
 
@@ -211,7 +229,15 @@ internal sealed unsafe class XrSession : IDisposable
         _xr.EndFrame(Handle, &endInfo).Check("xrEndFrame");
 
         // The sound looks into the video exactly like the eyes do (CLAUDE.md rule 6: rotation only).
-        return new XrFrameResult(layerCount > 0, headTracked, head, offset.ApplyToView(head), displayTimestamp, frameState.PredictedDisplayPeriod);
+        Quaternion head = Quaternion.Normalize(correction * trackedHead);
+        return new XrFrameResult(
+            layerCount > 0,
+            headTracked,
+            trackedHead,
+            head,
+            offset.ApplyToView(head),
+            displayTimestamp,
+            frameState.PredictedDisplayPeriod);
     }
 
     public void Dispose()
@@ -287,12 +313,12 @@ internal sealed unsafe class XrSession : IDisposable
         return valid;
     }
 
-    private void RenderEyes(PanoramaRenderer renderer, in PanoramaSource source, float brightness)
+    private void RenderEyes(PanoramaRenderer renderer, in PanoramaSource source, float brightness, Quaternion correction)
     {
         for (int eye = 0; eye < XrInstance.EyeCount; eye++)
         {
             ref readonly View view = ref _views[eye];
-            ViewParameters parameters = XrConversions.ToViewParameters(view, orientationValid: true, Quaternion.Identity);
+            ViewParameters parameters = RecenterControl.Apply(XrConversions.ToViewParameters(view, orientationValid: true, Quaternion.Identity), correction);
 
             XrSwapchain swapchain = _swapchains[eye];
             var target = swapchain.AcquireImage();

@@ -61,6 +61,26 @@ public sealed class TestImageRenderTests(TestImageRenderTests.Fixture fixture) :
         AssertMajority(bgra, 0, Width, Height / 2, Height, "VORNE");
     }
 
+    [Theory]
+    [InlineData(90, 0, 0, "VORNE")] // head 90° left, recenter: the front is where the head looks
+    [InlineData(90, 0, -90, "RECHTS")] // then turning 90° right shows what lies right of the front
+    [InlineData(-135, 0, 90, "LINKS")]
+    [InlineData(60, 30, 0, "VORNE")] // the head looked up while recentering: only the yaw counts
+    public void Recenter_MakesTheHeadDirectionTheFront(double headYaw, double headPitch, double turnAfterwards, string expectedFace)
+    {
+        var recenter = new RecenterControl();
+        ViewParameters head = TestViews.Create(headYaw, headPitch, 40, 16.0 / 9.0);
+        recenter.RequestRecenter();
+        recenter.Update(head.Orientation, headTracked: true);
+
+        // Afterwards the head turns on and looks straight ahead again.
+        ViewParameters later = TestViews.Create(headYaw + turnAfterwards, 0, 40, 16.0 / 9.0);
+        ViewParameters view = RecenterControl.Apply(later, recenter.Update(later.Orientation, headTracked: true));
+        byte[] bgra = Render($"recenter_{headYaw}_{headPitch}_{turnAfterwards}", view);
+
+        AssertMajority(bgra, 0, Width, 0, Height, expectedFace);
+    }
+
     [Fact]
     public void FaceColor_PassesThroughTheSrgbPipelineUnchanged()
     {

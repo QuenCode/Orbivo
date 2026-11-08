@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
+using Orbivo.Core.Geometry;
 using Orbivo.Core.Playback;
 using Orbivo.Core.Status;
 using Vortice.Direct3D11;
@@ -23,6 +24,9 @@ public sealed record VideoPlayerOptions(StereoLayout? StereoLayout, int FrameSlo
 {
     /// <summary>False skips the hardware check before opening, so the fallback after a hardware failure can be tested.</summary>
     internal bool CheckHardware { get; init; } = true;
+
+    /// <summary>Recenter (F30), shared with the render thread that carries it out. Null: recenter commands are ignored.</summary>
+    public RecenterControl? Recenter { get; init; }
 }
 
 /// <summary>
@@ -385,6 +389,12 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
                 break;
             case SetVideoFormatCommand format:
                 SetFormat(format.Overrides);
+                break;
+            case RecenterCommand:
+                _options.Recenter?.RequestRecenter();
+                break;
+            case ResetRecenterCommand:
+                _options.Recenter?.RequestReset();
                 break;
             default:
                 _logger.LogWarning("Unknown command {Command} ignored.", command);

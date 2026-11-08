@@ -125,6 +125,7 @@ public partial class MainWindow : Window
             Key.B => (viewModel.ToggleBlackoutCommand, null),
             Key.F => (viewModel.ToggleFadeCommand, null),
             Key.M => (viewModel.ToggleMuteCommand, null),
+            Key.R => (shift ? viewModel.ResetRecenterCommand : viewModel.RecenterCommand, null),
             _ => ((ICommand?)null, (object?)null),
         };
 

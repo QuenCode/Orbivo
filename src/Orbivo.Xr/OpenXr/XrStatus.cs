@@ -1,3 +1,5 @@
+using Orbivo.Core.Geometry;
+
 namespace Orbivo.Xr.OpenXr;
 
 /// <summary>Connection to the headset as the operator UI shows it.</summary>
@@ -66,11 +68,12 @@ public sealed record XrRuntimeInfo(
 /// <param name="FramesPerSecond">Submitted frames per second, averaged over about one second.</param>
 /// <param name="DisplayRefreshHz">Refresh rate of the headset from the predicted display period.</param>
 /// <param name="HeadTracked">True if the last frame had a valid head orientation.</param>
-/// <param name="HeadYawDegrees">Head yaw of the viewer, positive = left (docs/DECISIONS.md).</param>
+/// <param name="HeadYawDegrees">Head yaw of the viewer relative to the front after recenter, positive = left (docs/DECISIONS.md).</param>
 /// <param name="HeadPitchDegrees">Head pitch of the viewer, positive = up.</param>
 /// <param name="HasImage">True once an image is shown in the headset.</param>
 /// <param name="RenderLoopAllocates">True if the frame loop allocated after warm-up (CLAUDE.md rule 1, details in the log).</param>
 /// <param name="Error">Last error text (English, from the exception) for <see cref="XrConnectionState.Failed"/>.</param>
+/// <param name="Recenter">Recenter state (F30).</param>
 public readonly record struct XrStatus(
     XrConnectionState State,
     XrSessionState SessionState,
@@ -82,4 +85,5 @@ public readonly record struct XrStatus(
     float HeadPitchDegrees,
     bool HasImage,
     bool RenderLoopAllocates,
-    string? Error);
+    string? Error,
+    RecenterStatus Recenter = default);

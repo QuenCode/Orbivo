@@ -43,6 +43,7 @@ public sealed class XrHost : IDisposable
     private IVideoFrameSource? _videoSource;
     private LiveViewFrames? _liveView;
     private ListenerOrientation? _listener;
+    private RecenterControl? _recenter;
     private VideoFormat _imageFormat = VideoFormat.Default;
     private volatile bool _stopRequested;
 
@@ -110,6 +111,12 @@ public sealed class XrHost : IDisposable
         Volatile.Write(ref _listener, listener);
     }
 
+    /// <summary>Carries out recenter requests (F30) with the head pose of the next frame. Any thread.</summary>
+    public void SetRecenter(RecenterControl? recenter)
+    {
+        Volatile.Write(ref _recenter, recenter);
+    }
+
     /// <summary>Stereo layout of the images passed to <see cref="ShowImage"/>. Any thread, before <see cref="ShowImage"/>.</summary>
     public void SetImageLayout(StereoLayout layout)
     {
@@ -136,7 +143,8 @@ public sealed class XrHost : IDisposable
             Volatile.Read(ref _headPitchDegrees),
             Volatile.Read(ref _hasImage) != 0,
             Volatile.Read(ref _renderLoopAllocates) != 0,
-            Volatile.Read(ref _error));
+            Volatile.Read(ref _error),
+            RecenterStatus.Of(Volatile.Read(ref _recenter)));
     }
 
     public void Dispose()
@@ -387,7 +395,8 @@ public sealed class XrHost : IDisposable
                 Volatile.Read(ref _videoSource),
                 image,
                 Volatile.Read(ref _imageFormat),
-                Volatile.Read(ref _liveView));
+                Volatile.Read(ref _liveView),
+                Volatile.Read(ref _recenter));
             frame++;
             framesInInterval++;
             PublishFrame(result);
