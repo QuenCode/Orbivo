@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Microsoft.Extensions.Logging;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
@@ -16,7 +16,13 @@ namespace Orbivo.Xr.OpenXr;
 /// <param name="HeadTracked">True if the runtime delivered a valid head orientation for this frame.</param>
 /// <param name="Head">Head orientation (average of both eyes), only meaningful if <paramref name="HeadTracked"/>.</param>
 /// <param name="PredictedDisplayPeriod">Display period in nanoseconds.</param>
-internal readonly record struct XrFrameResult(bool Submitted, bool HeadTracked, Quaternion Head, long PredictedDisplayPeriod);
+/// <param name="Submitted">A layer was submitted.</param>
+/// <param name="HeadTracked">The views had a valid orientation.</param>
+/// <param name="Head">Head orientation in the world (between the eyes).</param>
+/// <param name="HeadInContent">Head orientation in the shown picture's frame (orientation offset applied), for the sound.</param>
+/// <param name="DisplayTimestamp">Predicted display time as Stopwatch timestamp.</param>
+/// <param name="PredictedDisplayPeriod">Frame period in nanoseconds.</param>
+internal readonly record struct XrFrameResult(bool Submitted, bool HeadTracked, Quaternion Head, Quaternion HeadInContent, long DisplayTimestamp, long PredictedDisplayPeriod);
 
 /// <summary>
 /// A session with its LOCAL reference space and one swapchain per eye (docs/ARCHITECTURE.md, "OpenXR-Lebenszyklus").
@@ -162,6 +168,7 @@ internal sealed unsafe class XrSession : IDisposable
 
         bool headTracked = false;
         Quaternion head = Quaternion.Identity;
+        OrientationOffset offset = OrientationOffset.Zero;
         uint layerCount = 0;
         if (frameState.ShouldRender != 0)
         {
@@ -169,6 +176,7 @@ internal sealed unsafe class XrSession : IDisposable
             if (_hasValidViews)
             {
                 PanoramaSource source = hasVideoFrame ? PanoramaSource.FromVideo(frame) : PanoramaSource.FromImage(image, imageFormat);
+                offset = source.Format.Offset;
                 // Blackout and fade (F5) also cover the still image; without a player there is nothing to dim.
                 float brightness = video?.GetOutputBrightness(displayTimestamp) ?? 1f;
                 RenderEyes(renderer, source, brightness);
@@ -202,7 +210,8 @@ internal sealed unsafe class XrSession : IDisposable
             layers: &layerHeader);
         _xr.EndFrame(Handle, &endInfo).Check("xrEndFrame");
 
-        return new XrFrameResult(layerCount > 0, headTracked, head, frameState.PredictedDisplayPeriod);
+        // The sound looks into the video exactly like the eyes do (CLAUDE.md rule 6: rotation only).
+        return new XrFrameResult(layerCount > 0, headTracked, head, offset.ApplyToView(head), displayTimestamp, frameState.PredictedDisplayPeriod);
     }
 
     public void Dispose()

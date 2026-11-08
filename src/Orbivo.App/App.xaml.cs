@@ -11,6 +11,7 @@ using Orbivo.App.LiveView;
 using Orbivo.App.ViewModels;
 using Orbivo.Audio;
 using Orbivo.Audio.Output;
+using Orbivo.Core.Audio;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Logging;
@@ -48,6 +49,9 @@ public partial class App : Application
     /// <summary>Operator UI → player (CLAUDE.md rule 3).</summary>
     private readonly Channel<PlayerCommand> _playerCommands =
         Channel.CreateUnbounded<PlayerCommand>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+
+    /// <summary>Head direction in the picture's frame, render thread → audio thread (sound fixed to the picture, M7).</summary>
+    private readonly ListenerOrientation _listener = new();
 
 #if DEBUG
     private const bool RequestDebugLayer = true;
@@ -98,7 +102,7 @@ public partial class App : Application
         }
 
         // The sound output runs from the start (silence until a video plays), so the decoders know the device rate.
-        _audioOutput = new AudioOutput(settings.AudioDeviceId, settings.Volume, _loggerFactory.CreateLogger<AudioOutput>());
+        _audioOutput = new AudioOutput(settings.AudioDeviceId, settings.Volume, _loggerFactory.CreateLogger<AudioOutput>(), _listener);
         ILogger deviceLogger = _loggerFactory.CreateLogger(typeof(AudioDeviceCatalog).FullName!);
         _viewModel = new MainViewModel(
             options,
@@ -165,6 +169,7 @@ public partial class App : Application
     {
         _xrHost = new XrHost(loggerFactory, RequestDebugLayer);
         _xrHost.SetImageLayout(options.StereoLayout ?? StereoLayout.Mono);
+        _xrHost.SetListener(_listener);
         _xrHost.Start();
         viewModel.StartXrPolling(_xrHost.GetStatus);
         _ = StartWhenDeviceReadyAsync(options, ffmpegAvailable, _xrHost, viewModel, loggerFactory, logger);
@@ -229,6 +234,7 @@ public partial class App : Application
         viewModel.ShowGraphicsDevice(_graphicsDevice.AdapterName, _graphicsDevice.DedicatedVideoMemoryBytes);
         _debugViewport = new DebugViewportHost(_graphicsDevice, loggerFactory.CreateLogger<DebugViewportHost>());
         _debugViewport.SetImageLayout(options.StereoLayout ?? StereoLayout.Mono);
+        _debugViewport.SetListener(_listener);
         AttachLiveView(_graphicsDevice, _debugViewport.SetLiveView, logger);
         StartPlayer(_graphicsDevice, ffmpegAvailable, _debugViewport.SetVideoSource, viewModel, loggerFactory, logger);
         _debugViewport.Start();

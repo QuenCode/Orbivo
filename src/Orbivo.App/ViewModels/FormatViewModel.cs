@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Orbivo.Core.Audio;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
@@ -50,6 +51,8 @@ public sealed class FormatViewModel : ObservableObject
     private FormatChoice? _selectedLayout;
     private FormatChoice? _selectedCubemap;
     private FormatChoice? _customCubemap;
+    private FormatChoice? _selectedStereoWidth;
+    private FormatChoice? _customStereoWidth;
     private OrientationOffset? _shownOffset;
     private FisheyeParameters? _shownFisheye;
     private string _yawText = "0";
@@ -71,6 +74,7 @@ public sealed class FormatViewModel : ObservableObject
         Projections = [_autoProjection, .. Enum.GetValues<ProjectionType>().Select(p => new FormatChoice(p, VideoFormatResolver.Describe(p)))];
         Layouts = [_autoLayout, .. Enum.GetValues<StereoLayout>().Select(l => new FormatChoice(l, VideoFormatResolver.Describe(l)))];
         CubemapLayouts = [_autoCubemap, .. CubemapLayout.Presets.Select(p => new FormatChoice(p.Layout, DescribeCubemap(p.Layout)))];
+        StereoWidths = [.. Enumerable.Range(0, 13).Select(i => StereoWidthChoice(StereoPlacement.MinWidthDegrees + (5.0 * i)))];
         ApplyOffsetCommand = new RelayCommand(ApplyOffset, () => IsAvailable);
         ResetOffsetCommand = new RelayCommand(() => Change(_overrides with { Offset = null }, refreshOffset: true), () => IsAvailable);
         ApplyFisheyeCommand = new RelayCommand(ApplyFisheye, () => IsAvailable);
@@ -85,6 +89,43 @@ public sealed class FormatViewModel : ObservableObject
     public ObservableCollection<FormatChoice> Layouts { get; }
 
     public ObservableCollection<FormatChoice> CubemapLayouts { get; }
+
+    /// <summary>Widths of the virtual stereo speakers (M7), every 5° from 30° to 90°.</summary>
+    public ObservableCollection<FormatChoice> StereoWidths { get; }
+
+    /// <summary>
+    /// Ton fest am Bild (M7): the stereo channels come from two speakers fixed in the picture and stay there when the
+    /// head turns. On by default; off plays stereo directly into the headphones.
+    /// </summary>
+    public bool SoundFixedToPicture
+    {
+        get => _status is not null && (_overrides.AudioFixedToPicture ?? StereoPlacement.Default.FixedToPicture);
+        set
+        {
+            if (_updating || _status is null || value == SoundFixedToPicture)
+            {
+                return;
+            }
+
+            Change(_overrides with { AudioFixedToPicture = value == StereoPlacement.Default.FixedToPicture ? null : value });
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanChooseStereoWidth));
+        }
+    }
+
+    public bool CanChooseStereoWidth => IsAvailable && SoundFixedToPicture;
+
+    public FormatChoice? SelectedStereoWidth
+    {
+        get => _selectedStereoWidth;
+        set
+        {
+            if (SetProperty(ref _selectedStereoWidth, value) && !_updating && value?.Value is double width)
+            {
+                Change(_overrides with { StereoWidthDegrees = width == StereoPlacement.DefaultWidthDegrees ? null : width });
+            }
+        }
+    }
 
     /// <summary>True once a video is open and its format known.</summary>
     public bool IsAvailable => _status is not null;
@@ -288,6 +329,7 @@ public sealed class FormatViewModel : ObservableObject
             ? _autoLayout
             : Layouts.First(c => Equals(c.Value, _overrides.Layout));
         SelectedCubemap = FindCubemap(_overrides.Cubemap);
+        SelectedStereoWidth = FindStereoWidth(StereoPlacement.From(_overrides).WidthDegrees);
 
         OrientationOffset offset = status.Format.Offset;
         if (_shownOffset != offset)
@@ -326,6 +368,31 @@ public sealed class FormatViewModel : ObservableObject
         _customCubemap = new FormatChoice(layout, $"Aus dem Sidecar: {layout}");
         CubemapLayouts.Add(_customCubemap);
         return _customCubemap;
+    }
+
+    private FormatChoice FindStereoWidth(double width)
+    {
+        FormatChoice? listed = StereoWidths.FirstOrDefault(c => c != _customStereoWidth && c.Value is double value && value == width);
+        if (listed is not null)
+        {
+            return listed;
+        }
+
+        // A width from the sidecar between the 5° steps.
+        if (_customStereoWidth is not null)
+        {
+            StereoWidths.Remove(_customStereoWidth);
+        }
+
+        _customStereoWidth = StereoWidthChoice(width);
+        StereoWidths.Add(_customStereoWidth);
+        return _customStereoWidth;
+    }
+
+    private static FormatChoice StereoWidthChoice(double width)
+    {
+        string label = string.Create(CultureInfo.CurrentCulture, $"±{width:0.#}°");
+        return new FormatChoice(width, width == StereoPlacement.DefaultWidthDegrees ? label + " (Standard)" : label);
     }
 
     private static string DescribeSource(FormatSource source)

@@ -223,7 +223,7 @@
           <TextBlock Grid.Row="8" Grid.Column="0" Text="Sidecar:" />
           <DockPanel Grid.Row="8" Grid.Column="1">
             <Button DockPanel.Dock="Right" Content="Alles automatisch" Command="{Binding ResetAllCommand}" Focusable="False" Margin="6,2,0,2"
-                    ToolTip="Alle Formateinstellungen dieses Videos verwerfen; das Sidecar wird gelöscht (fremde Einträge bleiben)." />
+                    ToolTip="Alle Format- und Toneinstellungen dieses Videos verwerfen; das Sidecar wird gelöscht (fremde Einträge bleiben)." />
             <TextBlock Text="{Binding SidecarText}" TextWrapping="Wrap" />
           </DockPanel>
 
@@ -276,18 +276,29 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
           </Grid.RowDefinitions>
           <TextBlock Grid.Row="0" Grid.Column="0" Text="Audio-Modus:" Margin="0,2,16,2" />
-          <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AudioModeText}" Margin="0,2,0,2" />
-          <TextBlock Grid.Row="1" Grid.Column="0" Text="Tonausgabe:" VerticalAlignment="Center" Margin="0,2,16,2" />
+          <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AudioModeText}" TextWrapping="Wrap" Margin="0,2,0,2" />
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Richtung:" VerticalAlignment="Center" Margin="0,2,16,2" />
           <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,2,0,2">
+            <CheckBox Content="Ton fest am Bild" IsChecked="{Binding Format.SoundFixedToPicture}" IsEnabled="{Binding Format.IsAvailable}"
+                      Focusable="False" VerticalAlignment="Center"
+                      ToolTip="Ein: Der linke und rechte Kanal kommen von zwei Lautsprechern, die fest im Video stehen. Dreht der Proband den Kopf, wandert der Ton mit dem Bild. Aus: Stereo geht unverändert auf die Kopfhörer und dreht mit dem Kopf. Wird pro Video im Sidecar gespeichert." />
+            <TextBlock Text="Breite:" VerticalAlignment="Center" Margin="16,0,6,0" />
+            <ComboBox ItemsSource="{Binding Format.StereoWidths}" SelectedItem="{Binding Format.SelectedStereoWidth}"
+                      IsEnabled="{Binding Format.CanChooseStereoWidth}" Focusable="False" MinWidth="110" HorizontalAlignment="Left"
+                      ToolTip="Winkel der beiden virtuellen Lautsprecher links und rechts von der Bildmitte. 60° entspricht einer üblichen Stereo-Aufstellung; größer klingt breiter, kleiner enger." />
+          </DockPanel>
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="Tonausgabe:" VerticalAlignment="Center" Margin="0,2,16,2" />
+          <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,2,0,2">
             <Button DockPanel.Dock="Right" Content="Aktualisieren" Command="{Binding RefreshAudioDevicesCommand}" Margin="6,0,0,0"
                     ToolTip="Geräteliste neu einlesen (z. B. nach dem Einstecken eines Kopfhörers)" />
             <ComboBox ItemsSource="{Binding AudioDevices}" SelectedItem="{Binding SelectedAudioDevice}" Focusable="False"
                       IsEnabled="{Binding SoundSettingsEditable}"
                       ToolTip="Gerät für die Kopfhörer. Windows-Standard folgt dem Standardgerät; ein fest gewähltes Gerät wird nie automatisch gewechselt." />
           </DockPanel>
-          <CheckBox Grid.Row="2" Grid.Column="1" Content="Tonausgabe und Lautstärke sperren" IsChecked="{Binding SoundLocked}"
+          <CheckBox Grid.Row="3" Grid.Column="1" Content="Tonausgabe und Lautstärke sperren" IsChecked="{Binding SoundLocked}"
                     Focusable="False" Margin="0,4,0,2"
                     ToolTip="Schützt Gerät und Lautstärke vor versehentlichem Verstellen. Bleibt nach einem Neustart erhalten. Stumm (M) geht weiter." />
         </Grid>

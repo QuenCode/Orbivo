@@ -1025,11 +1025,17 @@ public sealed class MainViewModel : ObservableObject
         else
         {
             AudioConversionPlan plan = track.Conversion;
-            string text = string.Create(culture, $"{track.Codec}, {plan.Describe()}");
+            (string mode, string? problem) = DescribeSoundMode(plan, status.AudioOutput?.Spatial);
+            string text = string.Create(culture, $"{track.Codec}, {plan.Describe()}, {mode}");
+            if (plan.IsDownmix)
+            {
+                text += ". Mehrkanal wird auf Stereo gemischt";
+            }
+
             _soundEntry.Update(
-                plan.IsDownmix ? text + ". Mehrkanal wird bis M7 auf Stereo gemischt" : text,
-                plan.IsDownmix ? StatusLevel.Warning : StatusLevel.Ok);
-            AudioModeText = "Stereo-Durchleitung (räumlicher Ton folgt in M7)";
+                problem is null ? text : $"{text}. {problem}",
+                plan.IsDownmix || problem is not null ? StatusLevel.Warning : StatusLevel.Ok);
+            AudioModeText = problem is null ? mode : $"{mode} – {problem}";
         }
 
         AudioOutputStatus? output = status.AudioOutput;
@@ -1039,7 +1045,12 @@ public sealed class MainViewModel : ObservableObject
         }
         else
         {
-            string muted = output.Muted ? ", STUMM" : string.Empty;
+            string extras = output.Muted ? ", STUMM" : string.Empty;
+            if (output.Spatial is { Active: true } spatial)
+            {
+                extras = string.Create(culture, $", Raumklang-Last {spatial.PeakLoad:0.#%}") + extras;
+            }
+
             double dropoutMs = output.SampleRate > 0 ? output.UnderrunFrames * 1000.0 / output.SampleRate : 0;
             switch (output.State)
             {
@@ -1047,7 +1058,7 @@ public sealed class MainViewModel : ObservableObject
                     _soundOutputEntry.Update(
                         string.Create(
                             culture,
-                            $"{output.DeviceName}, {output.SampleRate / 1000.0:0.#} kHz, {output.DeviceChannels} Kanäle, Latenz {output.LatencyMilliseconds:0} ms, Drift {output.DriftPpm:+0;-0;0} ppm, Aussetzer {dropoutMs:0} ms{muted}"),
+                            $"{output.DeviceName}, {output.SampleRate / 1000.0:0.#} kHz, {output.DeviceChannels} Kanäle, Latenz {output.LatencyMilliseconds:0} ms, Drift {output.DriftPpm:+0;-0;0} ppm, Aussetzer {dropoutMs:0} ms{extras}"),
                         output.UnderrunFrames > 0 || output.Muted ? StatusLevel.Warning : StatusLevel.Ok);
                     break;
                 case AudioEndpointState.Unavailable:
@@ -1074,6 +1085,30 @@ public sealed class MainViewModel : ObservableObject
                     $"{sync.WindowMeanMs:+0.0;-0.0;0.0} ms ({sync.WindowMinMs:+0.0;-0.0;0.0} … {sync.WindowMaxMs:+0.0;-0.0;0.0}), seit Start {sync.TotalOutsideLimit} von {sync.TotalFrames} Bildern außerhalb ±{AvSyncMeter.LimitMilliseconds:0} ms, {clock}"),
                 inside && sync.TotalOutsideLimit == 0 ? StatusLevel.Ok : StatusLevel.Warning);
         }
+    }
+
+    /// <summary>How the sound is heard right now (M7), and why sound fixed to the picture does not work, if it does not.</summary>
+    private static (string Mode, string? Problem) DescribeSoundMode(AudioConversionPlan plan, SpatialAudioStatus? spatial)
+    {
+        if (plan.Channels == ChannelHandling.MonoOnBoth)
+        {
+            return ("Mono auf beiden Ohren (ohne Richtung)", null);
+        }
+
+        if (spatial is null || !spatial.Placement.FixedToPicture)
+        {
+            return ("Stereo direkt (dreht mit dem Kopf)", null);
+        }
+
+        string placement = string.Create(CultureInfo.CurrentCulture, $"Ton fest am Bild, Lautsprecher bei ±{spatial.Placement.WidthDegrees:0.#}°");
+        if (spatial.Active)
+        {
+            return (placement, null);
+        }
+
+        return spatial.Problem is null
+            ? (placement + " (wird vorbereitet …)", null)
+            : ("Stereo direkt (dreht mit dem Kopf)", spatial.Problem);
     }
 
     private static string DescribeLayout(StereoLayout layout) => layout switch

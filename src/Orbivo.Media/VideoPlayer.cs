@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Orbivo.Core.Audio;
@@ -14,7 +14,7 @@ namespace Orbivo.Media;
 /// <param name="StereoLayout">
 /// Stereo layout from the command line (<c>--stereo</c>): wins over sidecar and metadata, this session only. Null = automatic.
 /// </param>
-/// <param name="FrameSlots">Number of decoded frames on the GPU (docs/ARCHITECTURE.md: 6–8).</param>
+/// <param name="FrameSlots">Number of decoded frames on the GPU (docs/ARCHITECTURE.md: 6â€“8).</param>
 /// <param name="Decoder">
 /// <c>--decoder auto|hw|sw</c>. Auto: hardware if the GPU can decode the video, else software; software as well if the
 /// hardware fails before the first frame.
@@ -78,7 +78,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     /// <summary>Why the loaded file is decoded in software after its hardware decoder failed; null otherwise.</summary>
     private string? _softwareFallbackReason;
 
-    // Format of the loaded file (F10–F14), control thread only.
+    // Format of the loaded file (F10â€“F14), control thread only.
     private SidecarFile? _sidecar;
     private FormatOverrides _overrides = FormatOverrides.None;
     private EmbeddedFormatMetadata? _metadata;
@@ -86,6 +86,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     private ResolvedVideoFormat? _resolvedFormat;
     private string? _sidecarError;
     private VideoFormatStatus? _formatStatus;
+    private StereoPlacement? _appliedPlacement;
     private bool _loop;
     private TimeSpan _seekPosition;
     private volatile bool _stopRequested;
@@ -417,7 +418,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         {
             if (!decoder.HasFirstFrame)
             {
-                Fail("Das Video enthält keine Bilder");
+                Fail("Das Video enthÃ¤lt keine Bilder");
                 return;
             }
 
@@ -535,6 +536,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             {
                 AudioDecoder reopened = AudioDecoder.Open(_demuxer, output.Ring, rate, _logger);
                 _audioDecoder = reopened;
+                ApplyStereoPlacement();
                 reopened.Start();
             }
             catch (MediaOpenException exception)
@@ -736,6 +738,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             _demuxer = demuxer;
             _decoder = video;
             _audioDecoder = audio;
+            ApplyStereoPlacement();
             return true;
         }
         catch
@@ -903,6 +906,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
 
         _overrides = overrides;
         ResolveFormat();
+        ApplyStereoPlacement();
         if (_decoder is { } decoder && _resolvedFormat is { } resolved)
         {
             decoder.Queue.PictureFormat = resolved.Format;
@@ -923,6 +927,33 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         UpdateFormatStatus();
 
         PublishStatus(error: null);
+    }
+
+/// <summary>
+    /// Tells the sound output how to play the stereo of this video (M7): fixed to the picture or plain, from the sidecar.
+    /// A mono track has no direction and always plays plain. Control thread.
+    /// </summary>
+    private void ApplyStereoPlacement()
+    {
+        if (_audio is null)
+        {
+            return;
+        }
+
+        StereoPlacement placement = StereoPlacement.From(_overrides);
+        if (_audioDecoder?.Plan.Channels == ChannelHandling.MonoOnBoth)
+        {
+            placement = placement with { FixedToPicture = false };
+        }
+
+        if (placement == _appliedPlacement)
+        {
+            return;
+        }
+
+        _appliedPlacement = placement;
+        _audio.SetStereoPlacement(placement);
+        _logger.LogInformation("Stereo of {Path}: {Placement}.", _filePath, placement);
     }
 
     /// <summary>Builds the format part of the status once per change, so publishing the status stays cheap.</summary>

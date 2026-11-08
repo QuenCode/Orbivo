@@ -1,5 +1,6 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Orbivo.Core.Audio;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
 using Orbivo.Media;
@@ -42,7 +43,7 @@ public readonly record struct DebugViewportStatus(
 /// </summary>
 public sealed class DebugViewportHost : IDisposable
 {
-    public const string WindowTitle = "Orbivo – Vorschau (Ersatz für die Brille)";
+    public const string WindowTitle = "Orbivo â€“ Vorschau (Ersatz fÃ¼r die Brille)";
 
     private const int InitialClientWidth = 1280;
     private const int InitialClientHeight = 720;
@@ -57,6 +58,7 @@ public sealed class DebugViewportHost : IDisposable
     private StillImageTexture? _pendingImage;
     private IVideoFrameSource? _videoSource;
     private LiveViewFrames? _liveView;
+    private ListenerOrientation? _listener;
     private VideoFormat _imageFormat = VideoFormat.Default;
 
     // Status, written by the render thread, read by the UI.
@@ -104,6 +106,15 @@ public sealed class DebugViewportHost : IDisposable
     public void SetLiveView(LiveViewFrames? frames)
     {
         Volatile.Write(ref _liveView, frames);
+    }
+
+    /// <summary>
+    /// Publishes the mouse view (in the picture's frame) every frame, so sound fixed to the picture can be checked
+    /// without a headset (M7). Any thread.
+    /// </summary>
+    public void SetListener(ListenerOrientation? listener)
+    {
+        Volatile.Write(ref _listener, listener);
     }
 
     /// <summary>Stereo layout of the images passed to <see cref="ShowImage"/>; the preview shows the left eye. Any thread.</summary>
@@ -241,6 +252,7 @@ public sealed class DebugViewportHost : IDisposable
             float brightness = video?.GetOutputBrightness(displayTimestamp) ?? 1f;
             renderer.Render(_device.ImmediateContext, swapChain.RenderTargetView, swapChain.Width, swapChain.Height, views[0], Eye.Left, source, brightness);
             Volatile.Read(ref _liveView)?.RenderIfDue(renderer, _device.ImmediateContext, views[0], source, brightness, displayTimestamp);
+            Volatile.Read(ref _listener)?.Publish(source.Format.Offset.ApplyToView(views[0].Orientation), displayTimestamp);
             swapChain.Present();
 
             frame++;

@@ -1,6 +1,7 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Numerics;
 using Microsoft.Extensions.Logging;
+using Orbivo.Core.Audio;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
 using Orbivo.Media;
@@ -41,6 +42,7 @@ public sealed class XrHost : IDisposable
     private StillImageTexture? _pendingImage;
     private IVideoFrameSource? _videoSource;
     private LiveViewFrames? _liveView;
+    private ListenerOrientation? _listener;
     private VideoFormat _imageFormat = VideoFormat.Default;
     private volatile bool _stopRequested;
 
@@ -97,6 +99,15 @@ public sealed class XrHost : IDisposable
     public void SetLiveView(LiveViewFrames? frames)
     {
         Volatile.Write(ref _liveView, frames);
+    }
+
+    /// <summary>
+    /// Publishes the head orientation in the picture's frame every rendered frame, for sound fixed to the picture (M7).
+    /// Any thread.
+    /// </summary>
+    public void SetListener(ListenerOrientation? listener)
+    {
+        Volatile.Write(ref _listener, listener);
     }
 
     /// <summary>Stereo layout of the images passed to <see cref="ShowImage"/>. Any thread, before <see cref="ShowImage"/>.</summary>
@@ -466,6 +477,7 @@ public sealed class XrHost : IDisposable
         Volatile.Write(ref _headTracked, result.HeadTracked ? 1 : 0);
         if (result.HeadTracked)
         {
+            Volatile.Read(ref _listener)?.Publish(result.HeadInContent, result.DisplayTimestamp);
             (float yaw, float pitch) = OrientationMath.ToYawPitch(Quaternion.Normalize(result.Head));
             Volatile.Write(ref _headYawDegrees, float.RadiansToDegrees(yaw));
             Volatile.Write(ref _headPitchDegrees, float.RadiansToDegrees(pitch));
