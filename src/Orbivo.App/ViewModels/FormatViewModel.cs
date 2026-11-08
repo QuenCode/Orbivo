@@ -490,6 +490,8 @@ public sealed class FormatViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowsFisheye));
         OnPropertyChanged(nameof(CanSwapEyes));
         OnPropertyChanged(nameof(SwapEyes));
+        OnPropertyChanged(nameof(SoundFixedToPicture));
+        OnPropertyChanged(nameof(CanChooseStereoWidth));
         ApplyOffsetCommand.NotifyCanExecuteChanged();
         ResetOffsetCommand.NotifyCanExecuteChanged();
         ApplyFisheyeCommand.NotifyCanExecuteChanged();

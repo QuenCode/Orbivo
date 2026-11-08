@@ -953,7 +953,14 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
 
         _appliedPlacement = placement;
         _audio.SetStereoPlacement(placement);
-        _logger.LogInformation("Stereo of {Path}: {Placement}.", _filePath, placement);
+        if (placement.FixedToPicture)
+        {
+            _logger.LogInformation("Sound of {Path}: fixed to the picture, speakers at +-{Width} degrees.", _filePath, placement.WidthDegrees);
+        }
+        else
+        {
+            _logger.LogInformation("Sound of {Path}: plain stereo, turns with the head.", _filePath);
+        }
     }
 
     /// <summary>Builds the format part of the status once per change, so publishing the status stays cheap.</summary>
