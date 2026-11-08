@@ -1,3 +1,4 @@
+using Orbivo.Audio.Spatial;
 using Orbivo.Core.Audio;
 
 namespace Orbivo.Audio.Output;
@@ -32,6 +33,11 @@ internal enum RendererState
 /// Transport changes take effect with a <see cref="TransportRamp"/> of 5 ms. The clock starts when the first frame of
 /// a fade-in is heard and stops when the last frame of a pause fade-out is heard; a hold stops it at once.
 /// </para>
+/// <para>
+/// Sound fixed to the picture (M7) goes through a <see cref="SpatialStage"/>, which delays it by one block. The ring is
+/// then read that many frames ahead, so the frame written for media frame <c>m</c> is still the sound of <c>m</c>.
+/// Switching between fixed and plain stereo while sound plays dips through silence like a ring flush.
+/// </para>
 /// </remarks>
 internal sealed class AudioRenderer
 {
@@ -49,6 +55,14 @@ internal sealed class AudioRenderer
     private long _heldMediaTicks;
     private bool _pendingPlay;
     private int _holdSequence;
+
+    // Sound fixed to the picture (M7).
+    private SpatialStage? _stage;
+    private float[] _primeBuffer = [];
+    private StereoPlacement _placement = StereoPlacement.HeadLocked;
+    private bool _spatialActive;
+    private bool _placementPending;
+    private bool _needsPrime;
 
     /// <param name="ring">Decoded sound (2 channels).</param>
     /// <param name="clock">The clock this renderer publishes.</param>
@@ -89,6 +103,74 @@ internal sealed class AudioRenderer
     /// <summary>A play is waiting for the end of a fade-out or for the next period.</summary>
     public bool PlayPending => _pendingPlay;
 
+    /// <summary>The sound is fixed to the picture right now (stage present and chosen).</summary>
+    public bool SpatialActive => _spatialActive;
+
+    /// <summary>The placement the player asked for last.</summary>
+    public StereoPlacement Placement => _placement;
+
+    /// <summary>The spatial stage for the current rate, or null if Steam Audio is not available.</summary>
+    public SpatialStage? Stage => _stage;
+
+    /// <summary>
+    /// Sets the spatial stage for the current device rate (null: plain stereo only). The renderer owns it from now on
+    /// and disposes the previous one. Between periods, right after <see cref="Attach"/>.
+    /// </summary>
+    public void SetStage(SpatialStage? stage)
+    {
+        if (!ReferenceEquals(stage, _stage))
+        {
+            _stage?.Dispose();
+            _stage = stage;
+        }
+
+        if (stage is not null)
+        {
+            stage.WidthDegrees = _placement.WidthDegrees;
+            if (_primeBuffer.Length < 2 * stage.LatencyFrames)
+            {
+                _primeBuffer = new float[2 * stage.LatencyFrames];
+            }
+        }
+
+        _spatialActive = WantsSpatial;
+        _placementPending = false;
+        _needsPrime = _spatialActive;
+    }
+
+    /// <summary>
+    /// How the stereo of the current video is heard. A new width applies from the next block; switching between fixed
+    /// and plain stereo while sound plays dips through 5 ms of silence. Between periods.
+    /// </summary>
+    public void SetPlacement(StereoPlacement placement)
+    {
+        _placement = placement;
+        if (_stage is not null)
+        {
+            _stage.WidthDegrees = placement.WidthDegrees;
+        }
+
+        bool wanted = WantsSpatial;
+        if (wanted == _spatialActive)
+        {
+            _placementPending = false;
+            return;
+        }
+
+        if (State == RendererState.Silent)
+        {
+            _spatialActive = wanted;
+            _needsPrime = wanted;
+            _placementPending = false;
+        }
+        else
+        {
+            _placementPending = true;
+        }
+    }
+
+    private bool WantsSpatial => _placement.FixedToPicture && _stage is not null && _stage.SampleRate == _sampleRate;
+
     /// <summary>
     /// A new device stream (other device, the first one after the silent stand-in, or a new rate). Stream frames
     /// restart at 0. Sound that played continues at the media time heard now, with a fade-in.
@@ -115,6 +197,11 @@ internal sealed class AudioRenderer
         }
 
         _tracker.Stand(_heldMediaTicks);
+
+        // The stage belongs to the old rate until SetStage brings one for the new rate.
+        _spatialActive = WantsSpatial;
+        _placementPending = false;
+        _needsPrime = _spatialActive;
         Publish();
     }
 
@@ -197,6 +284,12 @@ internal sealed class AudioRenderer
                     _ring.AcknowledgeFlush();
                 }
 
+                if (_placementPending)
+                {
+                    _spatialActive = WantsSpatial;
+                    _placementPending = false;
+                }
+
                 if (_pendingPlay)
                 {
                     long heard = firstHeardTimestamp + (long)((double)done * _timestampFrequency / _sampleRate);
@@ -216,12 +309,25 @@ internal sealed class AudioRenderer
                 continue;
             }
 
-            // A flush without a hold (the decoder starts over by itself): dip for it, then go on at the same media time.
-            if (State == RendererState.Playing && _ring.FlushPending)
+            // A flush without a hold (the decoder starts over by itself) or a switch between fixed and plain stereo: dip
+            // for it, then go on at the same media time.
+            if (State == RendererState.Playing && (_ring.FlushPending || _placementPending))
             {
                 if (_ramp.IsSilent)
                 {
-                    _ring.AcknowledgeFlush();
+                    if (_ring.FlushPending)
+                    {
+                        _ring.AcknowledgeFlush();
+                    }
+
+                    if (_placementPending)
+                    {
+                        _spatialActive = WantsSpatial;
+                        _placementPending = false;
+                    }
+
+                    // After a flush or a switch, the delay line holds sound that does not follow on.
+                    _needsPrime = _spatialActive;
                     _ramp.FadeIn();
                 }
                 else
@@ -237,7 +343,14 @@ internal sealed class AudioRenderer
             }
 
             Span<float> target = stereo.Slice(2 * done, 2 * chunk);
-            Fetch(target, chunk);
+            if (_spatialActive)
+            {
+                FetchSpatial(target, chunk);
+            }
+            else
+            {
+                Fetch(target, chunk, _mediaFrame);
+            }
             for (int i = 0; i < chunk; i++)
             {
                 float gain = _ramp.Next() * _gain.Next(targetGain);
@@ -274,14 +387,36 @@ internal sealed class AudioRenderer
         _tracker.BeginSegment(_written, _heldMediaTicks, heardTimestamp);
         _ramp.Close();
         _ramp.FadeIn();
+        _needsPrime = _spatialActive;
         State = RendererState.Playing;
     }
 
-    /// <summary>Copies the sound for media frames <see cref="_mediaFrame"/> … + <paramref name="frames"/>; silence where there is none.</summary>
-    private void Fetch(Span<float> destination, int frames)
+    /// <summary>
+    /// The sound for media frames <see cref="_mediaFrame"/> … + <paramref name="frames"/>, fixed to the picture: the ring
+    /// is read one block ahead and the stage gives back what went in one block earlier.
+    /// </summary>
+    private void FetchSpatial(Span<float> destination, int frames)
+    {
+        SpatialStage stage = _stage!;
+        int latency = stage.LatencyFrames;
+        if (_needsPrime || !stage.IsPrimed)
+        {
+            stage.Reset();
+            Span<float> prime = _primeBuffer.AsSpan(0, 2 * latency);
+            Fetch(prime, latency, _mediaFrame);
+            stage.Prime(prime);
+            _needsPrime = false;
+        }
+
+        Fetch(destination, frames, _mediaFrame + latency);
+        stage.Exchange(destination, frames);
+    }
+
+    /// <summary>Copies the sound for media frames <paramref name="firstMediaFrame"/> … + <paramref name="frames"/>; silence where there is none.</summary>
+    private void Fetch(Span<float> destination, int frames, long firstMediaFrame)
     {
         int done = 0;
-        long media = _mediaFrame;
+        long media = firstMediaFrame;
         while (done < frames)
         {
             if (!_ring.HasStart || _ring.SampleRate != _sampleRate)

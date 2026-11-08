@@ -18,6 +18,14 @@ public enum AudioEndpointState
     Unavailable,
 }
 
+/// <summary>State of the sound fixed to the picture (M7) for the operator UI.</summary>
+/// <param name="Available">Steam Audio is loaded and ready for the device rate.</param>
+/// <param name="Active">The sound is fixed to the picture right now.</param>
+/// <param name="Placement">What the player asked for (from the video's sidecar).</param>
+/// <param name="PeakLoad">Highest share of real time one block took to compute in the last second (0.05 = 5 %).</param>
+/// <param name="Problem">Why it is not available (German), or null.</param>
+public sealed record SpatialAudioStatus(bool Available, bool Active, StereoPlacement Placement, double PeakLoad, string? Problem);
+
 /// <summary>Snapshot of the sound output for the operator UI.</summary>
 /// <param name="State">Device state.</param>
 /// <param name="DeviceId">Selected device, null = Windows default.</param>
@@ -41,7 +49,11 @@ public sealed record AudioOutputStatus(
     double DriftPpm,
     float Volume,
     bool Muted,
-    string? Message);
+    string? Message)
+{
+    /// <summary>Sound fixed to the picture (M7), or null if the output does not support it.</summary>
+    public SpatialAudioStatus? Spatial { get; init; }
+}
 
 /// <summary>
 /// The sound output as the player sees it (implemented in Orbivo.Audio). The player control thread calls the
@@ -78,6 +90,12 @@ public interface IAudioOutput
 
     /// <summary>Blackout and fade of the picture also apply to the sound (decision M5).</summary>
     void SetFader(OutputFader? fader);
+
+    /// <summary>
+    /// How the stereo of the current video is heard (M7): fixed to the picture or plain. Applies at the next period; a
+    /// switch while sound plays dips through a few milliseconds of silence.
+    /// </summary>
+    void SetStereoPlacement(StereoPlacement placement);
 
     /// <summary>Switches to the device <paramref name="deviceId"/>; null = Windows default (follows changes of it).</summary>
     void SelectDevice(string? deviceId);

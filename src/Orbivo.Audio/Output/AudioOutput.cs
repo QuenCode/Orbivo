@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Orbivo.Audio.Spatial;
+using Orbivo.Audio.SteamAudio;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Concurrency;
 using Orbivo.Core.Playback;
@@ -21,6 +23,11 @@ namespace Orbivo.Audio.Output;
 /// system timer, so the video plays on; the device is tried again every <see cref="RetryInterval"/>. It never switches
 /// to another device by itself, except when "Windows default" is selected: then it follows the default.
 /// </para>
+/// <para>
+/// Stereo fixed to the picture (M7) is rendered here, at the last moment before the device, so a head turn is heard as
+/// soon as possible: a <see cref="SpatialStage"/> with Steam Audio per device rate, created when a device is opened.
+/// Without Steam Audio the sound stays plain stereo and the status says why.
+/// </para>
 /// The period loop never blocks except on the device event and never allocates (CLAUDE.md rule 2);
 /// <see cref="PeriodAllocatedBytes"/> counts it for the tests. Opening devices and logging happen outside it.
 /// </remarks>
@@ -37,6 +44,8 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
 
     private readonly ILogger _logger;
     private readonly Func<IAudioEndpointProvider> _providerFactory;
+    private readonly Func<int, IBlockSpatializer>? _spatializerFactory;
+    private readonly ListenerOrientation? _listener;
     private readonly SpscQueue<Command> _commands = new(64);
     private readonly Lock _commandLock = new();
     private readonly Thread _thread;
@@ -61,6 +70,11 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
     private double _driftPpm;
     private long _periodAllocatedBytes;
     private long _periods;
+    private volatile bool _spatialAvailable;
+    private volatile bool _spatialActive;
+    private double _spatialPeakLoad;
+    private volatile string? _spatialProblem;
+    private StereoPlacement _requestedPlacement = StereoPlacement.HeadLocked;
 
     // Output thread only.
     private IAudioEndpointProvider? _provider;
@@ -71,16 +85,35 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
     private int _seenChanges;
     private long _retryAt;
     private long _lastProgress;
+    private int _spatialFailedRate;
 
     /// <summary>Plays on the Windows device <paramref name="deviceId"/> (null = Windows default).</summary>
-    public AudioOutput(string? deviceId, float volume, ILogger logger)
-        : this(() => new WasapiEndpointProvider(logger), deviceId, volume, logger)
+    /// <param name="deviceId">Device, or null for the Windows default.</param>
+    /// <param name="volume">Volume level 0–1.</param>
+    /// <param name="logger">Logger.</param>
+    /// <param name="listener">Head orientation for sound fixed to the picture; null = always looking at the front.</param>
+    public AudioOutput(string? deviceId, float volume, ILogger logger, ListenerOrientation? listener = null)
+        : this(() => new WasapiEndpointProvider(logger), deviceId, volume, logger, rate => SteamStereoSpatializer.Create(rate), listener)
     {
     }
 
-    internal AudioOutput(Func<IAudioEndpointProvider> providerFactory, string? deviceId, float volume, ILogger logger)
+    /// <param name="providerFactory">Device access (simulated in tests).</param>
+    /// <param name="deviceId">Device, or null for the default.</param>
+    /// <param name="volume">Volume level 0–1.</param>
+    /// <param name="logger">Logger.</param>
+    /// <param name="spatializerFactory">Makes the spatializer for a device rate; null = plain stereo only.</param>
+    /// <param name="listener">Head orientation, or null.</param>
+    internal AudioOutput(
+        Func<IAudioEndpointProvider> providerFactory,
+        string? deviceId,
+        float volume,
+        ILogger logger,
+        Func<int, IBlockSpatializer>? spatializerFactory = null,
+        ListenerOrientation? listener = null)
     {
         _providerFactory = providerFactory;
+        _spatializerFactory = spatializerFactory;
+        _listener = listener;
         _logger = logger;
         _selectedDeviceId = deviceId;
         _volume = Math.Clamp(volume, 0f, 1f);
@@ -132,6 +165,16 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
         }
     }
 
+    public void SetStereoPlacement(StereoPlacement placement)
+    {
+        placement = placement with { WidthDegrees = StereoPlacement.ClampWidth(placement.WidthDegrees) };
+        lock (_commandLock)
+        {
+            _requestedPlacement = placement;
+            Enqueue(new Command(CommandKind.Placement, BitConverter.DoubleToInt64Bits(placement.WidthDegrees), placement.FixedToPicture ? 1 : 0));
+        }
+    }
+
     public void SetVolume(float level) => _volume = Math.Clamp(level, 0f, 1f);
 
     public void SetMuted(bool muted) => _muted = muted;
@@ -155,7 +198,23 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
         Volatile.Read(ref _driftPpm),
         _volume,
         _muted,
-        _message);
+        _message)
+    {
+        Spatial = new SpatialAudioStatus(
+            _spatialAvailable,
+            _spatialActive,
+            ReadRequestedPlacement(),
+            Volatile.Read(ref _spatialPeakLoad),
+            _spatialProblem),
+    };
+
+    private StereoPlacement ReadRequestedPlacement()
+    {
+        lock (_commandLock)
+        {
+            return _requestedPlacement;
+        }
+    }
 
     public void Dispose()
     {
@@ -241,6 +300,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
 
         _endpoint?.Dispose();
         _provider?.Dispose();
+        _renderer?.SetStage(null);
     }
 
     /// <summary>One device period: commands, sound, clock, status. No allocations.</summary>
@@ -292,6 +352,8 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
 
         Interlocked.Exchange(ref _underrunFrames, renderer.UnderrunFrames);
         Volatile.Write(ref _driftPpm, renderer.Tracker.DriftPpm);
+        _spatialActive = renderer.SpatialActive;
+        Volatile.Write(ref _spatialPeakLoad, renderer.Stage?.PeakLoad ?? 0);
     }
 
     private void ApplyCommands(AudioRenderer renderer)
@@ -308,6 +370,9 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
                     break;
                 case CommandKind.Pause:
                     renderer.Pause();
+                    break;
+                case CommandKind.Placement:
+                    renderer.SetPlacement(new StereoPlacement(command.HoldSequence != 0, BitConverter.Int64BitsToDouble(command.MediaTicks)));
                     break;
             }
         }
@@ -436,6 +501,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
             _renderer.Attach(endpoint.SampleRate, now);
         }
 
+        UpdateStage(_renderer, endpoint.SampleRate);
         _lastProgress = now;
         _sampleRate = endpoint.SampleRate;
         _deviceChannels = endpoint.Channels;
@@ -443,11 +509,60 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
         _state = state;
     }
 
+    /// <summary>
+    /// Gives the renderer a spatial stage for <paramref name="sampleRate"/>: keeps the current one if the rate is the same,
+    /// else creates one (loading Steam Audio and its HRTF takes a moment; this runs between periods). A failure is
+    /// logged once per rate and leaves plain stereo.
+    /// </summary>
+    private void UpdateStage(AudioRenderer renderer, int sampleRate)
+    {
+        if (_spatializerFactory is null)
+        {
+            return;
+        }
+
+        if (renderer.Stage is { } current && current.SampleRate == sampleRate)
+        {
+            renderer.SetStage(current);
+            return;
+        }
+
+        if (_spatialFailedRate == sampleRate)
+        {
+            renderer.SetStage(null);
+            return;
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            var stage = new SpatialStage(_spatializerFactory(sampleRate), _listener);
+            renderer.SetStage(stage);
+            _spatialAvailable = true;
+            _spatialProblem = null;
+            _logger.LogInformation(
+                "Sound fixed to the picture is ready: Steam Audio binaural rendering at {Rate} Hz, blocks of {Block} frames ({Latency:0.0} ms extra delay), prepared in {Milliseconds} ms",
+                sampleRate,
+                stage.LatencyFrames,
+                stage.LatencyFrames * 1000.0 / sampleRate,
+                stopwatch.ElapsedMilliseconds);
+        }
+        catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException or SteamAudioException or ArgumentException)
+        {
+            _spatialFailedRate = sampleRate;
+            _spatialAvailable = false;
+            _spatialProblem = $"Ton fest am Bild nicht verfügbar: Steam Audio lässt sich nicht laden ({exception.Message}). Der Ton läuft als normales Stereo.";
+            _logger.LogError(exception, "Steam Audio could not be prepared for {Rate} Hz; stereo plays without spatial rendering", sampleRate);
+            renderer.SetStage(null);
+        }
+    }
+
     private enum CommandKind
     {
         Hold,
         Play,
         Pause,
+        Placement,
     }
 
     private readonly record struct Command(CommandKind Kind, long MediaTicks, int HoldSequence);

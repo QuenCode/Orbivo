@@ -15,4 +15,7 @@
     <ProjectReference Include="..\..\src\Orbivo.Core\Orbivo.Core.csproj" />
   </ItemGroup>
 
+  <!-- phonon.dll for the Steam Audio tests (they are skipped when it is missing). -->
+  <Import Project="$(OrbivoRepoRoot)build\Native.targets" />
+
 </Project>
