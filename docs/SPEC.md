@@ -15,7 +15,8 @@ Wiedergabe von 360°/180°-Videos mit räumlichem Ton auf einer Varjo XR-3 für 
 - F3 Optional Loop für das einzelne Video, Auto-Advance in der Playlist ein/aus
 - F4 Lautstärke (Proband) und Mute
 - F5 **Schwarzbild** und **Fade** von/zu Schwarz mit einstellbarer Dauer, unabhängig vom Playback-Zustand
-- F6 Startzustand der Brille: Schwarz. Kein Inhalt, bis der Operator startet.
+- F6 Startzustand der Brille: Leerlauf-Ansicht (F7), Standard Schwarz. Kein Video, bis der Operator startet.
+- F7 **Leerlauf-Ansicht:** Was die Brille zeigt, wenn kein Video läuft (vor Play, nach Stop, ohne Video): Schwarz, See-through (Kamerabild der XR-3) oder ein vom Operator gewähltes Standbild (Equirect 360). Im UI wählbar und gespeichert. Schwarzbild und Fade (F5) wirken auch auf die Leerlauf-Ansicht, Schwarzbild bleibt immer schwarz
 
 ### Formate
 - F10 Projektionen: Equirectangular 360°, Equirectangular 180° (VR180), Cubemap (Layout konfigurierbar), Equi-Angular Cubemap (EAC), Fisheye (Sichtfeld, Mittelpunkt und Radius konfigurierbar)

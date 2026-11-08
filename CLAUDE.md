@@ -31,7 +31,7 @@ Neue NuGet-Pakete oder native DLLs **nur nach Rückfrage**. Versionen in `Direct
 4. **Audio-Clock ist Master-Clock.** Gibt es keinen Ton, übernimmt eine Systemuhr.
 5. Video-Frames bleiben auf der GPU (NV12/P010-Texturen). Keine CPU-Kopie von Videoframes. Einzige Ausnahme: Software-Decoder-Fallback (siehe `docs/DECISIONS.md`).
 6. 360°-Inhalt wird **nur rotatorisch** dargestellt (Kopfposition ignorieren, Inhalt im Unendlichen).
-7. In der Brille wird **nie** UI angezeigt. Nur Video, Schwarzbild oder Fade.
+7. In der Brille wird **nie** UI angezeigt. Nur Video, Leerlauf-Ansicht (Schwarz, Kamerabild, Standbild; F7), Schwarzbild oder Fade.
 8. Projektionsmathematik existiert zweimal: HLSL-Shader und C#-Referenz (`ProjectionMath`) mit Unit-Tests. **Beide immer synchron ändern.**
 9. Koordinatensystem überall: OpenXR-Konvention, rechtshändig, +Y oben, −Z vorne, +X rechts. Umrechnungen nur an klar benannten Stellen.
 
