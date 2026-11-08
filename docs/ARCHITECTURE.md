@@ -13,10 +13,11 @@ src/
     Formats/                   # ProjectionType, StereoLayout, CubemapLayout, FisheyeParameters, VideoFormat, FormatOverrides,
                                # EmbeddedFormatMetadata, VideoFormatResolver (Rangfolge), SidecarFile (Laden/Speichern)
     Geometry/                  # ProjectionMath (C#-Referenz der Shader-Mathematik), OrientationMath, FovAngles
+    Audio/                     # AudioRingBuffer, AudioConversionPlan, Uhr; StereoPlacement, AudioCoordinates, ListenerOrientation (M7)
     Logging/                   # SessionLogger (CSV), EventLog
     Status/                    # PlayerStatus-Snapshot (immutable record)
   Orbivo.Media/           # FFmpeg: Demux, Decode (D3D11VA), Metadaten (sv3d/st3d, Kanal-Layout)
-  Orbivo.Audio/           # NAudio-Ausgabe, Ringpuffer, AmbisonicsProcessor (Steam Audio), Kanal-Konvertierung
+  Orbivo.Audio/           # NAudio-Ausgabe (Output/), Steam-Audio-Interop (SteamAudio/), Ton fest am Bild (Spatial/)
   Orbivo.Xr/              # OpenXR-Session, D3D11-Device, Swapchains, Renderer, HLSL-Shader
     OpenXr/                    # XrHost (XR-Render-Thread), Instance, Session, Swapchains, Lifecycle, Umrechnungen
     Graphics/                  # D3D11-Device, Shader-Compiler
@@ -27,7 +28,7 @@ src/
   Orbivo.App/             # WPF-Operator-UI (MVVM), Composition Root, Settings
 tests/
   Orbivo.Core.Tests/      # ProjectionMath, Sidecar, Clock/Sync-Logik, Zustandsautomat
-  Orbivo.Audio.Tests/     # Ambisonics-Konvertierungen (FuMa→AmbiX), Kanalreihenfolgen
+  Orbivo.Audio.Tests/     # Renderer und Ausgabe mit simulierten Geräten, Richtung mit echter phonon.dll (Pegel der Ohren)
   Orbivo.Xr.Tests/        # Shader gegen ProjectionMath (WARP), Richtungstest mit dem Testbild, alle Projektionen gegen Equirect 360, Maus-Steuerung
 tools/
   testmedia/                   # Skripte (ffmpeg + Python) zum Erzeugen von Testvideos und Test-Ambisonics
@@ -44,12 +45,12 @@ docs/
 | Demux (`MediaDemuxer`) | liest Pakete und verteilt sie auf Video- und Audio-`PacketQueue`; führt Seeks aus und legt eine Seek-Marke in beide Queues | ja |
 | Video-Decode | dekodiert in GPU-Frames, kopiert sie in den Ring der `VideoFrameQueue` (6 Slots) und gibt sie über `FramePacer` frei. Führt Seeks aus und wartet nach dem Dateiende auf den nächsten Seek | ja |
 | Audio-Decode (`AudioDecoder`) | dekodiert, konvertiert mit swresample nach float32 Stereo interleaved in der Geräte-Samplerate, schreibt mit Medienposition in `AudioRingBuffer` | ja |
-| Audio-Out (`AudioOutput`, MMCSS „Pro Audio“) | wartet auf das WASAPI-Ereignis, liest Befehle, Geräteposition → `AudioClockTracker` → `ClockSnapshot`; `AudioRenderer` füllt den Puffer aus dem Ringpuffer (ab M7 über den AmbisonicsProcessor). Geräte öffnen und Wiederholung laufen zwischen den Perioden, nie darin | **nein** in der Periode (wartet nur auf das Geräte-Ereignis) |
+| Audio-Out (`AudioOutput`, MMCSS „Pro Audio“) | wartet auf das WASAPI-Ereignis, liest Befehle, Geräteposition → `AudioClockTracker` → `ClockSnapshot`; `AudioRenderer` füllt den Puffer aus dem Ringpuffer (bei „Ton fest am Bild“ über die `SpatialStage`). Geräte öffnen und Wiederholung laufen zwischen den Perioden, nie darin | **nein** in der Periode (wartet nur auf das Geräte-Ereignis) |
 | XR-Render (`XrHost`) | OpenXR-Frame-Loop, wählt Frame nach Clock, rendert beide Augen, liest Head-Pose. Ohne laufende Session: Verbindungsaufbau und Wiederholung; holt dabei fällige Video-Frames ab, damit der Decoder mit der Uhr mitläuft | **nein** im Frame-Loop (wartet nur in `xrWaitFrame`); ohne Session darf er warten |
 | Vorschau-Render (nur `--no-xr`) | Fensternachrichten und Maus, rendert ein Auge ins Vorschaufenster | **nein** (wartet nur auf den Frame-Takt der Swapchain, wie `xrWaitFrame`) |
 | Live-Ansicht (`LiveViewPresenter`, nur wenn eingeschaltet) | kopiert das neueste Bild der Live-Ansicht ins Kindfenster im Operatorfenster und zeigt es an | ja (wartet auf den Frame-Takt seiner Swapchain); der Render-Thread wartet nie auf ihn |
 
-Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC-Queues, `Volatile`/`Interlocked`). Die aktuelle Kopforientierung wird vom Render-Thread als atomarer Snapshot (Quaternion und Zeitstempel) publiziert und vom Audio-Callback gelesen.
+Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC-Queues, `Volatile`/`Interlocked`). Die aktuelle Kopforientierung im Bildsystem (mit Ausrichtungs-Offset) veröffentlichen XR-Render- bzw. Vorschau-Thread jedes Bild als `ListenerOrientation` (`SnapshotCell`, Quaternion und Zeitstempel); der Audio-Thread liest sie einmal je Block.
 
 ## Datenfluss Video
 1. Ein `ID3D11Device` mit `ID3D11Multithread::SetMultithreadProtected(true)` wird von Renderer und FFmpeg gemeinsam genutzt (`AVHWDeviceContext` auf dieses Device setzen).
@@ -101,11 +102,11 @@ Alle Formeln stehen in `ProjectionMath.cs` und in `projection.hlsl`. Die Unit-Te
 Standbilder (`--image`) bleiben ein Testwerkzeug für Equirect 360 ohne Sidecar.
 
 ## Audio
-Stand M5: nur Stereo-Durchleitung. Räumlicher Ton folgt in M7.
+Stand M7: Stereo direkt oder „fest am Bild“ (zwei virtuelle Lautsprecher, binaural mit Steam Audio). Ambisonics und Surround folgen später.
 
 ### Datenfluss Ton
 1. `MediaDemuxer` wählt die Tonspur (`av_find_best_stream`, passend zum Videostream) und füllt die Audio-`PacketQueue`.
-2. `AudioDecoder` dekodiert; `AudioConversionPlan` legt die Umrechnung fest: Stereo durchreichen, Mono auf beide Seiten, Mehrkanal bis M7 auf Stereo mischen, Resampling auf die Samplerate des Ausgabegeräts. Ergebnis: float32 Stereo interleaved mit Medienposition.
+2. `AudioDecoder` dekodiert; `AudioConversionPlan` legt die Umrechnung fest: Stereo durchreichen, Mono auf beide Seiten, Mehrkanal auf Stereo mischen, Resampling auf die Samplerate des Ausgabegeräts. Ergebnis: float32 Stereo interleaved mit Medienposition.
 3. `AudioRingBuffer` (Core, SPSC, 2¹⁷ Frames ≈ 2,7 s bei 48 kHz) ist medienadressiert: Der Leser holt „Daten ab Medienzeit t“, zu späte Daten werden übersprungen, Lücken werden Stille. Flush (Seek, Stop) als Handshake: Die alten Daten bleiben lesbar, bis die Ausgabe ausgeblendet und bestätigt hat.
 4. `AudioOutput` (Orbivo.Audio) besitzt den Audio-Out-Thread und das Gerät. Der Player spricht nur über `IAudioOutput` (Core) mit ihr: Befehle (Attach, Play, Pause, Hold, Lautstärke, Stumm, Gerät) über eine lock-freie Queue, Uhr und Status über Snapshots.
 5. `AudioRenderer` (Zustände Still / Läuft / Blendet zur Pause aus / Blendet zum Halt aus) holt pro Periode die Frames zur gehörten Medienzeit, wendet Transport-Rampe (5 ms Smoothstep) und Verstärkung an und zählt Aussetzer. `SampleWriter` schreibt in das Geräteformat (float32, int16/24/32; Stereo auf die ersten zwei Kanäle, ein Mono-Gerät bekommt den Mittelwert).
@@ -117,13 +118,18 @@ Stand M5: nur Stereo-Durchleitung. Räumlicher Ton folgt in M7.
 - Fehlt das Gerät oder fällt es aus (Fehler oder 500 ms ohne Periode), läuft `NullAudioEndpoint` weiter; neuer Versuch alle 2 s und bei jeder Geräteänderung.
 - `settings.json` (`%LOCALAPPDATA%\Orbivo`) speichert Gerät, Lautstärke und die Ton-Sperre, nicht Stumm (`AppSettings`, Core).
 
-### Ab M7 (geplant)
+### Ton fest am Bild (M7)
+- **Wahl:** `StereoPlacement` (Core) = fest am Bild ja/nein und Breite (30–90°, Standard an, 60°), aus dem Sidecar (`audioFixedToPicture`, `stereoWidthDeg`). Der Player schickt sie beim Öffnen, nach jedem Neuöffnen des Ton-Decoders und bei jeder Änderung im Operatorfenster über `IAudioOutput.SetStereoPlacement` (lock-freie Befehlsqueue). Mono-Spuren bekommen immer „direkt“.
+- **Kopfrichtung:** `ListenerOrientation` (siehe Threads) = Kopf im Bildsystem, `OrientationOffset.ApplyToView(Kopf)`, dieselbe Rechnung wie für das Bild. Recenter (M8) muss dort mit eingehen.
+- **Lautsprecher:** `AudioCoordinates.StereoSpeakers(Breite, Kopf)` liefert die Richtungen der beiden Lautsprecher (Yaw ±Breite auf dem Horizont des Bilds) relativ zum Kopf: `normalize(conj(Kopf)·Richtung)`. Steam Audio nutzt dieselben Achsen wie OpenXR (+X rechts, +Y oben, −Z vorne), es gibt keine weitere Umrechnung.
+- **Verarbeitung:** `SpatialStage` (Orbivo.Audio, gehört dem Audio-Thread) arbeitet in Blöcken zu 256 Frames: Kopfrichtung lesen, `SteamStereoSpatializer` (je Kanal ein `iplBinauralEffect` mit eingebauter HRTF, bilinear, Ohrsignale addiert × 0,6). Die Stufe verzögert um genau einen Block; `AudioRenderer` liest den Ringpuffer um diesen Block voraus, damit das Gehörte zur Medienposition passt (Uhr und A/V unverändert). Nach Start, Seek, Flush und Umschalten füllt der Renderer die Verzögerungsleitung neu. Umschalten während der Wiedergabe läuft über die 5-ms-Transportrampe.
+- **Erzeugen:** Kontext, HRTF und Effekte legt der Audio-Thread beim Öffnen des Geräts an (zwischen den Perioden), passend zur Samplerate. Scheitert das (z. B. `phonon.dll` fehlt), bleibt es bei Stereo direkt, der Status meldet den Grund.
+- **Status:** `AudioOutputStatus.Spatial` (verfügbar, aktiv, Wahl, Spitzenlast je Block, Problem); das Operatorfenster zeigt den Modus in der Gruppe „Ton“ und die Last in „Tonausgabe“.
+
+### Später (geplant)
 - Die Kanal-Layout-Erkennung bestimmt den `AudioMode`: `Stereo`, `Surround`, `Ambisonics(order, convention)`, `Binaural`.
-- **Ambisonics:** FuMa wird beim Dekodieren nach AmbiX (ACN/SN3D) konvertiert. Steam Audio rechnet intern in N3D, daher vor der Verarbeitung SN3D → N3D (`iplAudioBufferConvertAmbisonics`). Danach Rotation mit der **inversen** Kopforientierung (inkl. Recenter und Video-Yaw-Offset) und binaurales Decoding über Steam Audio (`iplAmbisonicsBinauralEffect` oder Rotation und Decode).
-- **Surround:** virtuelle Lautsprecher (Steam Audio `iplBinauralEffect` pro Kanal, oder Ambisonics-Encode und Decode).
-- **Binaural/Stereo:** durchreichen.
-- Koordinatenumrechnung OpenXR ↔ Steam Audio an genau einer Stelle (`AudioCoordinates.cs`), mit Unit-Test.
-- Die Blockgröße des Prozessors passt zur Periode des Geräts (z. B. 480 Samples bei 48 kHz).
+- **Ambisonics:** FuMa wird beim Dekodieren nach AmbiX (ACN/SN3D) konvertiert. Steam Audio rechnet intern in N3D, daher vor der Verarbeitung SN3D → N3D (`iplAudioBufferConvertAmbisonics`). Danach Rotation mit der **inversen** Kopforientierung (aus `ListenerOrientation`) und binaurales Decoding über Steam Audio (`iplAmbisonicsBinauralEffect` oder Rotation und Decode). Die Blockverarbeitung mit Vorauslesen aus M7 lässt sich übernehmen.
+- **Surround:** virtuelle Lautsprecher wie bei Stereo (Steam Audio `iplBinauralEffect` pro Kanal).
 - **Externe Audiodatei** (falls die Aufnahmen getrennt geliefert werden): Sidecar-Feld `externalAudio` mit `path` und `offsetMs`. Eigener Demux/Decoder für Audio, gleiche Clock.
 
 ## Synchronisation
@@ -163,8 +169,8 @@ Vorzeichen von `orientationOffsetDeg`: wie überall Rechte-Hand-Regel, Yaw posit
   "fisheye": null,
   "cubemapLayout": "6x1",
   "orientationOffsetDeg": { "yaw": 30, "pitch": 0, "roll": 0 },
-  "audioMode": { "type": "Ambisonics", "order": 1, "convention": "AmbiX" },
-  "externalAudio": null
+  "audioFixedToPicture": null,
+  "stereoWidthDeg": 75
 }
 ```
 - **`null` oder fehlend = automatisch** (Metadaten, sonst Schätzung). Geschrieben werden immer alle Formatfelder.
@@ -172,6 +178,7 @@ Vorzeichen von `orientationOffsetDeg`: wie überall Rechte-Hand-Regel, Yaw posit
 - `cubemapLayout`: Name einer Vorgabe (`3x2`, `6x1`, `1x6`, `eac`) oder ein Objekt `{ "columns": 3, "rows": 2, "faceOrder": "rludfb", "faceRotation": "000000", "padding": 0 }`.
 - `fisheye`: `{ "fovDeg": 180, "centerX": 0.5, "centerY": 0.5, "radius": 0.5 }` (fehlende Felder: diese Standardwerte).
 - `orientationOffsetDeg`: je Achse höchstens ±360°; `null` = keine Drehung.
-- `audioMode` und `externalAudio` (ab M7) und alle unbekannten Felder bleiben beim Speichern erhalten.
+- `audioFixedToPicture` (M7): `true`/`false`, `null` = an (Ton fest am Bild). `stereoWidthDeg`: 30–90, `null` = 60.
+- Geplante Felder (`audioMode`, `externalAudio`) und alle unbekannten Felder bleiben beim Speichern erhalten.
 - Speichern: bei jeder Änderung im Operatorfenster, über eine `.tmp`-Datei. Ist nichts mehr eingestellt und gibt es keine fremden Felder, wird die Datei gelöscht.
 - Ungültige Felder werden mit Hinweis ignoriert. Eine Datei, die kein JSON ist, wird gemeldet, ignoriert und vor dem ersten Überschreiben als `.orbivo.json.bak` gesichert. Eine Datei mit `version` > 1 wird gelesen, aber nie überschrieben.

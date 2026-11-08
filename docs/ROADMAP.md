@@ -55,11 +55,14 @@ Jeder Meilenstein endet mit: grünem Build, grünen Tests, Commit und der **Chec
 - **Fertig, wenn:** Mit Live-Ansicht an bleibt die Brille bei 90 fps (8K-TB-Video), die Render-Schleife allokiert nicht, abgeschaltet kostet sie nichts
 - **Brillen-Test:** Kopf drehen, die Live-Ansicht folgt ohne spürbare Verzögerung in die gleiche Richtung; Fade und Schwarzbild sind sichtbar
 
-## M7 – Räumlicher Ton
-- Steam-Audio-Interop, AmbisonicsProcessor (Ordnung 1–3), FuMa→AmbiX, Surround über virtuelle Lautsprecher, Binaural-Passthrough
-- Head-Pose-Snapshot vom Render-Thread, Rotation im Audio-Callback
-- `AudioCoordinates` mit Unit-Tests
-- **Hör-Test:** Ambisonics-Testdatei: Quelle „vorne“ bleibt beim Kopfdrehen räumlich stehen. Links und rechts, oben und unten sind korrekt. Keine hörbare Verzögerung.
+## M7 – Räumlicher Ton: Stereo fest am Bild
+Neu zugeschnitten am 2026-11-08 (`DECISIONS.md`): Der Ton der Videos ist Stereo, er soll zum Bild passen. Ambisonics und Surround kommen später.
+- Steam-Audio-Interop (Binaural-Effekt mit eingebauter HRTF), `AudioCoordinates` mit Unit-Tests
+- Kopfrichtung im Bildsystem vom Render-Thread (Brille) bzw. von der Maus (Vorschau) als lock-freier Snapshot, Verarbeitung im Audio-Thread in 256er-Blöcken ohne Versatz zur Uhr
+- Zwei virtuelle Lautsprecher bei ±Breite (Standard 60°); Schalter „Ton fest am Bild“ und Breite pro Video im Operatorfenster und Sidecar, Standard an. Mono bleibt kopffest, Mehrkanal wird auf Stereo gemischt
+- Testvideo `stereo_richtungstest_…` (`make_testmedia.py --what stereo`)
+- **Fertig, wenn:** Richtung (Pegelunterschied der Ohren) mit echter `phonon.dll` gemessen, keine Knackser beim Drehen, A/V unverändert, Audio-Thread allokiert nicht, Last unter 1 % ✔
+- **Hör-Test:** Stereo-Richtungstest: Der Ton kommt aus dem leuchtenden Kasten, auch beim Kopfdrehen. Mitte vorne, nicht im Kopf. Schalter aus: links bleibt links. Keine Knackser, kein spürbares Nachziehen.
 
 ## M8 – Recenter, Logging, Robustheit
 - Recenter (F30/F31) für Bild und Ton
@@ -73,3 +76,7 @@ Jeder Meilenstein endet mit: grünem Build, grünen Tests, Commit und der **Chec
 - Self-contained Publish (`dotnet publish -r win-x64 --self-contained`), native DLLs im Paket
 - Einstellungen persistieren (Ausgabegerät, Logging-Ordner, letzte Playlist)
 - Kurze Bedienungsanleitung für Operatoren (`docs/OPERATOR.md`)
+
+## Später – Ambisonics und Surround
+- Ambisonics Ordnung 1–3 (AmbiX, FuMa → AmbiX → N3D), kopfgetrackt; 5.1/7.1 über virtuelle Lautsprecher; Erkennung des Audio-Modus (F21, F23)
+- Testdateien liegen bereit (`make_testmedia.py --what audio`)
