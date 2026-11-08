@@ -1,0 +1,66 @@
+Orbivo - Hinweise zu Drittkomponenten / Third-party notices
+=============================================================
+
+Orbivo enthält die folgenden Komponenten anderer Hersteller. Die Lizenztexte der nativen
+Bibliotheken liegen im Ordner "licenses" neben Orbivo.exe.
+Orbivo includes the following third-party components. The license texts of the native
+libraries are in the "licenses" folder next to Orbivo.exe.
+
+
+FFmpeg 9.0.2 (avcodec-63.dll, avformat-63.dll, avutil-61.dll, swresample-7.dll, swscale-10.dll)
+-----------------------------------------------------------------------------------------------
+Lizenz / License: GNU Lesser General Public License, Version 3 oder später / or later
+  (LGPL-3.0-or-later), Text: licenses\FFmpeg-LICENSE.txt
+Version: n9.0.2-39-g7adfbe40dc-20261031, unverändert / unmodified
+Build: BtbN/FFmpeg-Builds, Variante win64-lgpl-shared-9.0, Release autobuild-2026-10-31-12-59
+  https://github.com/BtbN/FFmpeg-Builds
+Quellcode / Source code: https://ffmpeg.org/download.html, Stand / commit 7adfbe40dc,
+  Build-Skripte / build scripts: https://github.com/BtbN/FFmpeg-Builds
+Die FFmpeg-Bibliotheken sind dynamisch eingebunden und können durch eine kompatible eigene
+Version (gleiche Hauptversionen der DLLs) ersetzt werden.
+The FFmpeg libraries are linked dynamically and may be replaced with a compatible build of
+your own (same major versions of the DLLs).
+FFmpeg is a trademark of Fabrice Bellard.
+
+
+Steam Audio 4.8.1 (phonon.dll)
+------------------------------
+Copyright (c) Valve Corporation. Lizenz / License: Apache License 2.0
+Texte / Texts: licenses\SteamAudio-LICENSE.md, licenses\SteamAudio-THIRDPARTY.md
+https://github.com/ValveSoftware/steam-audio
+
+
+OpenXR Loader 1.1.65 (openxr_loader.dll)
+----------------------------------------
+Copyright (c) The Khronos Group Inc. Lizenz / License: Apache License 2.0
+Text: licenses\OpenXR-LICENSE.txt
+https://github.com/KhronosGroup/OpenXR-SDK-Source
+
+
+.NET-Bibliotheken / .NET libraries (MIT License)
+------------------------------------------------
+.NET Runtime und Windows Desktop Runtime (WPF)   Copyright (c) .NET Foundation and Contributors
+Microsoft.Extensions.Logging                     Copyright (c) .NET Foundation and Contributors
+CommunityToolkit.Mvvm                            Copyright (c) .NET Foundation and Contributors
+FFmpeg.AutoGen                                   Copyright (c) Ruslan Balanukhin (Rationale One)
+NAudio (NAudio.Core, NAudio.Wasapi)              Copyright (c) Mark Heath and contributors
+Silk.NET (Core, Maths, OpenXR)                   Copyright (c) .NET Foundation and Contributors
+Vortice.Windows (Direct3D11, DXGI, D3DCompiler)  Copyright (c) Amer Koleci and contributors
+SharpGen.Runtime                                 Copyright (c) Jeremy Koritzinsky and contributors
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software
+and associated documentation files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

@@ -53,6 +53,8 @@ dotnet run --project src/Orbivo.App -- --no-xr --video tools/testmedia/out/equir
 dotnet run --project src/Orbivo.App -- --video tools/testmedia/out/equirect360_tb_8192x8192_hevc_8bit_30fps.mp4            # Video in der Brille (--stereo mono|tb|sbs erzwingt das Layout, --decoder auto|hw|sw den Decoder)
 powershell -NoProfile -ExecutionPolicy Bypass -File native\fetch-native.ps1   # native DLLs laden
 python tools/testmedia/make_testmedia.py            # Testbilder, -videos, Ambisonics-Test
+powershell -NoProfile -ExecutionPolicy Bypass -File release.ps1 -PackageOnly              # Probepaket bauen und prüfen (ohne Version, Commit, Tag)
+powershell -NoProfile -ExecutionPolicy Bypass -File release.ps1 -Version 1.1.0 [-Publish] # Release (docs/RELEASE.md)
 $env:ORBIVO_LONG_TESTS=1; dotnet test --project tests/Orbivo.Media.Tests -- --filter-class "*SoakTests"   # 30-Minuten-Dauertest mit Aufzeichnung (ORBIVO_SOAK_MINUTES kürzt ihn)
 ```
 FFmpeg-, Steam-Audio- und OpenXR-Loader-DLLs liegen in `native/win-x64/` (nicht im Git, siehe `native/README.md`) und werden beim Build ins Ausgabeverzeichnis kopiert.
@@ -70,3 +72,5 @@ Du siehst die Brille nicht und hörst den Ton nicht. Deshalb:
 - Ein Meilenstein nach dem anderen, kleine Commits mit aussagekräftigen Messages
 - Vor größeren Strukturänderungen kurz Plan vorschlagen und auf OK warten
 - Offene Punkte oder Annahmen in `docs/DECISIONS.md` festhalten (Datum, Entscheidung, Begründung)
+- Ändert sich etwas, das Operatoren oder Auswertende merken (Bedienung, Aufzeichnungsformat, Sidecar), dann `docs/Anleitung.html` mitpflegen und die Änderung in `CHANGELOG.md` unter „Unveröffentlicht“ eintragen
+- Releases nur über `release.ps1` und nur auf ausdrücklichen Wunsch; `-Publish` pusht und veröffentlicht

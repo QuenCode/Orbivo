@@ -3,8 +3,11 @@
 ## Solution-Struktur
 ```
 Orbivo.sln
-Directory.Build.props          # Nullable, TreatWarningsAsErrors, LangVersion, x64
+Directory.Build.props          # Nullable, TreatWarningsAsErrors, LangVersion, x64, Version (nur release.ps1 ändert sie)
 Directory.Packages.props       # zentrale, gepinnte Paketversionen
+release.ps1                    # Release bauen und veröffentlichen (docs/RELEASE.md)
+CHANGELOG.md                   # Änderungen je Version, Quelle der Release-Notizen
+build/                         # Native.targets (native DLLs ins Ausgabeverzeichnis), THIRD-PARTY-NOTICES.txt (fürs Paket)
 src/
   Orbivo.Core/            # keine UI-, XR- oder Native-Abhängigkeiten
     Commands/                  # PlayerCommand-Records (Open, Close, Play, Pause, Stop, Seek, Loop, Blackout, Fade, SetVideoFormat, Recenter)
@@ -25,7 +28,7 @@ src/
     Shaders/                   # *.hlsl, als Ressource eingebettet und beim Start kompiliert
     DebugViewport/             # Vorschaufenster für --no-xr (eigenes Win32-Fenster, eigener Render-Thread)
     LiveView/                  # Live-Ansicht (F42): LiveViewFrames (3 Slot-Texturen), LiveViewPresenter (Thread), LiveViewWindow (Kindfenster)
-  Orbivo.App/             # WPF-Operator-UI (MVVM), Composition Root, Settings
+  Orbivo.App/             # WPF-Operator-UI (MVVM), Composition Root, Settings; kopiert docs/Anleitung.html neben die exe
 tests/
   Orbivo.Core.Tests/      # ProjectionMath, Sidecar, Clock/Sync-Logik, Zustandsautomat
   Orbivo.Audio.Tests/     # Renderer und Ausgabe mit simulierten Geräten, Richtung mit echter phonon.dll (Pegel der Ohren)
@@ -35,7 +38,7 @@ tools/
   testmedia/                   # Skripte (ffmpeg + Python) zum Erzeugen von Testvideos und Test-Ambisonics
 native/
   README.md                    # Woher die FFmpeg- und phonon-DLLs kommen, welche Version
-docs/
+docs/                          # SPEC, ARCHITECTURE, ROADMAP, DECISIONS, RELEASE; Anleitung.html (Bedienungsanleitung, wird ausgeliefert)
 ```
 
 ## Threads
@@ -118,7 +121,7 @@ Stand M7: Stereo direkt oder „fest am Bild“ (zwei virtuelle Lautsprecher, bi
 - `IAudioEndpoint` kapselt ein Gerät: `WasapiAudioEndpoint` (Shared Mode, ereignisgesteuert, 20 ms Puffer, Position über `IAudioClock` mit QPC-Zeitstempel), `NullAudioEndpoint` (stiller Ersatz mit Systemtakt) und `SimulatedAudioEndpoint` (für Tests: Drift, Latenz, Aufnahme, Erkennung von Tönen).
 - `WasapiEndpointProvider` listet Geräte und meldet Änderungen (`IMMNotificationClient`). „Windows-Standard“ folgt dem Standardgerät; ein fest gewähltes Gerät wird nie automatisch gewechselt.
 - Fehlt das Gerät oder fällt es aus (Fehler oder 500 ms ohne Periode), läuft `NullAudioEndpoint` weiter; neuer Versuch alle 2 s und bei jeder Geräteänderung.
-- `settings.json` (`%LOCALAPPDATA%\Orbivo`) speichert Gerät, Lautstärke und die Ton-Sperre, nicht Stumm (`AppSettings`, Core).
+- `settings.json` (`%LOCALAPPDATA%\Orbivo`) speichert Gerät, Lautstärke und die Ton-Sperre, nicht Stumm (`AppSettings`, Core). Dazu Leerlauf-Ansicht und Aufzeichnung (M8) sowie Playlist, „Automatisch weiter“, „Wiederholen“ und Fade-Dauer (M9, siehe „Auslieferung“).
 
 ### Ton fest am Bild (M7)
 - **Wahl:** `StereoPlacement` (Core) = fest am Bild ja/nein und Breite (30–90°, Standard an, 75°), aus dem Sidecar (`audioFixedToPicture`, `stereoWidthDeg`). Der Player schickt sie beim Öffnen, nach jedem Neuöffnen des Ton-Decoders und bei jeder Änderung im Operatorfenster über `IAudioOutput.SetStereoPlacement` (lock-freie Befehlsqueue). Mono-Spuren bekommen immer „direkt“.
@@ -140,6 +143,13 @@ Stand M7: Stereo direkt oder „fest am Bild“ (zwei virtuelle Lautsprecher, bi
 - **Aufzeichnung (F50–F52):** `SessionRecorder` (Core) besitzt einen eigenen Thread. Der Render-Thread gibt jedes Bild eine `HeadSample` an `HeadSampleGate` (lock-freie SPSC-Queue, 8192 Plätze, dünnt auf die gewählte Rate aus, allokiert nicht; voll = Zeile verloren und gezählt). Player-Control, App und `XrHost` (Verbindung, Sitzung, Fehler) melden Ereignisse an `ISessionEventLog` (`SessionEventQueue`, höchstens 10 000 wartend). Der Recorder schreibt alle 50 ms und flusht jede Sekunde. Zeiten: ein Anker (UTC und Stopwatch) je Dateipaar, jede Zeile = Anker + Stopwatch-Zeit, damit monoton; geschrieben wird sie als Ortszeit des PCs. In der Brille ist der Zeitpunkt einer Kopfzeile die vorhergesagte Anzeigezeit des Bilds.
 - **Nur bei laufendem Video:** Der Recorder ist eingeschaltet, öffnet aber keine Dateien. Der Player meldet Zustandswechsel typisiert (`ISessionEventLog.RecordState`, `SessionEvent.PlaybackState`). Wechselt der Zustand auf „Läuft“, beginnt ein Dateipaar, verankert am Play-Befehl davor (Ereignisse und Kopfproben der letzten 5 s werden dafür vorgehalten). Pause bleibt im Dateipaar; jeder andere Zustand (Öffnet, Bereit, Ende, Kein Video, Fehler) beendet es, Kopfproben nach diesem Ereignis gehören nicht mehr dazu. Läuft beim Einschalten schon ein Video (oder steht es auf Pause), beginnt das Dateipaar sofort (`RecordingOptions.PlaybackAtStart`).
 - **Dateien:** je Aufzeichnung `JJJJ-MM-TT_hhmmss[_Proband]_kopf.csv` und `…_ereignisse.csv` (mit „Nur bei laufendem Video“ je Video `…[_Proband]_Videoname_kopf.csv`) im gewählten Ordner (Standard `Dokumente\Orbivo\Aufzeichnungen`), Semikolon, Dezimalkomma, UTF-8 mit BOM. Kopf-CSV: `Uhrzeit;Sekunden;Video;Videozeit_s;Status;Inhalt;Helligkeit;Tracking;Kopf_qw…qz;Kopf_Yaw/Pitch/Roll_Grad;Blick_Video_Yaw/Pitch_Grad;Recenter_Yaw_Grad`. Ereignis-CSV: `Uhrzeit;Sekunden;Ereignis;Video;Videozeit_s;Details`. Kann der Recorder nicht schreiben, beendet er die Aufzeichnung und meldet den Grund im Operatorfenster.
+
+## Auslieferung (M9)
+- **Paket:** `release.ps1` veröffentlicht `Orbivo.App` self-contained für win-x64 (`dotnet publish -c Release --self-contained`, `-p:OrbivoRelease=true`) und legt `licenses\` und `build/THIRD-PARTY-NOTICES.txt` dazu. Die nativen DLLs kommen über `build/Native.targets` (`CopyToPublishDirectory`), die Anleitung über `Orbivo.App.csproj`. Ablauf, Prüfungen und Paketinhalt: `docs/RELEASE.md`.
+- **Version:** `<Version>` in `Directory.Build.props`. Ohne `OrbivoRelease=true` wird die `InformationalVersion` zu `X.Y.Z-dev`; das SDK hängt den Commit an (`+<sha>`). Die App zeigt die Version ohne Commit in der Titelleiste, Log und Aufzeichnung bekommen sie ganz.
+- **`--check`:** Die App prüft wie bei jedem Start FFmpeg, Steam Audio und den OpenXR-Loader, dazu die Anleitung, schreibt das Ergebnis ins Log und beendet sich ohne Fenster (Exit-Code 0 oder 1). Das Release-Skript prüft damit das fertige Paket.
+- **Anleitung:** `docs/Anleitung.html` (eine Datei ohne externe Abhängigkeiten) wird bei jedem Build als `Anleitung.html` neben die exe kopiert. „Anleitung (F1)“ im Operatorfenster öffnet sie über die Shell im Standardbrowser (`App.OpenManual`); fehlt sie, sagt ein Hinweisfenster wo sie liegen müsste.
+- **Playlist beim Start:** `MainViewModel` legt die gespeicherten Pfade wieder an (fehlende weglassen, im Status „Playlist“ nennen) und wählt das zuletzt geladene Video aus, ohne es zu laden. Jede Änderung an Playlist, „Automatisch weiter“, „Wiederholen“ und Fade-Dauer speichert die Einstellungen. Mit `--video` bleibt die gespeicherte Playlist unberührt.
 
 ## Synchronisation
 - **Medienzeit** ist für Bild und Ton gleich: Ticks ab dem Beginn des Videostreams (`MediaDemuxer.OriginTicks`). Im Ringpuffer: Frame = Ticks × Samplerate / 10⁷.

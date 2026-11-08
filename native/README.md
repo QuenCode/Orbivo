@@ -53,7 +53,7 @@ native/win-x64/
 
 **Update:** Neue FFmpeg-Hauptversion nur zusammen mit der passenden FFmpeg.AutoGen-Version. Dabei URL und SHA256 in `fetch-native.ps1`, die DLL-Liste in `build/Native.targets` und `FFmpegRuntime.ExpectedLibraries` sowie diese Datei anpassen.
 
-**Pflichten bei der Auslieferung (M9):** dynamisch gelinkt (shared), DLLs bleiben austauschbar, Lizenztext und Hinweis auf Quelle (FFmpeg-Version, BtbN-Build-Skripte) beilegen.
+**Pflichten bei der Auslieferung (M9):** dynamisch gelinkt (shared), DLLs bleiben austauschbar, Lizenztext und Hinweis auf Quelle (FFmpeg-Version, BtbN-Build-Skripte) beilegen. Umgesetzt: Das Release-Paket (`release.ps1`) enthält `licenses\` und `THIRD-PARTY-NOTICES.txt` (aus `build/`). Bei einem Update von FFmpeg, Steam Audio oder dem OpenXR-Loader dort Version und Quelle anpassen.
 
 ## Steam Audio 4.8.1
 

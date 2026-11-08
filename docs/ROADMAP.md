@@ -73,9 +73,12 @@ Neu zugeschnitten am 2026-11-08 (`DECISIONS.md`): Der Ton der Videos ist Stereo,
 - **Brillen-Test (Leerlauf):** See-through zeigt das Kamerabild vor Play und nach Stop, „Bild“ zeigt das gewählte Standbild richtig orientiert, Play wechselt sauber ins Video, Schwarzbild (B) bleibt schwarz
 
 ## M9 – Feinschliff und Auslieferung
-- Self-contained Publish (`dotnet publish -r win-x64 --self-contained`), native DLLs im Paket
-- Einstellungen persistieren (Ausgabegerät, Logging-Ordner, letzte Playlist)
-- Kurze Bedienungsanleitung für Operatoren (`docs/OPERATOR.md`)
+- Self-contained Publish (`dotnet publish -r win-x64 --self-contained`), native DLLs und Lizenzen im Paket, ZIP ohne Installation
+- **Release-Workflow** für wiederholte Releases (`release.ps1`, `CHANGELOG.md`, `docs/RELEASE.md`): Tests, Paket, Starttest `Orbivo.exe --check`, Version, Tag; mit `-Publish` GitHub-Release
+- Einstellungen persistieren: Ausgabegerät und Aufzeichnungsordner (seit M5/M8), neu Playlist, „Automatisch weiter“, „Wiederholen“, Fade-Dauer
+- Bedienungsanleitung als HTML (`docs/Anleitung.html`, statt `docs/OPERATOR.md`), liegt bei jedem Build neben der exe, „Anleitung (F1)“ im Operatorfenster; mit Abschnitt zu den Aufzeichnungsdaten (Spalten, Achsen, Winkel, Umrechnung in Bildpunkte)
+- **Fertig, wenn:** `release.ps1 -Version 1.0.0` baut ein geprüftes Paket, alle Tests grün ✔ (Probelauf mit `-PackageOnly`)
+- **Brillen-Test:** ZIP auf dem Brillen-Rechner entpacken und starten (`docs/RELEASE.md`, „Kurzer Brillen-Test“), Anleitung über F1, Playlist nach Neustart wieder da
 
 ## Später – Ambisonics und Surround
 - Ambisonics Ordnung 1–3 (AmbiX, FuMa → AmbiX → N3D), kopfgetrackt; 5.1/7.1 über virtuelle Lautsprecher; Erkennung des Audio-Modus (F21, F23)
