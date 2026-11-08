@@ -6,6 +6,7 @@ Erzeugt Testmaterial, mit dem sich Projektion, Stereo, Bildrate, A/V-Sync und Ra
 - dieselbe Szene in den anderen Projektionen (M6): VR180, Cubemap 3×2 / 6×1 / 1×6, EAC und Fisheye
 - daraus 20-Sekunden-Testvideos (HEVC) mit Timecode, bewegtem Marker und Sync-Blitz mit Piepton, mit Projektions-Metadaten (`sv3d`/`st3d`) und teils mit Sidecar (`<Video>.orbivo.json`)
 - einen Ambisonics-Richtungstest 1. Ordnung (AmbiX und FuMa) mit deutschen Ansagen
+- ein Stereo-Richtungstestvideo für „Ton fest am Bild“ (M7)
 
 Die Ergebnisse landen in `tools/testmedia/out/` und sind nicht im Git.
 
@@ -27,6 +28,7 @@ python tools/testmedia/make_testmedia.py --sizes 4k --layouts tb          # nur 
 python tools/testmedia/make_testmedia.py --formats cubemap,eac            # nur Cubemap und EAC
 python tools/testmedia/make_testmedia.py --what audio                     # nur der Ambisonics-Test
 python tools/testmedia/make_testmedia.py --what decoder                   # nur die Videos für den Software-Decoder
+python tools/testmedia/make_testmedia.py --what stereo                    # nur das Stereo-Richtungstestvideo (M7)
 python tools/testmedia/make_testmedia.py --bit-depth 10 --fps 60          # HEVC Main10, 60 fps
 python tools/testmedia/make_testmedia.py --long                           # nur das 10-Minuten-Video für den A/V-Langtest (M5)
 ```
@@ -39,7 +41,7 @@ $env:ORBIVO_LONG_TESTS = '1'; dotnet test --project tests/Orbivo.Media.Tests
 
 | Option | Standard | Bedeutung |
 |---|---|---|
-| `--what` | `images,videos,audio,decoder` | Was erzeugt wird |
+| `--what` | `images,videos,audio,decoder,stereo` | Was erzeugt wird |
 | `--sizes` | `4k,8k` | Größenklassen (siehe Tabelle unten) |
 | `--layouts` | `mono,tb,sbs` | Stereo-Layouts (nur Equirect 360) |
 | `--formats` | alle | Projektionen: `equirect360`, `equirect180`, `cubemap`, `eac`, `fisheye` |
@@ -135,7 +137,19 @@ Je Richtung kommt erst die Ansage, dann drei Rauschimpulse aus derselben Richtun
 - `ambix_foa_richtungstest.wav`: AmbiX, Kanäle W, Y, Z, X (ACN), SN3D
 - `fuma_foa_richtungstest.wav`: FuMa, Kanäle W, X, Y, Z, W um 3 dB abgesenkt
 
-Ab M7 soll jeder Ton aus der angesagten Richtung kommen und beim Kopfdrehen im Raum stehen bleiben.
+Der Player spielt Ambisonics noch nicht ab (für später geplant, siehe docs/ROADMAP.md). Die Dateien bleiben als Testmaterial dafür.
+
+## Stereo-Richtungstest (M7)
+
+`--what stereo` erzeugt `stereo_richtungstest_equirect360_mono_4096x2048_hevc_8bit_30fps.mp4`: 4K Equirect 360 Mono, 36 s, das normale Testbild mit zwei Kästen auf dem Horizont an den Stellen der virtuellen Lautsprecher bei Standardbreite (**L** 60° links, **R** 60° rechts von VORNE). Der Ton (AAC Stereo, 48 kHz) besteht aus weißen Rauschimpulsen (0,3 s an, 0,2 s Pause) im 6-Sekunden-Takt:
+
+| Zeit im Takt | Ton | Im Bild |
+|---|---|---|
+| 0–2 s | nur linker Kanal | Kasten L leuchtet grün, unter VORNE „Ton – nur links“ |
+| 2–4 s | nur rechter Kanal | Kasten R leuchtet grün |
+| 4–6 s | beide Kanäle, gleiches Rauschen | beide Kästen leuchten, der Ton kommt von vorne |
+
+Mit „Ton fest am Bild“ (Standard) muss der Ton immer aus dem leuchtenden Kasten kommen, egal wohin der Kopf zeigt. Schaut man direkt auf L, kommt der linke Kanal von vorne; dreht man sich um, kommt er von hinten rechts. Mit ausgeschaltetem „Ton fest am Bild“ bleibt links immer auf dem linken Ohr. Die Abschnitte stehen in `manifest.json`.
 
 ## Konventionen
 
@@ -152,5 +166,5 @@ Alle Vorzeichen stehen an einer Stelle: `orbivo_testmedia/conventions.py`. Kurzf
 - EAC-Videos tragen keine EAC-Projektion in den Metadaten: YouTube kennzeichnet EAC nach unserem Wissen mit einer `mshp`-Box (Mesh), die FFmpeg nicht auswertet. Die Projektion steht deshalb im Sidecar (mit echtem Material prüfen, siehe docs/DECISIONS.md)
 - Die Testvideos haben keine Grundausrichtung (`prhd` = 0); der Player würde sie nur anzeigen, nicht anwenden
 - 8192×8192 HEVC liegt über HEVC-Level 6.2. NVDEC dekodiert es trotzdem (RTX 3070, reine Dekodierung: etwa 54 fps)
-- Ambisonics nur 1. Ordnung; höhere Ordnungen kommen mit M7
-- Noch kein Video mit eingebettetem Ambisonics-Ton (folgt mit M7)
+- Ambisonics nur 1. Ordnung, noch kein Video mit eingebettetem Ambisonics-Ton (Ambisonics im Player ist für später geplant)
+- Die Kästen im Stereo-Richtungstest gelten für die Standardbreite 60°; bei anderer Breite stehen die virtuellen Lautsprecher weiter innen oder außen

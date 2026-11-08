@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from orbivo_testmedia import ambisonics, conventions, equirect, projections, speech, spherical, variants, video
+from orbivo_testmedia import ambisonics, conventions, equirect, projections, speech, spherical, stereo, variants, video
 from orbivo_testmedia.wavfile import write_wav
 
 TOOL_DIR = Path(__file__).resolve().parent
@@ -35,8 +35,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="output directory (default: %(default)s)")
     parser.add_argument("--ffmpeg", type=Path, default=DEFAULT_FFMPEG, help="ffmpeg.exe (default: %(default)s)")
-    parser.add_argument("--what", default="images,videos,audio,decoder",
-                        help="images, videos, audio, decoder (comma separated)")
+    parser.add_argument("--what", default="images,videos,audio,decoder,stereo",
+                        help="images, videos, audio, decoder, stereo (comma separated)")
     parser.add_argument("--sizes", default="4k,8k", help="4k, 8k (comma separated)")
     parser.add_argument("--layouts", default="mono,tb,sbs", help="equirect 360 only: mono, tb, sbs (comma separated)")
     parser.add_argument("--formats", default=",".join(variants.PROJECTION_KEYS),
@@ -320,9 +320,44 @@ def generate_audio(args, manifest) -> None:
         })
 
 
+def generate_stereo_direction(args, manifest) -> None:
+    """Stereo direction test for sound fixed to the picture (M7): 4K mono equirect, noise bursts left/right/both."""
+    if not args.ffmpeg.exists():
+        sys.exit(f"ffmpeg not found: {args.ffmpeg} (see native/README.md or pass --ffmpeg)")
+    codec = video.CODECS[args.codec]
+    if codec.name not in video.available_encoders(args.ffmpeg):
+        sys.exit(f"Encoder {codec.name} is not available in {args.ffmpeg}")
+    settings = video.VideoSettings(codec, 8, args.fps, stereo.DURATION_S)
+    layout = equirect.LAYOUTS["mono"]
+    width, height = equirect.FRAME_SIZES[("mono", "4k")]
+
+    work = args.out / "_work"
+    work.mkdir(parents=True, exist_ok=True)
+    still = work / "stereo_still.png"
+    Image.fromarray(equirect.render_frame(layout, width, height)).save(still, compress_level=3)
+    audio = work / "stereo_richtungstest.wav"
+    write_wav(audio, stereo.build_audio(), stereo.SAMPLE_RATE, bits=24, channel_mask=0x3)
+
+    name = f"stereo_richtungstest_equirect360_mono_{width}x{height}_{codec.short}_8bit_{args.fps}fps.mp4"
+    output = args.out / name
+    elapsed = stereo.encode(args.ffmpeg, still, audio, output, width, height, settings)
+    metadata = spherical.SphericalMetadata("mono", "equirect")
+    tag(output, metadata)
+    write_sidecar(output, None)
+    log(f"{name} ({elapsed:.0f} s)")
+    manifest["videos"].append({
+        "file": name, "projection": "equirect360", "layout": "mono", "width": width, "height": height,
+        "metadata": metadata.describe(), "encoder": codec.name, "pix_fmt": settings.pix_fmt, "fps": args.fps,
+        "duration_s": stereo.DURATION_S, "color": "BT.709, limited range",
+        "audio": "stereo AAC 256 kbit/s, white noise bursts 0.3 s every 0.5 s, 6 s cycle: left only, right only, both",
+        "speakers_yaw_deg": {"L": stereo.SPEAKER_DEG, "R": -stereo.SPEAKER_DEG},
+        "events": stereo.events(),
+    })
+
+
 def main() -> None:
     args = parse_args()
-    what = split(args.what, {"images", "videos", "audio", "decoder"}, "--what")
+    what = split(args.what, {"images", "videos", "audio", "decoder", "stereo"}, "--what")
     sizes = split(args.sizes, {"4k", "8k"}, "--sizes")
     layouts = split(args.layouts, set(equirect.LAYOUTS), "--layouts")
     formats = split(args.formats, set(variants.PROJECTION_KEYS), "--formats")
@@ -347,6 +382,8 @@ def main() -> None:
         generate_audio(args, manifest)
     if "decoder" in what:
         generate_decoder_cases(args, manifest)
+    if "stereo" in what:
+        generate_stereo_direction(args, manifest)
 
     # Keep the entries of files that were not generated this time (e.g. the short videos when only --long ran).
     if manifest_path.exists():
