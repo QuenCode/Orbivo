@@ -142,7 +142,7 @@ public sealed class SidecarFileTests : IDisposable
         Assert.Equal(overrides, SidecarFile.Load(Video).Overrides);
         JsonObject root = JsonNode.Parse(File.ReadAllText(SidecarPath))!.AsObject();
         Assert.Equal(
-            ["version", "projection", "stereoLayout", "swapEyes", "fisheye", "cubemapLayout", "orientationOffsetDeg"],
+            ["version", "projection", "stereoLayout", "swapEyes", "fisheye", "cubemapLayout", "orientationOffsetDeg", "audioFixedToPicture", "stereoWidthDeg"],
             root.Select(pair => pair.Key));
         Assert.Equal("Cubemap", root["projection"]!.GetValue<string>());
         Assert.Null(root["fisheye"]);

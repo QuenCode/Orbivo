@@ -11,18 +11,22 @@ namespace Orbivo.Core.Formats;
 /// <param name="Cubemap">Cube face layout, or null for automatic (3 × 2, EAC: YouTube layout).</param>
 /// <param name="Fisheye">Fisheye circle, or null for automatic (180°, centered).</param>
 /// <param name="Offset">Orientation offset, or null for none.</param>
+/// <param name="AudioFixedToPicture">Stereo sound fixed to the picture (M7), or null for the default (on).</param>
+/// <param name="StereoWidthDegrees">Angle of the virtual stereo speakers, or null for the default (60°).</param>
 public sealed record FormatOverrides(
     ProjectionType? Projection = null,
     StereoLayout? Layout = null,
     bool? SwapEyes = null,
     CubemapLayout? Cubemap = null,
     FisheyeParameters? Fisheye = null,
-    OrientationOffset? Offset = null)
+    OrientationOffset? Offset = null,
+    bool? AudioFixedToPicture = null,
+    double? StereoWidthDegrees = null)
 {
     public static FormatOverrides None { get; } = new();
 
     /// <summary>True if nothing is overridden; then no sidecar is needed.</summary>
     public bool IsEmpty =>
         Projection is null && Layout is null && SwapEyes is null && Cubemap is null && Fisheye is null
-        && (Offset is null || Offset.Value.IsZero);
+        && (Offset is null || Offset.Value.IsZero) && AudioFixedToPicture is null && StereoWidthDegrees is null;
 }

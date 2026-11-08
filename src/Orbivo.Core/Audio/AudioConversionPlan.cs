@@ -1,6 +1,6 @@
 namespace Orbivo.Core.Audio;
 
-/// <summary>How the channels of a sound track reach the stereo output (M5: stereo only).</summary>
+/// <summary>How the channels of a sound track reach the stereo output.</summary>
 public enum ChannelHandling
 {
     /// <summary>Two channels, passed through.</summary>
@@ -10,8 +10,8 @@ public enum ChannelHandling
     MonoOnBoth,
 
     /// <summary>
-    /// More than two channels, mixed down to stereo with the standard matrix of swresample. Temporary until
-    /// binaural rendering of surround and Ambisonics (M7).
+    /// More than two channels, mixed down to stereo with the standard matrix of swresample. Binaural rendering of
+    /// surround and Ambisonics is planned for later (docs/ROADMAP.md).
     /// </summary>
     Downmix,
 }
@@ -32,7 +32,7 @@ public sealed record AudioConversionPlan(int SourceChannels, int SourceSampleRat
     /// <summary>The sample rate changes (swresample resamples).</summary>
     public bool Resamples => SourceSampleRate != OutputSampleRate;
 
-    /// <summary>The track is mixed down; the operator gets a hint, because spatial sound follows in M7.</summary>
+    /// <summary>The track is mixed down; the operator gets a hint, because its channel directions are lost.</summary>
     public bool IsDownmix => Channels == ChannelHandling.Downmix;
 
     /// <summary>Plans the conversion of a track with <paramref name="sourceChannels"/> channels.</summary>

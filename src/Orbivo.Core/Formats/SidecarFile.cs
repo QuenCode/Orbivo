@@ -23,7 +23,7 @@ public sealed class SidecarFile
     private static readonly JsonSerializerOptions WriteOptions = new() { WriteIndented = true };
 
     private static readonly string[] KnownKeys =
-        ["version", "projection", "stereoLayout", "swapEyes", "fisheye", "cubemapLayout", "orientationOffsetDeg"];
+        ["version", "projection", "stereoLayout", "swapEyes", "fisheye", "cubemapLayout", "orientationOffsetDeg", "audioFixedToPicture", "stereoWidthDeg"];
 
     private readonly JsonObject _root;
 
@@ -110,7 +110,9 @@ public sealed class SidecarFile
             ReadBool(root, "swapEyes", warnings),
             ReadCubemap(root, warnings),
             ReadFisheye(root, warnings),
-            ReadOffset(root, warnings));
+            ReadOffset(root, warnings),
+            ReadBool(root, "audioFixedToPicture", warnings),
+            ReadStereoWidth(root, warnings));
         return new SidecarFile(path, root, overrides, warnings, broken: false, readOnly: newer);
     }
 
@@ -161,6 +163,8 @@ public sealed class SidecarFile
             ["orientationOffsetDeg"] = overrides.Offset is { IsZero: false } offset
                 ? new JsonObject { ["yaw"] = offset.YawDegrees, ["pitch"] = offset.PitchDegrees, ["roll"] = offset.RollDegrees }
                 : null,
+            ["audioFixedToPicture"] = overrides.AudioFixedToPicture,
+            ["stereoWidthDeg"] = overrides.StereoWidthDegrees,
         };
         foreach ((string key, JsonNode? value) in _root)
         {
@@ -318,6 +322,23 @@ public sealed class SidecarFile
         }
 
         warnings.Add(string.Create(CultureInfo.InvariantCulture, $"Sidecar: Ausrichtung {node.ToJsonString()} ungültig (je Achse höchstens ±{OrientationOffset.MaxDegrees}°); ignoriert."));
+        return null;
+    }
+
+    private static double? ReadStereoWidth(JsonObject root, List<string> warnings)
+    {
+        JsonNode? node = root["stereoWidthDeg"];
+        if (node is null)
+        {
+            return null;
+        }
+
+        if (node is JsonValue value && value.TryGetValue(out double width) && Audio.StereoPlacement.IsValidWidth(width))
+        {
+            return width;
+        }
+
+        warnings.Add(string.Create(CultureInfo.InvariantCulture, $"Sidecar: Stereo-Breite {node.ToJsonString()} ungültig (erlaubt {Audio.StereoPlacement.MinWidthDegrees:0}–{Audio.StereoPlacement.MaxWidthDegrees:0}°); ignoriert."));
         return null;
     }
 
