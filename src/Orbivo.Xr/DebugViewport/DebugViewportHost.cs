@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Playback;
 using Orbivo.Media;
 using Orbivo.Xr.Graphics;
 using Orbivo.Xr.LiveView;
@@ -63,7 +64,7 @@ public sealed class DebugViewportHost : IDisposable
     private LiveViewFrames? _liveView;
     private ListenerOrientation? _listener;
     private RecenterControl? _recenter;
-    private VideoFormat _imageFormat = VideoFormat.Default;
+    private int _idleView = (int)IdleView.Black;
 
     // Status, written by the render thread, read by the UI.
     private int _state = (int)DebugViewportState.Starting;
@@ -122,17 +123,19 @@ public sealed class DebugViewportHost : IDisposable
     }
 
     /// <summary>
+    /// What the preview shows while no video runs (F7); see-through appears as a dark stand-in. Any thread.
+    /// </summary>
+    public void SetIdleView(IdleView view)
+    {
+        Volatile.Write(ref _idleView, (int)view);
+    }
+
+    /// <summary>
     /// Carries out recenter requests (F30) with the mouse view, like the headset does with the head. Any thread.
     /// </summary>
     public void SetRecenter(RecenterControl? recenter)
     {
         Volatile.Write(ref _recenter, recenter);
-    }
-
-    /// <summary>Stereo layout of the images passed to <see cref="ShowImage"/>; the preview shows the left eye. Any thread.</summary>
-    public void SetImageLayout(StereoLayout layout)
-    {
-        Volatile.Write(ref _imageFormat, VideoFormat.Equirect360(layout));
     }
 
     /// <summary>
@@ -263,7 +266,7 @@ public sealed class DebugViewportHost : IDisposable
             long displayTimestamp = Stopwatch.GetTimestamp();
             PanoramaSource source = video is not null && video.TryGetFrame(displayTimestamp, out VideoFrame videoFrame)
                 ? PanoramaSource.FromVideo(videoFrame)
-                : PanoramaSource.FromImage(image, Volatile.Read(ref _imageFormat));
+                : PanoramaSource.ForIdle((IdleView)Volatile.Read(ref _idleView), image);
             float brightness = video?.GetOutputBrightness(displayTimestamp) ?? 1f;
             renderer.Render(_device.ImmediateContext, swapChain.RenderTargetView, swapChain.Width, swapChain.Height, views[0], Eye.Left, source, brightness);
             Volatile.Read(ref _liveView)?.RenderIfDue(renderer, _device.ImmediateContext, views[0], source, brightness, displayTimestamp);

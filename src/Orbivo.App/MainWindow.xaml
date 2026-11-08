@@ -261,6 +261,7 @@
     <Grid Grid.Row="0" Grid.Column="1">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
 
@@ -304,8 +305,47 @@
         </Grid>
       </GroupBox>
 
+      <!-- Idle view (F7): what the headset shows while no video runs; kept in settings.json -->
+      <GroupBox Grid.Row="1" Header="Brille im Leerlauf (vor Play, nach Stop, ohne Video)" DataContext="{Binding Idle}">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="Anzeige:" VerticalAlignment="Center" Margin="0,2,16,2" />
+          <DockPanel Grid.Row="0" Grid.Column="1" Margin="0,2,0,2">
+            <Button DockPanel.Dock="Right" Content="Bild wählen …" Click="OnChooseIdleImageClick" Margin="6,0,0,0" Focusable="False"
+                    ToolTip="Equirect-360°-Bild (PNG, JPG). Quadratisch = Top-Bottom, 4:1 = Side-by-Side, sonst Mono" />
+            <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding Selected}" DisplayMemberPath="Label" Focusable="False"
+                      MinWidth="200" HorizontalAlignment="Left"
+                      ToolTip="Was der Proband sieht, solange kein Video läuft. Pause und Ende zeigen weiter das Videobild. Schwarzbild (B) und Fade wirken auch hier; Schwarzbild bleibt immer schwarz. Wird gespeichert." />
+          </DockPanel>
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Standbild:" Margin="0,2,16,2"
+                     Visibility="{Binding ShowsImageRow, Converter={StaticResource VisibleIfTrue}}" />
+          <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ImageText}" TextWrapping="Wrap" Margin="0,2,0,2"
+                     ToolTip="{Binding ImagePath}" Visibility="{Binding ShowsImageRow, Converter={StaticResource VisibleIfTrue}}">
+            <TextBlock.Style>
+              <Style TargetType="TextBlock">
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding ImageLevel}" Value="{x:Static vm:StatusLevel.Error}">
+                    <Setter Property="Foreground" Value="Firebrick" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="See-through:" Margin="0,2,16,2" />
+          <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SeeThroughText}" TextWrapping="Wrap" Margin="0,2,0,2" />
+        </Grid>
+      </GroupBox>
+
       <!-- Status (F40/F41, filled from M2 on) -->
-      <GroupBox Grid.Row="1" Header="Status">
+      <GroupBox Grid.Row="2" Header="Status">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <ItemsControl ItemsSource="{Binding StatusEntries}">
             <ItemsControl.ItemTemplate>

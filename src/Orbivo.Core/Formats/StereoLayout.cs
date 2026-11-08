@@ -18,12 +18,22 @@ public enum Eye
 public static class StereoLayoutDetection
 {
     /// <summary>
-    /// Guess from the image size until metadata detection (M6): square images are top-bottom
-    /// (two 2:1 equirect images on top of each other), everything else mono. Side-by-side cannot be told
-    /// apart from mono by its size and must be chosen explicitly.
+    /// Guess for an equirect 360 still image from its size: square images are top-bottom (two 2:1 images on top of each
+    /// other), 4:1 images side-by-side (two 2:1 images next to each other), everything else mono. A squeezed side-by-side
+    /// image (2:1) cannot be told apart from mono by its size and must be chosen explicitly.
     /// </summary>
     public static StereoLayout FromSize(int width, int height)
     {
-        return width > 0 && width == height ? StereoLayout.TopBottom : StereoLayout.Mono;
+        if (width <= 0 || height <= 0)
+        {
+            return StereoLayout.Mono;
+        }
+
+        if (width == height)
+        {
+            return StereoLayout.TopBottom;
+        }
+
+        return width == 4 * height ? StereoLayout.SideBySide : StereoLayout.Mono;
     }
 }

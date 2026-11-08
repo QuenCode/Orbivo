@@ -1,3 +1,4 @@
+using Orbivo.Core.Playback;
 using Orbivo.Core.Settings;
 
 namespace Orbivo.Core.Tests.Settings;
@@ -74,5 +75,33 @@ public sealed class AppSettingsTests : IDisposable
         AppSettings settings = AppSettings.Load(FilePath, out _);
         Assert.Null(settings.AudioDeviceId);
         Assert.Equal(1f, settings.Volume);
+    }
+
+    [Fact]
+    public void SaveAndLoad_KeepIdleViewAndRecording()
+    {
+        var saved = new AppSettings(
+            IdleView: IdleView.SeeThrough,
+            IdleImagePath: @"C:\Bilder\raum.png",
+            RecordingEnabled: true,
+            RecordingFolder: @"D:\Studie",
+            HeadSampleRateHz: 30);
+        saved.Save(FilePath);
+
+        Assert.Contains("\"SeeThrough\"", File.ReadAllText(FilePath), StringComparison.Ordinal);
+        Assert.Equal(saved, AppSettings.Load(FilePath, out string? problem));
+        Assert.Null(problem);
+    }
+
+    [Fact]
+    public void FileFromBeforeM8_GivesBlackIdleViewAndNoRecording()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+        File.WriteAllText(FilePath, """{ "AudioDeviceId": null, "Volume": 0.5, "SoundLocked": true }""");
+        AppSettings settings = AppSettings.Load(FilePath, out _);
+        Assert.Equal(IdleView.Black, settings.IdleView);
+        Assert.Null(settings.IdleImagePath);
+        Assert.False(settings.RecordingEnabled);
+        Assert.Equal(0, settings.HeadSampleRateHz);
     }
 }

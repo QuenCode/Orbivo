@@ -1,24 +1,38 @@
 using Orbivo.Core.Formats;
+using Orbivo.Core.Playback;
 using Orbivo.Media;
 
 namespace Orbivo.Xr.Rendering;
 
-/// <summary>What a view shows: black, a still image or a decoded video frame. Built on the render thread without allocations.</summary>
+/// <summary>
+/// What a view shows: black, a still image, a decoded video frame or the camera picture (see-through, F7).
+/// Built on the render thread without allocations.
+/// </summary>
 public readonly struct PanoramaSource
 {
-    private PanoramaSource(StillImageTexture? image, VideoFormat? imageFormat, VideoFrame video, bool isVideo)
+    private PanoramaSource(StillImageTexture? image, VideoFormat? imageFormat, VideoFrame video, bool isVideo, bool isSeeThrough)
     {
         Image = image;
         _imageFormat = imageFormat;
         Video = video;
         IsVideo = isVideo;
+        IsSeeThrough = isSeeThrough;
     }
 
     private readonly VideoFormat? _imageFormat;
 
     public static PanoramaSource Black => default;
 
-    public bool IsBlack => !IsVideo && Image is null;
+    /// <summary>
+    /// The camera picture of the headset. In the headset the compositor shows it where the layer is transparent; the
+    /// preview and the live view draw a dark stand-in (<see cref="PanoramaRenderer.SeeThroughStandIn"/>).
+    /// </summary>
+    public static PanoramaSource SeeThrough => new(null, null, default, isVideo: false, isSeeThrough: true);
+
+    public bool IsBlack => !IsVideo && !IsSeeThrough && Image is null;
+
+    /// <summary>True for <see cref="SeeThrough"/>.</summary>
+    public bool IsSeeThrough { get; }
 
     internal StillImageTexture? Image { get; }
 
@@ -36,11 +50,24 @@ public readonly struct PanoramaSource
     /// <param name="format">Its format; keep one instance and pass it every frame (no allocation).</param>
     public static PanoramaSource FromImage(StillImageTexture? image, VideoFormat format)
     {
-        return new PanoramaSource(image, format, default, isVideo: false);
+        return new PanoramaSource(image, format, default, isVideo: false, isSeeThrough: false);
     }
 
     public static PanoramaSource FromVideo(in VideoFrame frame)
     {
-        return new PanoramaSource(null, null, frame, isVideo: true);
+        return new PanoramaSource(null, null, frame, isVideo: true, isSeeThrough: false);
+    }
+
+    /// <summary>What the headset shows while no video frame is due (F7).</summary>
+    /// <param name="view">The operator's choice.</param>
+    /// <param name="image">The idle image with its format, or null (then <see cref="IdleView.Image"/> shows black).</param>
+    public static PanoramaSource ForIdle(IdleView view, StillImageTexture? image)
+    {
+        return view switch
+        {
+            IdleView.SeeThrough => SeeThrough,
+            IdleView.Image when image is not null => FromImage(image, image.PictureFormat),
+            _ => Black,
+        };
     }
 }

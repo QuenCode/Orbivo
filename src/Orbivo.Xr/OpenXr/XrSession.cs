@@ -2,12 +2,14 @@
 using Microsoft.Extensions.Logging;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Playback;
 using Orbivo.Media;
 using Orbivo.Xr.Graphics;
 using Orbivo.Xr.LiveView;
 using Orbivo.Xr.Rendering;
 using Silk.NET.OpenXR;
 using Vortice.DXGI;
+using Vortice.Mathematics;
 
 namespace Orbivo.Xr.OpenXr;
 
@@ -29,6 +31,9 @@ namespace Orbivo.Xr.OpenXr;
 /// <param name="HeadInContent">Head in the video's own frame (recenter and orientation offset), as the renderer looks into it.</param>
 /// <param name="DisplayTimestamp">Stopwatch timestamp of the predicted display time.</param>
 /// <param name="PredictedDisplayPeriod">Frame period of the headset in nanoseconds.</param>
+/// <param name="Content">What the eyes showed, before blackout and fade.</param>
+/// <param name="Brightness">Blackout and fade factor (1 = full picture, 0 = black).</param>
+/// <param name="VideoPtsTicks">Presentation time of the shown video frame, or <see cref="long.MinValue"/>.</param>
 internal readonly record struct XrFrameResult(
     bool Submitted,
     bool HeadTracked,
@@ -36,7 +41,10 @@ internal readonly record struct XrFrameResult(
     Quaternion Head,
     Quaternion HeadInContent,
     long DisplayTimestamp,
-    long PredictedDisplayPeriod);
+    long PredictedDisplayPeriod,
+    HeadsetContent Content,
+    float Brightness,
+    long VideoPtsTicks);
 
 /// <summary>
 /// A session with its LOCAL reference space and one swapchain per eye (docs/ARCHITECTURE.md, "OpenXR-Lebenszyklus").
@@ -57,8 +65,9 @@ internal sealed unsafe class XrSession : IDisposable
     private bool _hasValidViews;
     private bool _disposed;
 
-    private XrSession(XrInstance instance, GraphicsDevice device, Session handle, Space space, XrSwapchain[] swapchains)
+    private XrSession(XrInstance instance, GraphicsDevice device, Session handle, Space space, XrSwapchain[] swapchains, bool supportsSeeThrough)
     {
+        SupportsSeeThrough = supportsSeeThrough;
         _xr = instance.Xr;
         _instance = instance;
         _device = device;
@@ -76,6 +85,9 @@ internal sealed unsafe class XrSession : IDisposable
     public int EyeWidth => _swapchains[0].Width;
 
     public int EyeHeight => _swapchains[0].Height;
+
+    /// <summary>True if the runtime offers the blend mode <c>ALPHA_BLEND</c> (camera picture of the XR-3, F7).</summary>
+    public bool SupportsSeeThrough { get; }
 
     public static XrSession Create(XrInstance instance, in XrSystemInfo system, GraphicsDevice device, ILogger logger)
     {
@@ -113,7 +125,8 @@ internal sealed unsafe class XrSession : IDisposable
                 system.EyeHeight,
                 format,
                 swapchains[0].ImageCount);
-            return new XrSession(instance, device, handle, space, [.. swapchains]);
+            bool seeThrough = SupportsAlphaBlend(instance, system.SystemId, logger);
+            return new XrSession(instance, device, handle, space, [.. swapchains], seeThrough);
         }
         catch
         {
@@ -157,16 +170,17 @@ internal sealed unsafe class XrSession : IDisposable
     /// </summary>
     /// <param name="renderer">Draws the panorama.</param>
     /// <param name="video">Video frames; a due frame wins over <paramref name="image"/>. Null without a player.</param>
-    /// <param name="image">Image to show if there is no video frame, or null for black.</param>
-    /// <param name="imageFormat">Format of <paramref name="image"/>.</param>
+    /// <param name="image">Idle image (F7) with its format, or null.</param>
     /// <param name="liveView">Live view for the operator (F42), or null.</param>
+    /// <param name="recenter">Recenter (F30), or null.</param>
+    /// <param name="idleView">What to show while no video frame is due (F7).</param>
     public XrFrameResult RenderFrame(
         PanoramaRenderer renderer,
         IVideoFrameSource? video,
         StillImageTexture? image,
-        VideoFormat imageFormat,
         LiveViewFrames? liveView,
-        RecenterControl? recenter)
+        RecenterControl? recenter,
+        IdleView idleView)
     {
         var waitInfo = new FrameWaitInfo(type: StructureType.FrameWaitInfo);
         var frameState = new FrameState(type: StructureType.FrameState);
@@ -185,6 +199,9 @@ internal sealed unsafe class XrSession : IDisposable
         Quaternion trackedHead = Quaternion.Identity;
         Quaternion correction = Quaternion.Identity;
         OrientationOffset offset = OrientationOffset.Zero;
+        HeadsetContent content = HeadsetContent.None;
+        float brightness = 1f;
+        bool seeThrough = false;
         uint layerCount = 0;
         if (frameState.ShouldRender != 0)
         {
@@ -198,10 +215,18 @@ internal sealed unsafe class XrSession : IDisposable
 
                 // Recenter turns every view the same way (F31: picture, live view and sound).
                 correction = recenter?.Update(trackedHead, headTracked) ?? Quaternion.Identity;
-                PanoramaSource source = hasVideoFrame ? PanoramaSource.FromVideo(frame) : PanoramaSource.FromImage(image, imageFormat);
+                PanoramaSource source = hasVideoFrame ? PanoramaSource.FromVideo(frame) : PanoramaSource.ForIdle(idleView, image);
+                if (source.IsSeeThrough && !SupportsSeeThrough)
+                {
+                    source = PanoramaSource.Black;
+                }
+
                 offset = source.Format.Offset;
-                // Blackout and fade (F5) also cover the still image; without a player there is nothing to dim.
-                float brightness = video?.GetOutputBrightness(displayTimestamp) ?? 1f;
+                content = ContentOf(source);
+                seeThrough = source.IsSeeThrough;
+
+                // Blackout and fade (F5) also cover the idle view; without a player there is nothing to dim.
+                brightness = video?.GetOutputBrightness(displayTimestamp) ?? 1f;
                 RenderEyes(renderer, source, brightness, correction);
                 layerCount = 1;
                 if (liveView is { Enabled: true })
@@ -214,8 +239,10 @@ internal sealed unsafe class XrSession : IDisposable
             }
         }
 
+        // See-through: the compositor blends the layer over the camera picture by its (premultiplied) alpha.
         var layer = new CompositionLayerProjection(
             type: StructureType.CompositionLayerProjection,
+            layerFlags: seeThrough ? CompositionLayerFlags.BlendTextureSourceAlphaBit : 0,
             space: Space,
             viewCount: XrInstance.EyeCount,
             views: (CompositionLayerProjectionView*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref _projectionViews[0]));
@@ -223,7 +250,7 @@ internal sealed unsafe class XrSession : IDisposable
         var endInfo = new FrameEndInfo(
             type: StructureType.FrameEndInfo,
             displayTime: frameState.PredictedDisplayTime,
-            environmentBlendMode: EnvironmentBlendMode.Opaque,
+            environmentBlendMode: seeThrough ? EnvironmentBlendMode.AlphaBlend : EnvironmentBlendMode.Opaque,
             layerCount: layerCount,
             layers: &layerHeader);
         _xr.EndFrame(Handle, &endInfo).Check("xrEndFrame");
@@ -237,7 +264,10 @@ internal sealed unsafe class XrSession : IDisposable
             head,
             offset.ApplyToView(head),
             displayTimestamp,
-            frameState.PredictedDisplayPeriod);
+            frameState.PredictedDisplayPeriod,
+            content,
+            brightness,
+            content == HeadsetContent.Video ? frame.PtsTicks : long.MinValue);
     }
 
     public void Dispose()
@@ -255,6 +285,43 @@ internal sealed unsafe class XrSession : IDisposable
 
         _xr.DestroySpace(Space);
         _xr.DestroySession(Handle);
+    }
+
+    private static HeadsetContent ContentOf(in PanoramaSource source)
+    {
+        if (source.IsVideo)
+        {
+            return HeadsetContent.Video;
+        }
+
+        if (source.IsSeeThrough)
+        {
+            return HeadsetContent.SeeThrough;
+        }
+
+        return source.IsBlack ? HeadsetContent.Black : HeadsetContent.Image;
+    }
+
+    /// <summary>Asks the runtime for its environment blend modes and logs them (decision 2026-11-07: write to the log).</summary>
+    private static bool SupportsAlphaBlend(XrInstance instance, ulong systemId, ILogger logger)
+    {
+        XR xr = instance.Xr;
+        uint count = 0;
+        xr.EnumerateEnvironmentBlendModes(instance.Handle, systemId, XrInstance.ViewConfiguration, 0, &count, (EnvironmentBlendMode*)null)
+            .Check("xrEnumerateEnvironmentBlendModes");
+        var modes = new EnvironmentBlendMode[count];
+        fixed (EnvironmentBlendMode* pointer = modes)
+        {
+            xr.EnumerateEnvironmentBlendModes(instance.Handle, systemId, XrInstance.ViewConfiguration, count, &count, pointer)
+                .Check("xrEnumerateEnvironmentBlendModes");
+        }
+
+        bool alphaBlend = modes.AsSpan(0, (int)count).Contains(EnvironmentBlendMode.AlphaBlend);
+        logger.LogInformation(
+            "Environment blend modes: {Modes}. See-through (camera picture) is {Availability}.",
+            string.Join(", ", modes.Take((int)count)),
+            alphaBlend ? "available" : "not available");
+        return alphaBlend;
     }
 
     private static Format ChooseFormat(XR xr, Session session, ILogger logger)
@@ -322,7 +389,16 @@ internal sealed unsafe class XrSession : IDisposable
 
             XrSwapchain swapchain = _swapchains[eye];
             var target = swapchain.AcquireImage();
-            renderer.Render(_device.ImmediateContext, target, swapchain.Width, swapchain.Height, parameters, (Eye)eye, source, brightness);
+            if (source.IsSeeThrough)
+            {
+                // Transparent shows the camera; blackout and fade lay black over it (premultiplied: color 0, alpha = darkness).
+                _device.ImmediateContext.ClearRenderTargetView(target, new Color4(0f, 0f, 0f, 1f - Math.Clamp(brightness, 0f, 1f)));
+            }
+            else
+            {
+                renderer.Render(_device.ImmediateContext, target, swapchain.Width, swapchain.Height, parameters, (Eye)eye, source, brightness);
+            }
+
             swapchain.ReleaseImage();
 
             // The submitted pose is the located one: the compositor reprojects from it. Content is at infinity,

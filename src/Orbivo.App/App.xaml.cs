@@ -47,6 +47,15 @@ public partial class App : Application
     private LiveViewFrames? _liveViewFrames;
     private StartupOptions? _options;
 
+    /// <summary>Device and hand-over of the render thread for the idle image, once the device exists (UI thread).</summary>
+    private (GraphicsDevice Device, Action<StillImageTexture> Show)? _imageTarget;
+
+    /// <summary>Applies the idle view to the render thread (headset or preview), once it exists.</summary>
+    private Action<Core.Playback.IdleView>? _setIdleView;
+
+    /// <summary>The idle image that was last loaded or is being loaded, to load each file only once.</summary>
+    private string? _loadedIdleImage;
+
     /// <summary>Operator UI → player (CLAUDE.md rule 3).</summary>
     private readonly Channel<PlayerCommand> _playerCommands =
         Channel.CreateUnbounded<PlayerCommand>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
@@ -116,6 +125,13 @@ public partial class App : Application
             settings,
             () => AudioDeviceCatalog.ListOutputs(deviceLogger));
         _viewModel.SettingsChanged += (_, _) => SaveSettings();
+        if (options.ImagePath is not null)
+        {
+            // --image: the idle image for this session; the stored idle view stays as it is.
+            _viewModel.Idle.UseSessionImage(Path.GetFullPath(options.ImagePath));
+        }
+
+        _viewModel.Idle.Changed += (_, _) => ApplyIdleView();
         _liveView = new LiveViewController(_loggerFactory.CreateLogger<LiveViewPresenter>());
         _viewModel.AttachLiveView(_liveView);
         var window = new MainWindow
@@ -172,9 +188,10 @@ public partial class App : Application
     private void StartHeadset(StartupOptions options, bool ffmpegAvailable, MainViewModel viewModel, ILoggerFactory loggerFactory, ILogger logger)
     {
         _xrHost = new XrHost(loggerFactory, RequestDebugLayer);
-        _xrHost.SetImageLayout(options.StereoLayout ?? StereoLayout.Mono);
         _xrHost.SetListener(_listener);
         _xrHost.SetRecenter(_recenter);
+        _setIdleView = _xrHost.SetIdleView;
+        ApplyIdleView();
         _xrHost.Start();
         viewModel.StartXrPolling(_xrHost.GetStatus);
         _ = StartWhenDeviceReadyAsync(options, ffmpegAvailable, _xrHost, viewModel, loggerFactory, logger);
@@ -192,10 +209,8 @@ public partial class App : Application
         GraphicsDevice device = await host.GraphicsDeviceReady;
         AttachLiveView(device, host.SetLiveView, logger);
         StartPlayer(device, ffmpegAvailable, host.SetVideoSource, viewModel, loggerFactory, logger);
-        if (options.ImagePath is not null)
-        {
-            await LoadImageAsync(options.ImagePath, options.StereoLayout, device, host.ShowImage, viewModel, logger);
-        }
+        _imageTarget = (device, host.ShowImage);
+        ApplyIdleView();
     }
 
     /// <summary>
@@ -238,17 +253,35 @@ public partial class App : Application
 
         viewModel.ShowGraphicsDevice(_graphicsDevice.AdapterName, _graphicsDevice.DedicatedVideoMemoryBytes);
         _debugViewport = new DebugViewportHost(_graphicsDevice, loggerFactory.CreateLogger<DebugViewportHost>());
-        _debugViewport.SetImageLayout(options.StereoLayout ?? StereoLayout.Mono);
         _debugViewport.SetListener(_listener);
         _debugViewport.SetRecenter(_recenter);
+        _setIdleView = _debugViewport.SetIdleView;
+        _imageTarget = (_graphicsDevice, _debugViewport.ShowImage);
+        ApplyIdleView();
         AttachLiveView(_graphicsDevice, _debugViewport.SetLiveView, logger);
         StartPlayer(_graphicsDevice, ffmpegAvailable, _debugViewport.SetVideoSource, viewModel, loggerFactory, logger);
         _debugViewport.Start();
         viewModel.StartViewportPolling(_debugViewport.GetStatus);
+    }
 
-        if (options.ImagePath is not null)
+    /// <summary>
+    /// Hands the operator's idle view (F7) to the render thread and loads a newly chosen idle image once the device
+    /// exists. UI thread.
+    /// </summary>
+    private void ApplyIdleView()
+    {
+        if (_viewModel is null || _logger is null)
         {
-            _ = LoadImageAsync(options.ImagePath, options.StereoLayout, _graphicsDevice, _debugViewport.ShowImage, viewModel, logger);
+            return;
+        }
+
+        IdleViewModel idle = _viewModel.Idle;
+        _setIdleView?.Invoke(idle.View);
+        if (idle.ImagePath is { } path && _imageTarget is { } target
+            && !string.Equals(path, _loadedIdleImage, StringComparison.OrdinalIgnoreCase))
+        {
+            _loadedIdleImage = path;
+            _ = LoadImageAsync(path, _options?.ImagePath is not null ? _options.StereoLayout : null, target.Device, target.Show, _viewModel, _logger);
         }
     }
 
@@ -289,11 +322,12 @@ public partial class App : Application
         try
         {
             var stopwatch = Stopwatch.StartNew();
-            (int width, int height) = await Task.Run(() =>
+            (int width, int height, StereoLayout layout) = await Task.Run(() =>
             {
                 Bgra32Image image = StillImageLoader.LoadBgra32(fullPath);
-                show(StillImageTexture.Create(device, image));
-                return (image.Width, image.Height);
+                StereoLayout layout = layoutOverride ?? StereoLayoutDetection.FromSize(image.Width, image.Height);
+                show(StillImageTexture.Create(device, image, layout));
+                return (image.Width, image.Height, layout);
             });
 
             logger.LogInformation(
@@ -302,15 +336,7 @@ public partial class App : Application
                 width,
                 height,
                 stopwatch.ElapsedMilliseconds);
-            // The hosts were told the layout before; the guess here only labels it for the operator when none was given.
-            StereoLayout layout = layoutOverride ?? StereoLayout.Mono;
-            if (layoutOverride is null && StereoLayoutDetection.FromSize(width, height) != StereoLayout.Mono)
-            {
-                logger.LogWarning(
-                    "Image {Path} is square and probably top-bottom stereo; it is shown as mono. Start with --stereo tb.",
-                    fullPath);
-            }
-
+            logger.LogInformation("Idle image layout: {Layout} ({Source}).", layout, layoutOverride is null ? "guessed from the size" : "--stereo");
             viewModel.ShowImageLoaded(fileName, width, height, layout, layoutOverride is not null);
         }
         catch (Exception exception)

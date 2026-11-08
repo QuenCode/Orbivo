@@ -1,3 +1,4 @@
+using Orbivo.Core.Formats;
 using Orbivo.Xr.Graphics;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -15,21 +16,28 @@ public sealed class StillImageTexture : IDisposable
 
     private readonly ID3D11Texture2D _texture;
 
-    private StillImageTexture(ID3D11Texture2D texture, ID3D11ShaderResourceView view, int width, int height)
+    private StillImageTexture(ID3D11Texture2D texture, ID3D11ShaderResourceView view, int width, int height, VideoFormat format)
     {
         _texture = texture;
         ShaderResourceView = view;
         Width = width;
         Height = height;
+        PictureFormat = format;
     }
 
     public int Width { get; }
 
     public int Height { get; }
 
+    /// <summary>The image is shown as equirect 360 in this stereo layout (one instance, so the render thread does not allocate).</summary>
+    public VideoFormat PictureFormat { get; }
+
     internal ID3D11ShaderResourceView ShaderResourceView { get; }
 
-    public static unsafe StillImageTexture Create(GraphicsDevice device, Bgra32Image image)
+    /// <param name="device">Device of the render thread.</param>
+    /// <param name="image">Pixels.</param>
+    /// <param name="layout">Stereo layout of the equirect 360 image.</param>
+    public static unsafe StillImageTexture Create(GraphicsDevice device, Bgra32Image image, StereoLayout layout = StereoLayout.Mono)
     {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(image);
@@ -56,7 +64,7 @@ public sealed class StillImageTexture : IDisposable
         try
         {
             ID3D11ShaderResourceView view = device.Device.CreateShaderResourceView(texture, null);
-            return new StillImageTexture(texture, view, image.Width, image.Height);
+            return new StillImageTexture(texture, view, image.Width, image.Height, VideoFormat.Equirect360(layout));
         }
         catch
         {

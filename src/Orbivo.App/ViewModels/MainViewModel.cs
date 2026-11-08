@@ -41,7 +41,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly ChannelWriter<PlayerCommand> _commands;
     private readonly List<Action> _refreshers = [];
     private readonly StatusEntry _gpuEntry;
-    private readonly StatusEntry? _imageEntry;
+    private readonly AppSettings _loadedSettings;
     private readonly StatusEntry _playbackEntry;
     private readonly StatusEntry _videoEntry;
     private readonly StatusEntry _decoderEntry;
@@ -85,7 +85,7 @@ public sealed class MainViewModel : ObservableObject
     private bool _autoAdvance = true;
     private bool _loop;
     private PlaylistEntry? _selectedEntry;
-    private string _outputText = "Brille: schwarz";
+    private string _outputText = "Brille: Leerlauf";
     private StatusLevel _outputLevel = StatusLevel.Neutral;
 
     public MainViewModel(
@@ -105,6 +105,10 @@ public sealed class MainViewModel : ObservableObject
         _noXr = options.NoXr;
         _listAudioDevices = listAudioDevices;
         Format = new FormatViewModel(Send);
+        _loadedSettings = settings;
+        Idle = new IdleViewModel(settings.IdleView, settings.IdleImagePath, options.NoXr);
+        Idle.SettingsChanged += (_, _) => SettingsChanged?.Invoke(this, EventArgs.Empty);
+        Idle.Changed += (_, _) => ShowOutput(_lastStatus);
         _volumePercent = Math.Round(settings.Volume * 100);
         _soundLocked = settings.SoundLocked;
         Playlist = new Playlist();
@@ -149,12 +153,11 @@ public sealed class MainViewModel : ObservableObject
         };
 
         _gpuEntry = new StatusEntry("GPU", options.NoXr ? "Wird eingerichtet …" : "Wartet auf die Brille …", StatusLevel.Neutral);
-        _imageEntry = options.ImagePath is null ? null : new StatusEntry("Bild", "Wird geladen …", StatusLevel.Neutral);
         _playbackEntry = options.VideoPath is null
             ? new StatusEntry(
                 "Wiedergabe",
-                $"Kein Video (Schwarz). Start mit {StartupOptions.VideoOption} <Pfad>",
-                options.ImagePath is null ? StatusLevel.Warning : StatusLevel.Neutral)
+                "Kein Video geladen. Videos über „Hinzufügen …“ oder per Drag & Drop in die Playlist",
+                StatusLevel.Neutral)
             : new StatusEntry("Wiedergabe", "Wartet auf die Grafikkarte …", StatusLevel.Neutral);
         _videoEntry = new StatusEntry("Video", "–", StatusLevel.Neutral);
         _decoderEntry = new StatusEntry("Decoder", "–", StatusLevel.Neutral);
@@ -198,11 +201,6 @@ public sealed class MainViewModel : ObservableObject
             ]);
         }
 
-        if (_imageEntry is not null)
-        {
-            entries.Insert(entries.IndexOf(_playbackEntry), _imageEntry);
-        }
-
         entries.AddRange(nativeComponents.Select(component => new StatusEntry(
             component.Component,
             component.Detail,
@@ -216,8 +214,18 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>The operator changed the output device; the app saves the settings.</summary>
     public event EventHandler? SettingsChanged;
 
-    /// <summary>Settings to keep: output device, volume and their lock (not mute).</summary>
-    public AppSettings CurrentSettings => new(SelectedAudioDevice?.Id, (float)(VolumePercent / 100), SoundLocked);
+    /// <summary>Settings to keep: output device, volume and their lock (not mute), idle view.</summary>
+    public AppSettings CurrentSettings => _loadedSettings with
+    {
+        AudioDeviceId = SelectedAudioDevice?.Id,
+        Volume = (float)(VolumePercent / 100),
+        SoundLocked = SoundLocked,
+        IdleView = Idle.SavedChoice.View,
+        IdleImagePath = Idle.SavedChoice.ImagePath,
+    };
+
+    /// <summary>The "Brille im Leerlauf" group (F7).</summary>
+    public IdleViewModel Idle { get; }
 
     /// <summary>
     /// Locks output device and volume against a slip (kept across restarts). Mute stays usable, as an emergency stop.
@@ -512,7 +520,6 @@ public sealed class MainViewModel : ObservableObject
     {
         _gpuEntry.Update("Grafikkarte konnte nicht eingerichtet werden (Details im Log)", StatusLevel.Error);
         _viewportEntry?.Update("Nicht gestartet", StatusLevel.Error);
-        _imageEntry?.Update("–", StatusLevel.Neutral);
         _playbackEntry.Update("Kein Video möglich ohne Grafikkarte", StatusLevel.Error);
     }
 
@@ -524,14 +531,19 @@ public sealed class MainViewModel : ObservableObject
         int eyeWidth = layout == StereoLayout.SideBySide ? width / 2 : width;
         int eyeHeight = layout == StereoLayout.TopBottom ? height / 2 : height;
         bool expected = layout == StereoLayout.SideBySide ? eyeWidth == eyeHeight : eyeWidth == 2 * eyeHeight;
-        _imageEntry?.Update(
-            expected ? text : text + ". Ungewöhnliches Seitenverhältnis für Equirect 360°",
-            expected ? StatusLevel.Ok : StatusLevel.Warning);
+        if (expected)
+        {
+            Idle.ShowImageLoaded(text);
+        }
+        else
+        {
+            Idle.ShowImageFailed(text + ". Ungewöhnliches Seitenverhältnis für Equirect 360°");
+        }
     }
 
     public void ShowImageFailed(string fileName, string reason)
     {
-        _imageEntry?.Update($"{fileName}: {reason}", StatusLevel.Error);
+        Idle.ShowImageFailed($"{fileName}: {reason}");
     }
 
     /// <summary>Refreshes playback, video and decoder ten times per second.</summary>
@@ -992,13 +1004,19 @@ public sealed class MainViewModel : ObservableObject
         CultureInfo culture = CultureInfo.CurrentCulture;
         OutputLevel output = status.Output;
         bool videoVisible = status.State is PlaybackState.Playing or PlaybackState.Paused or PlaybackState.Ended;
+        string idle = Idle.View switch
+        {
+            IdleView.SeeThrough => "See-through",
+            IdleView.Image => "Standbild",
+            _ => "Schwarz",
+        };
         string content = status.State switch
         {
             PlaybackState.Playing => "Video läuft",
-            PlaybackState.Paused => "Standbild (Pause)",
+            PlaybackState.Paused => "Videobild steht (Pause)",
             PlaybackState.Ended => "Letztes Bild (Ende)",
-            PlaybackState.NoMedia => "Schwarz (kein Video geladen)",
-            _ => "Schwarz (kein Video freigegeben)",
+            PlaybackState.NoMedia => $"Leerlauf: {idle} (kein Video geladen)",
+            _ => $"Leerlauf: {idle} (Video noch nicht gestartet)",
         };
 
         string text;
@@ -1226,6 +1244,12 @@ public sealed class MainViewModel : ObservableObject
         }
 
         ShowRecenter(status.Recenter, waitingText: "wartet auf Kopf-Tracking");
+        Idle.ShowSeeThroughSupport(status.SeeThrough switch
+        {
+            SeeThroughSupport.Available => true,
+            SeeThroughSupport.NotAvailable => false,
+            _ => null,
+        });
     }
 
     /// <summary>Recenter line and buttons (F30). The yaw is the turn of the video's front, positive = to the left.</summary>

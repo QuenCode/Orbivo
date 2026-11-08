@@ -72,6 +72,8 @@ public sealed class EyeSourceRectTests
     [InlineData(4096, 4096, StereoLayout.TopBottom)]
     [InlineData(8192, 4096, StereoLayout.Mono)]
     [InlineData(3840, 1920, StereoLayout.Mono)]
+    [InlineData(8192, 2048, StereoLayout.SideBySide)]
+    [InlineData(0, 0, StereoLayout.Mono)]
     public void DetectionFromSize(int width, int height, StereoLayout expected)
     {
         Assert.Equal(expected, StereoLayoutDetection.FromSize(width, height));

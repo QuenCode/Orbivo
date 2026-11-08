@@ -31,6 +31,12 @@ public sealed class PanoramaRenderer : IDisposable
 
     private static readonly Color4 Black = new(0f, 0f, 0f, 1f);
 
+    /// <summary>
+    /// Linear color that stands in for the camera picture (see-through, F7) where it cannot be shown: preview and live
+    /// view. A dark blue-gray (about sRGB 48/52/60), clearly different from black.
+    /// </summary>
+    public static readonly Color4 SeeThroughStandIn = new(0.030f, 0.034f, 0.045f, 1f);
+
     private readonly ID3D11VertexShader _vertexShader;
     private readonly ID3D11PixelShader _imageShader;
     private readonly ID3D11PixelShader _videoShader;
@@ -82,7 +88,7 @@ public sealed class PanoramaRenderer : IDisposable
     /// <param name="height">Target height in pixels.</param>
     /// <param name="view">Orientation and field of view.</param>
     /// <param name="eye">The eye to render (the debug viewport shows the left eye); swapped by the format if set (F11).</param>
-    /// <param name="source">Image, video frame or black.</param>
+    /// <param name="source">Image, video frame, black, or see-through (drawn as <see cref="SeeThroughStandIn"/>).</param>
     /// <param name="brightness">1 = full image, 0 = black.</param>
     public void Render(
         ID3D11DeviceContext context,
@@ -126,6 +132,15 @@ public sealed class PanoramaRenderer : IDisposable
         if (output == PanoramaOutput.Image && (source.IsBlack || brightness <= 0f))
         {
             context.ClearRenderTargetView(target, Black);
+            return;
+        }
+
+        if (output == PanoramaOutput.Image && source.IsSeeThrough)
+        {
+            // Blackout and fade darken the stand-in like they darken the camera picture in the headset.
+            context.ClearRenderTargetView(
+                target,
+                new Color4(SeeThroughStandIn.R * brightness, SeeThroughStandIn.G * brightness, SeeThroughStandIn.B * brightness, 1f));
             return;
         }
 

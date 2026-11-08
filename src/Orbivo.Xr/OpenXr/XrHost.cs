@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Playback;
 using Orbivo.Media;
 using Orbivo.Xr.Graphics;
 using Orbivo.Xr.LiveView;
@@ -44,7 +45,7 @@ public sealed class XrHost : IDisposable
     private LiveViewFrames? _liveView;
     private ListenerOrientation? _listener;
     private RecenterControl? _recenter;
-    private VideoFormat _imageFormat = VideoFormat.Default;
+    private int _idleView = (int)IdleView.Black;
     private volatile bool _stopRequested;
 
     // Status, written by the render thread, read by the UI.
@@ -57,6 +58,7 @@ public sealed class XrHost : IDisposable
     private float _headYawDegrees;
     private float _headPitchDegrees;
     private int _hasImage;
+    private int _seeThroughSupport = (int)SeeThroughSupport.Unknown;
     private int _renderLoopAllocates;
     private string? _error;
 
@@ -111,19 +113,22 @@ public sealed class XrHost : IDisposable
         Volatile.Write(ref _listener, listener);
     }
 
+    /// <summary>What the headset shows while no video runs (F7), from the next frame on. Any thread.</summary>
+    public void SetIdleView(IdleView view)
+    {
+        Volatile.Write(ref _idleView, (int)view);
+    }
+
     /// <summary>Carries out recenter requests (F30) with the head pose of the next frame. Any thread.</summary>
     public void SetRecenter(RecenterControl? recenter)
     {
         Volatile.Write(ref _recenter, recenter);
     }
 
-    /// <summary>Stereo layout of the images passed to <see cref="ShowImage"/>. Any thread, before <see cref="ShowImage"/>.</summary>
-    public void SetImageLayout(StereoLayout layout)
-    {
-        Volatile.Write(ref _imageFormat, VideoFormat.Equirect360(layout));
-    }
-
-    /// <summary>Shows <paramref name="texture"/> from the next frame on. Ownership passes to the host. Any thread.</summary>
+    /// <summary>
+    /// The idle image (F7, shown while the idle view is <see cref="IdleView.Image"/>), from the next frame on, in the
+    /// layout it was created with. Ownership passes to the host. Any thread.
+    /// </summary>
     public void ShowImage(StillImageTexture texture)
     {
         ArgumentNullException.ThrowIfNull(texture);
@@ -144,7 +149,8 @@ public sealed class XrHost : IDisposable
             Volatile.Read(ref _hasImage) != 0,
             Volatile.Read(ref _renderLoopAllocates) != 0,
             Volatile.Read(ref _error),
-            RecenterStatus.Of(Volatile.Read(ref _recenter)));
+            RecenterStatus.Of(Volatile.Read(ref _recenter)),
+            (SeeThroughSupport)Volatile.Read(ref _seeThroughSupport));
     }
 
     public void Dispose()
@@ -271,6 +277,7 @@ public sealed class XrHost : IDisposable
                 session.SwapchainFormat.ToString(),
                 device.AdapterName));
             Volatile.Write(ref _error, null);
+            Volatile.Write(ref _seeThroughSupport, (int)(session.SupportsSeeThrough ? SeeThroughSupport.Available : SeeThroughSupport.NotAvailable));
             SetState(XrConnectionState.Connected);
             _logger.LogInformation("Headset {System} connected through {Runtime}.", system.SystemName, instance.RuntimeName);
 
@@ -394,9 +401,9 @@ public sealed class XrHost : IDisposable
                 renderer,
                 Volatile.Read(ref _videoSource),
                 image,
-                Volatile.Read(ref _imageFormat),
                 Volatile.Read(ref _liveView),
-                Volatile.Read(ref _recenter));
+                Volatile.Read(ref _recenter),
+                (IdleView)Volatile.Read(ref _idleView));
             frame++;
             framesInInterval++;
             PublishFrame(result);

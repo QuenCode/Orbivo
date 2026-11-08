@@ -42,6 +42,19 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnChooseIdleImageClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Standbild für den Leerlauf wählen (Equirect 360°)",
+            Filter = "Bilder (*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff)|*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff|Alle Dateien (*.*)|*.*",
+        };
+        if (dialog.ShowDialog(this) == true)
+        {
+            ViewModel.Idle.ChooseImage(dialog.FileName);
+        }
+    }
+
     private void OnPlaylistDragOver(object sender, DragEventArgs e)
     {
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
