@@ -9,12 +9,20 @@
     <RootNamespace>Orbivo.App</RootNamespace>
     <!-- Embedded as Win32 resource: Explorer, taskbar and the native debug viewport window use it. -->
     <ApplicationIcon>Assets\orbivo.ico</ApplicationIcon>
+    <!-- Only German framework texts (WPF dialogs) in the output and the release package, not a dozen languages. -->
+    <SatelliteResourceLanguages>de</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- WPF resource for the operator window's title bar. orbivo.svg and orbivo-512.png are the source artwork. -->
     <Resource Include="Assets\orbivo.ico" />
     <None Include="Assets\orbivo.svg;Assets\orbivo-512.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Operator manual (M9): next to Orbivo.exe in every build and in the release package, opened with F1. -->
+    <None Include="$(OrbivoRepoRoot)docs\Anleitung.html" Link="Anleitung.html"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

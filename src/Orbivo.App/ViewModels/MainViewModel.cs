@@ -62,6 +62,9 @@ public sealed class MainViewModel : ObservableObject
     private bool _muted;
     private bool _soundLocked;
     private readonly bool _noXr;
+
+    /// <summary>False with <c>--video</c>: that session's playlist is neither restored nor saved (M9).</summary>
+    private readonly bool _keepsPlaylist;
     private LiveViewController? _liveView;
     private bool _liveViewEnabled;
     private string _liveViewStatusText = "Aus";
@@ -86,6 +89,9 @@ public sealed class MainViewModel : ObservableObject
     private bool _autoAdvance = true;
     private bool _loop;
     private PlaylistEntry? _selectedEntry;
+
+    /// <summary>Files of the last playlist that were gone at the start; shown until the playlist changes.</summary>
+    private string? _restoreProblem;
     private string _outputText = "Brille: Leerlauf";
     private StatusLevel _outputLevel = StatusLevel.Neutral;
 
@@ -95,7 +101,8 @@ public sealed class MainViewModel : ObservableObject
         string logFilePath,
         ChannelWriter<PlayerCommand> commands,
         AppSettings settings,
-        Func<IReadOnlyList<AudioDeviceInfo>> listAudioDevices)
+        Func<IReadOnlyList<AudioDeviceInfo>> listAudioDevices,
+        string appVersion = "")
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(nativeComponents);
@@ -114,6 +121,10 @@ public sealed class MainViewModel : ObservableObject
         Recording.SettingsChanged += (_, _) => SettingsChanged?.Invoke(this, EventArgs.Empty);
         _volumePercent = Math.Round(settings.Volume * 100);
         _soundLocked = settings.SoundLocked;
+        _autoAdvance = settings.AutoAdvance;
+        _fadeDuration = TimeSpan.FromSeconds(settings.FadeSeconds);
+        _fadeSecondsText = settings.FadeSeconds.ToString("0.0#", CultureInfo.CurrentCulture);
+        _keepsPlaylist = options.VideoPath is null;
         Playlist = new Playlist();
         ((System.Collections.Specialized.INotifyCollectionChanged)Playlist.Entries).CollectionChanged += (_, _) => OnPlaylistChanged();
 
@@ -148,7 +159,12 @@ public sealed class MainViewModel : ObservableObject
         ToggleMuteCommand = new RelayCommand(() => Muted = !Muted);
         RefreshAudioDevicesCommand = new RelayCommand(RefreshAudioDevices, () => !SoundLocked);
 
-        Title = options.NoXr ? "Orbivo – Operator (ohne Brille)" : "Orbivo – Operator";
+        OpenManualCommand = new RelayCommand(() => ManualRequested?.Invoke(this, EventArgs.Empty));
+
+        // "1.0.0+<commit>" → "1.0.0"; the full version is in the log.
+        string shortVersion = appVersion.Split('+')[0];
+        string name = shortVersion.Length == 0 ? "Orbivo" : "Orbivo " + shortVersion;
+        Title = options.NoXr ? name + " – Operator (ohne Brille)" : name + " – Operator";
 
         var entries = new List<StatusEntry>
         {
@@ -212,12 +228,28 @@ public sealed class MainViewModel : ObservableObject
 
         StatusEntries = entries;
         FillAudioDevices(settings.AudioDeviceId);
+
+        // Loop goes to the player like a click; the command waits in the channel until the player runs.
+        Loop = settings.Loop;
+        if (_keepsPlaylist)
+        {
+            RestorePlaylist(settings.Playlist, settings.PlaylistSelected);
+        }
     }
 
     /// <summary>The operator changed the output device; the app saves the settings.</summary>
     public event EventHandler? SettingsChanged;
 
-    /// <summary>Settings to keep: output device, volume and their lock (not mute), idle view, recording.</summary>
+    /// <summary>The operator asked for the manual (link or F1); the app opens Anleitung.html.</summary>
+    public event EventHandler? ManualRequested;
+
+    /// <summary>Opens the operator manual (F1).</summary>
+    public IRelayCommand OpenManualCommand { get; }
+
+    /// <summary>
+    /// Settings to keep: output device, volume and their lock (not mute), idle view, recording, playlist with its
+    /// switches and the fade duration.
+    /// </summary>
     public AppSettings CurrentSettings => _loadedSettings with
     {
         AudioDeviceId = SelectedAudioDevice?.Id,
@@ -229,6 +261,11 @@ public sealed class MainViewModel : ObservableObject
         RecordingFolder = string.Equals(Recording.SavedChoice.Folder, AppSettings.DefaultRecordingFolder, StringComparison.OrdinalIgnoreCase) ? null : Recording.SavedChoice.Folder,
         HeadSampleRateHz = Recording.SavedChoice.RateHz,
         RecordingPerVideo = Recording.SavedChoice.PerVideo,
+        Playlist = _keepsPlaylist ? (Playlist.Entries.Count == 0 ? null : Playlist.Entries.Select(entry => entry.Path).ToArray()) : _loadedSettings.Playlist,
+        PlaylistSelected = _keepsPlaylist ? SavedPlaylistIndex() : _loadedSettings.PlaylistSelected,
+        AutoAdvance = AutoAdvance,
+        Loop = Loop,
+        FadeSeconds = _fadeDuration.TotalSeconds,
     };
 
     /// <summary>The "Brille im Leerlauf" group (F7).</summary>
@@ -431,6 +468,7 @@ public sealed class MainViewModel : ObservableObject
             if (SetProperty(ref _autoAdvance, value))
             {
                 ShowPlaylistStatus();
+                SettingsChanged?.Invoke(this, EventArgs.Empty);
             }
         }
     }
@@ -445,6 +483,7 @@ public sealed class MainViewModel : ObservableObject
             {
                 Send(new SetLoopCommand(value));
                 ShowPlaylistStatus();
+                SettingsChanged?.Invoke(this, EventArgs.Empty);
             }
         }
     }
@@ -495,7 +534,8 @@ public sealed class MainViewModel : ObservableObject
             if (SetProperty(ref _fadeSecondsText, value)
                 && double.TryParse(value.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out double seconds))
             {
-                _fadeDuration = TimeSpan.FromSeconds(Math.Clamp(seconds, 0.1, 30));
+                _fadeDuration = TimeSpan.FromSeconds(Math.Clamp(seconds, AppSettings.MinFadeSeconds, AppSettings.MaxFadeSeconds));
+                SettingsChanged?.Invoke(this, EventArgs.Empty);
             }
         }
     }
@@ -766,8 +806,66 @@ public sealed class MainViewModel : ObservableObject
 
     private void OnPlaylistChanged()
     {
+        _restoreProblem = null;
         RefreshPlaylistCommands();
         ShowPlaylistStatus();
+        if (_keepsPlaylist)
+        {
+            SettingsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Puts the playlist of the last session back (M9). Nothing is loaded: the entry that was loaded last is selected,
+    /// "Laden" or a double click opens it. Files that are gone are left out and named in the playlist status.
+    /// </summary>
+    private void RestorePlaylist(IReadOnlyList<string>? paths, int selected)
+    {
+        if (paths is null || paths.Count == 0)
+        {
+            return;
+        }
+
+        var present = new List<string>();
+        var missing = new List<string>();
+        int selectedPresent = -1;
+        for (int index = 0; index < paths.Count; index++)
+        {
+            if (File.Exists(paths[index]))
+            {
+                if (index == selected)
+                {
+                    selectedPresent = present.Count;
+                }
+
+                present.Add(paths[index]);
+            }
+            else
+            {
+                missing.Add(Path.GetFileName(paths[index]));
+            }
+        }
+
+        IReadOnlyList<PlaylistEntry> added = Playlist.Add(present);
+        if (added.Count > 0)
+        {
+            SelectedEntry = added[selectedPresent >= 0 ? selectedPresent : 0];
+        }
+
+        if (missing.Count > 0)
+        {
+            _restoreProblem = missing.Count == 1
+                ? $"1 Video der letzten Playlist fehlt: {missing[0]}"
+                : $"{missing.Count} Videos der letzten Playlist fehlen: {string.Join(", ", missing)}";
+            ShowPlaylistStatus();
+        }
+    }
+
+    /// <summary>The loaded entry (or, if none, the selected one), to select it after a restart.</summary>
+    private int SavedPlaylistIndex()
+    {
+        PlaylistEntry? entry = Playlist.Current ?? SelectedEntry;
+        return entry is null ? -1 : Playlist.Entries.IndexOf(entry);
     }
 
     private void RefreshPlaylistCommands()
@@ -793,6 +891,12 @@ public sealed class MainViewModel : ObservableObject
         if (count > 0)
         {
             text += Loop ? ", Wiederholen an" : AutoAdvance ? ", automatisch weiter" : ", hält am Ende";
+        }
+
+        if (_restoreProblem is not null)
+        {
+            _playlistEntry.Update(text + ". " + _restoreProblem, StatusLevel.Warning);
+            return;
         }
 
         _playlistEntry.Update(text, StatusLevel.Neutral);

@@ -517,8 +517,15 @@
                     ToolTip="Wieder die Vorderseite des Videos (Shift+R)" />
           </WrapPanel>
         </DockPanel>
-        <TextBlock Style="{StaticResource PlaceholderText}" Margin="0,8,0,0" FontStyle="Normal"
-                   Text="Tasten: Leertaste Play/Pause · ←/→ ±5 s · Shift+←/→ ±30 s · , / . Einzelbild · Bild↑/Bild↓ Video zurück/weiter · B Schwarzbild · F Fade · M Stumm · R Recenter · Shift+R Recenter zurücksetzen" />
+        <DockPanel Margin="0,8,0,0">
+          <!-- Operator manual (M9): Anleitung.html next to the exe -->
+          <TextBlock DockPanel.Dock="Right" Margin="16,0,0,0" VerticalAlignment="Top">
+            <Hyperlink Command="{Binding OpenManualCommand}" Focusable="False"
+                       ToolTip="Bedienungsanleitung und Erklärung der Aufzeichnungsdaten im Browser öffnen (F1)">Anleitung (F1)</Hyperlink>
+          </TextBlock>
+          <TextBlock Style="{StaticResource PlaceholderText}" FontStyle="Normal"
+                     Text="Tasten: Leertaste Play/Pause · ←/→ ±5 s · Shift+←/→ ±30 s · , / . Einzelbild · Bild↑/Bild↓ Video zurück/weiter · B Schwarzbild · F Fade · M Stumm · R Recenter · Shift+R Recenter zurücksetzen" />
+        </DockPanel>
       </StackPanel>
     </GroupBox>
   </Grid>

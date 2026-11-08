@@ -6,8 +6,8 @@ namespace Orbivo.Core.Settings;
 
 /// <summary>
 /// Operator settings that survive a restart (docs/DECISIONS.md, M5 and M8): sound output device, volume and their lock,
-/// idle view and recording. Mute and recenter are not kept on purpose: after a restart the sound is on and the video's
-/// own front applies. M9 adds more (last playlist).
+/// idle view, recording, and since M9 the playlist with its switches and the fade duration. Mute and recenter are not
+/// kept on purpose: after a restart the sound is on and the video's own front applies.
 /// </summary>
 /// <param name="AudioDeviceId">Windows endpoint id of the sound output, null = Windows default.</param>
 /// <param name="Volume">Volume level 0–1 (before the loudness curve).</param>
@@ -20,6 +20,11 @@ namespace Orbivo.Core.Settings;
 /// <param name="RecordingFolder">Folder for the recordings, null = <see cref="DefaultRecordingFolder"/>.</param>
 /// <param name="HeadSampleRateHz">Rows per second of the head log; 0 = every frame (90 Hz in the headset).</param>
 /// <param name="RecordingPerVideo">"Nur bei laufendem Video": one pair of files per video, nothing written while no video plays.</param>
+/// <param name="Playlist">Full paths of the playlist in its order (M9), null = empty. The same file may appear more than once.</param>
+/// <param name="PlaylistSelected">Index of the entry that was loaded last, selected (not loaded) after a restart; -1 = none.</param>
+/// <param name="AutoAdvance">"Automatisch weiter zum nächsten Video" (F3).</param>
+/// <param name="Loop">"Aktuelles Video wiederholen" (F3).</param>
+/// <param name="FadeSeconds">Fade duration (F5), 0.1–30 s.</param>
 public sealed record AppSettings(
     string? AudioDeviceId = null,
     float Volume = AppSettings.DefaultVolume,
@@ -29,9 +34,20 @@ public sealed record AppSettings(
     bool RecordingEnabled = false,
     string? RecordingFolder = null,
     int HeadSampleRateHz = AppSettings.DefaultHeadSampleRateHz,
-    bool RecordingPerVideo = false)
+    bool RecordingPerVideo = false,
+    IReadOnlyList<string>? Playlist = null,
+    int PlaylistSelected = -1,
+    bool AutoAdvance = true,
+    bool Loop = false,
+    double FadeSeconds = AppSettings.DefaultFadeSeconds)
 {
     public const float DefaultVolume = 0.8f;
+
+    public const double DefaultFadeSeconds = 1.0;
+
+    public const double MinFadeSeconds = 0.1;
+
+    public const double MaxFadeSeconds = 30;
 
     /// <summary>30 rows per second are enough for head movement and keep the files small.</summary>
     public const int DefaultHeadSampleRateHz = 30;
@@ -84,6 +100,11 @@ public sealed record AppSettings(
                 IdleImagePath = string.IsNullOrWhiteSpace(settings.IdleImagePath) ? null : settings.IdleImagePath,
                 RecordingFolder = string.IsNullOrWhiteSpace(settings.RecordingFolder) ? null : settings.RecordingFolder,
                 HeadSampleRateHz = Math.Clamp(settings.HeadSampleRateHz, 0, 1000),
+                Playlist = CleanPlaylist(settings.Playlist),
+                PlaylistSelected = Math.Max(settings.PlaylistSelected, -1),
+                FadeSeconds = double.IsFinite(settings.FadeSeconds)
+                    ? Math.Clamp(settings.FadeSeconds, MinFadeSeconds, MaxFadeSeconds)
+                    : DefaultFadeSeconds,
             };
         }
         catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
@@ -91,6 +112,13 @@ public sealed record AppSettings(
             problem = $"Einstellungen nicht lesbar ({exception.Message}); es gelten die Vorgaben.";
             return new AppSettings();
         }
+    }
+
+    /// <summary>Drops empty paths from a hand-edited file; an empty list is stored as null.</summary>
+    private static string[]? CleanPlaylist(IReadOnlyList<string>? paths)
+    {
+        string[] clean = paths?.Where(path => !string.IsNullOrWhiteSpace(path)).ToArray() ?? [];
+        return clean.Length == 0 ? null : clean;
     }
 
     /// <summary>Writes the settings (through a temporary file, so a crash never leaves half a file).</summary>

@@ -106,4 +106,49 @@ public sealed class AppSettingsTests : IDisposable
         Assert.Equal(30, settings.HeadSampleRateHz);
         Assert.False(settings.RecordingPerVideo);
     }
+
+    [Fact]
+    public void SaveAndLoad_KeepPlaylistSwitchesAndFade()
+    {
+        string[] playlist = [@"D:\Videos\a.mp4", @"D:\Videos\b.mp4", @"D:\Videos\a.mp4"];
+        new AppSettings(Playlist: playlist, PlaylistSelected: 2, AutoAdvance: false, Loop: true, FadeSeconds: 2.5).Save(FilePath);
+
+        AppSettings settings = AppSettings.Load(FilePath, out string? problem);
+        Assert.Null(problem);
+        Assert.Equal(playlist, settings.Playlist);
+        Assert.Equal(2, settings.PlaylistSelected);
+        Assert.False(settings.AutoAdvance);
+        Assert.True(settings.Loop);
+        Assert.Equal(2.5, settings.FadeSeconds);
+    }
+
+    [Fact]
+    public void FileFromBeforeM9_GivesAnEmptyPlaylistAndTheOldDefaults()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+        File.WriteAllText(FilePath, """{ "AudioDeviceId": null, "Volume": 0.5, "RecordingPerVideo": true }""");
+        AppSettings settings = AppSettings.Load(FilePath, out string? problem);
+        Assert.Null(problem);
+        Assert.Null(settings.Playlist);
+        Assert.Equal(-1, settings.PlaylistSelected);
+        Assert.True(settings.AutoAdvance);
+        Assert.False(settings.Loop);
+        Assert.Equal(AppSettings.DefaultFadeSeconds, settings.FadeSeconds);
+    }
+
+    [Fact]
+    public void HandEditedPlaylistAndFade_AreCleaned()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+        File.WriteAllText(FilePath, """{ "Playlist": [ "", "  ", "D:\\x.mp4" ], "PlaylistSelected": -7, "FadeSeconds": 900 }""");
+        AppSettings settings = AppSettings.Load(FilePath, out _);
+        Assert.Equal([@"D:\x.mp4"], settings.Playlist);
+        Assert.Equal(-1, settings.PlaylistSelected);
+        Assert.Equal(AppSettings.MaxFadeSeconds, settings.FadeSeconds);
+
+        File.WriteAllText(FilePath, """{ "Playlist": [ "" ], "FadeSeconds": 0 }""");
+        settings = AppSettings.Load(FilePath, out _);
+        Assert.Null(settings.Playlist);
+        Assert.Equal(AppSettings.MinFadeSeconds, settings.FadeSeconds);
+    }
 }

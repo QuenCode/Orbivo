@@ -32,6 +32,14 @@ public sealed record StartupOptions(
     IReadOnlyList<string> UnknownArguments)
 {
     public const string NoXrSwitch = "--no-xr";
+    public const string CheckSwitch = "--check";
+
+    /// <summary>
+    /// <c>--check</c>: check the native libraries and the manual next to the exe, log the result and exit without a window
+    /// (exit code 0 = everything there, 1 = something missing). The release script uses it on the finished package (M9).
+    /// </summary>
+    public bool Check { get; init; }
+
     public const string ImageOption = "--image";
     public const string VideoOption = "--video";
     public const string StereoOption = "--stereo";
@@ -46,6 +54,7 @@ public sealed record StartupOptions(
         string? videoPath = null;
         StereoLayout? stereoLayout = null;
         DecoderPreference decoder = DecoderPreference.Auto;
+        bool check = false;
         var unknown = new List<string>();
         for (int i = 0; i < args.Count; i++)
         {
@@ -53,6 +62,10 @@ public sealed record StartupOptions(
             if (Is(arg, NoXrSwitch))
             {
                 noXr = true;
+            }
+            else if (Is(arg, CheckSwitch))
+            {
+                check = true;
             }
             else if (Is(arg, ImageOption))
             {
@@ -96,7 +109,7 @@ public sealed record StartupOptions(
             }
         }
 
-        return new StartupOptions(noXr, imagePath, videoPath, stereoLayout, decoder, unknown);
+        return new StartupOptions(noXr, imagePath, videoPath, stereoLayout, decoder, unknown) { Check = check };
     }
 
     private static StereoLayout? ParseStereoLayout(string value)

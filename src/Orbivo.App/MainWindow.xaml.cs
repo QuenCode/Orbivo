@@ -153,6 +153,7 @@ public partial class MainWindow : Window
             Key.F => (viewModel.ToggleFadeCommand, null),
             Key.M => (viewModel.ToggleMuteCommand, null),
             Key.R => (shift ? viewModel.ResetRecenterCommand : viewModel.RecenterCommand, null),
+            Key.F1 => (viewModel.OpenManualCommand, null),
             _ => ((ICommand?)null, (object?)null),
         };
 

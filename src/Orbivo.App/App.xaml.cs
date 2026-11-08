@@ -49,6 +49,9 @@ public partial class App : Application
     private SessionRecorder? _recorder;
     private string _appVersion = "unbekannt";
 
+    /// <summary>The operator manual next to the exe (docs/Anleitung.html in the repository).</summary>
+    private const string ManualFileName = "Anleitung.html";
+
     /// <summary>Device and hand-over of the render thread for the idle image, once the device exists (UI thread).</summary>
     private (GraphicsDevice Device, Action<StillImageTexture> Show)? _imageTarget;
 
@@ -111,6 +114,12 @@ public partial class App : Application
             OpenXrLoader.Check(nativeDirectory, _loggerFactory.CreateLogger(typeof(OpenXrLoader).FullName!)),
         ];
 
+        if (options.Check)
+        {
+            RunCheckAndExit(nativeComponents, _logger);
+            return;
+        }
+
         AppSettings settings = AppSettings.Load(AppSettings.DefaultPath, out string? settingsProblem);
         if (settingsProblem is not null)
         {
@@ -126,8 +135,10 @@ public partial class App : Application
             logFilePath,
             _playerCommands.Writer,
             settings,
-            () => AudioDeviceCatalog.ListOutputs(deviceLogger));
+            () => AudioDeviceCatalog.ListOutputs(deviceLogger),
+            _appVersion);
         _viewModel.SettingsChanged += (_, _) => SaveSettings();
+        _viewModel.ManualRequested += (_, _) => OpenManual();
         if (options.ImagePath is not null)
         {
             // --image: the idle image for this session; the stored idle view stays as it is.
@@ -436,6 +447,65 @@ public partial class App : Application
         foreach (string failure in result.Failures)
         {
             logger.LogWarning("Old session log could not be deleted: {Failure}", failure);
+        }
+    }
+
+    /// <summary>
+    /// <c>--check</c> (M9): the native libraries were checked above; also the manual must be there. Logs the result and
+    /// ends the app without a window, exit code 0 if everything is there, else 1.
+    /// </summary>
+    private void RunCheckAndExit(IReadOnlyList<NativeComponentStatus> nativeComponents, ILogger logger)
+    {
+        bool manualPresent = File.Exists(Path.Combine(AppContext.BaseDirectory, ManualFileName));
+        if (!manualPresent)
+        {
+            logger.LogError("Check: the manual {File} is missing next to the exe.", ManualFileName);
+        }
+
+        foreach (NativeComponentStatus component in nativeComponents)
+        {
+            if (component.IsAvailable)
+            {
+                logger.LogInformation("Check: {Component} ok ({Detail}).", component.Component, component.Detail);
+            }
+            else
+            {
+                logger.LogError("Check: {Component} failed ({Detail}).", component.Component, component.Detail);
+            }
+        }
+
+        bool ok = manualPresent && nativeComponents.All(component => component.IsAvailable);
+        logger.LogInformation("Check finished: {Result}.", ok ? "everything is there" : "something is missing");
+        Shutdown(ok ? 0 : 1);
+    }
+
+    /// <summary>Opens Anleitung.html (next to the exe) in the default browser (M9).</summary>
+    private void OpenManual()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, ManualFileName);
+        string? problem = null;
+        if (!File.Exists(path))
+        {
+            _logger?.LogWarning("The manual {Path} is missing.", path);
+            problem = $"Die Anleitung fehlt:\n{path}\n\nBitte das Programmpaket neu entpacken.";
+        }
+        else
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose();
+                _logger?.LogInformation("Opened the manual {Path}.", path);
+            }
+            catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
+            {
+                _logger?.LogWarning(exception, "Opening the manual {Path} failed.", path);
+                problem = $"Die Anleitung ließ sich nicht öffnen ({exception.Message}).\n\nSie liegt hier und lässt sich auch direkt im Browser öffnen:\n{path}";
+            }
+        }
+
+        if (problem is not null)
+        {
+            MessageBox.Show(MainWindow, problem, "Orbivo – Anleitung", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
