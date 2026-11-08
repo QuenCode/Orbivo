@@ -75,6 +75,8 @@ public sealed record XrRuntimeInfo(
 /// <param name="Error">Last error text (English, from the exception) for <see cref="XrConnectionState.Failed"/>.</param>
 /// <param name="Recenter">Recenter state (F30).</param>
 /// <param name="SeeThrough">Whether the runtime offers the camera picture (F7); known once a session was created.</param>
+/// <param name="StateSinceUtc">When <paramref name="State"/> began (UTC).</param>
+/// <param name="WasConnected">True once a headset was connected in this run: a later loss is a disconnect (N3).</param>
 public readonly record struct XrStatus(
     XrConnectionState State,
     XrSessionState SessionState,
@@ -88,7 +90,9 @@ public readonly record struct XrStatus(
     bool RenderLoopAllocates,
     string? Error,
     RecenterStatus Recenter = default,
-    SeeThroughSupport SeeThrough = SeeThroughSupport.Unknown);
+    SeeThroughSupport SeeThrough = SeeThroughSupport.Unknown,
+    DateTime StateSinceUtc = default,
+    bool WasConnected = false);
 
 /// <summary>Whether the runtime offers the blend mode <c>ALPHA_BLEND</c> for the camera picture (see-through, F7).</summary>
 public enum SeeThroughSupport

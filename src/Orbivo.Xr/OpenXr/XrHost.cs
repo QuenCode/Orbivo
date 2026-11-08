@@ -53,6 +53,8 @@ public sealed class XrHost : IDisposable
 
     // Status, written by the render thread, read by the UI.
     private int _state = (int)XrConnectionState.Starting;
+    private long _stateSinceUtcTicks = DateTime.UtcNow.Ticks;
+    private int _wasConnected;
     private int _sessionState = (int)XrSessionState.None;
     private XrRuntimeInfo? _runtime;
     private float _framesPerSecond;
@@ -163,7 +165,9 @@ public sealed class XrHost : IDisposable
             Volatile.Read(ref _renderLoopAllocates) != 0,
             Volatile.Read(ref _error),
             RecenterStatus.Of(Volatile.Read(ref _recenter)),
-            (SeeThroughSupport)Volatile.Read(ref _seeThroughSupport));
+            (SeeThroughSupport)Volatile.Read(ref _seeThroughSupport),
+            new DateTime(Volatile.Read(ref _stateSinceUtcTicks), DateTimeKind.Utc),
+            Volatile.Read(ref _wasConnected) != 0);
     }
 
     public void Dispose()
@@ -481,6 +485,21 @@ public sealed class XrHost : IDisposable
                 _logger.LogWarning("OpenXR event queue overflowed; some events were lost.");
                 return XrLifecycleAction.None;
 
+            case StructureType.EventDataReferenceSpaceChangePending:
+            {
+                EventDataReferenceSpaceChangePending change;
+                fixed (EventDataBuffer* pointer = &events)
+                {
+                    change = *(EventDataReferenceSpaceChangePending*)pointer;
+                }
+
+                // The runtime moved its reference space (e.g. recentered in Varjo Base). Picture and sound follow the
+                // runtime's new front; Orbivo's own recenter (F30) stays as it was.
+                _logger.LogInformation("OpenXR reference space {Space} changes (pose valid: {Valid}).", change.ReferenceSpaceType, change.PoseValid != 0);
+                Volatile.Read(ref _events)?.Record(SessionEventKind.Headset, XrEventText.ReferenceSpaceChanged(change.ReferenceSpaceType.ToString()));
+                return XrLifecycleAction.None;
+            }
+
             default:
                 return XrLifecycleAction.None;
         }
@@ -537,7 +556,14 @@ public sealed class XrHost : IDisposable
         bool changed = Interlocked.Exchange(ref _state, (int)state) != (int)state;
         if (changed)
         {
-            Volatile.Read(ref _events)?.Record(SessionEventKind.Headset, XrEventText.Connection(state, Volatile.Read(ref _runtime)));
+            Volatile.Write(ref _stateSinceUtcTicks, DateTime.UtcNow.Ticks);
+            bool wasConnected = Volatile.Read(ref _wasConnected) != 0;
+            if (state == XrConnectionState.Connected)
+            {
+                Volatile.Write(ref _wasConnected, 1);
+            }
+
+            Volatile.Read(ref _events)?.Record(SessionEventKind.Headset, XrEventText.Connection(state, Volatile.Read(ref _runtime), wasConnected));
         }
 
         return changed;

@@ -1184,19 +1184,23 @@ public sealed class MainViewModel : ObservableObject
         CultureInfo culture = CultureInfo.CurrentCulture;
         XrRuntimeInfo? runtime = status.Runtime;
         string runtimeText = runtime is null ? "OpenXR-Runtime" : $"{runtime.RuntimeName} {runtime.RuntimeVersion}";
+        string since = XrEventText.Since(status.StateSinceUtc, DateTime.UtcNow);
 
         (string headsetText, StatusLevel headsetLevel) = status.State switch
         {
             XrConnectionState.Starting => ("Startet …", StatusLevel.Neutral),
             XrConnectionState.LoaderMissing => ("OpenXR-Loader fehlt (siehe native/README.md)", StatusLevel.Error),
+            XrConnectionState.RuntimeUnavailable when status.WasConnected => ($"Brille getrennt{since}: Varjo Base läuft nicht mehr. Varjo Base starten, Orbivo verbindet sich von selbst neu", StatusLevel.Error),
             XrConnectionState.RuntimeUnavailable => ("Kein OpenXR-Runtime erreichbar. Läuft Varjo Base? Neuer Versuch alle 2 s", StatusLevel.Error),
+            XrConnectionState.HeadsetUnavailable when status.WasConnected => ($"Brille getrennt{since}. Brille anschließen und einschalten, Orbivo verbindet sich von selbst neu", StatusLevel.Error),
             XrConnectionState.HeadsetUnavailable => ($"{runtimeText}: keine Brille gefunden. Brille anschließen und einschalten", StatusLevel.Warning),
+            XrConnectionState.Connecting when status.WasConnected => ($"{runtimeText}: verbinde neu{since} …", StatusLevel.Warning),
             XrConnectionState.Connecting => ($"{runtimeText}: verbinde …", StatusLevel.Neutral),
             XrConnectionState.Connected when runtime is not null => (
                 string.Create(culture, $"{runtime.SystemName} über {runtimeText}, {runtime.EyeWidth} × {runtime.EyeHeight} je Auge"),
                 StatusLevel.Ok),
             XrConnectionState.Connected => ("Verbunden", StatusLevel.Ok),
-            XrConnectionState.Failed => ($"Fehler: {status.Error} (Details im Log). Neuer Versuch läuft", StatusLevel.Error),
+            XrConnectionState.Failed => ($"Fehler{since}: {status.Error} (Details im Log). Neuer Versuch läuft", StatusLevel.Error),
             _ => ("Beendet", StatusLevel.Neutral),
         };
         _headsetEntry?.Update(headsetText, headsetLevel);
