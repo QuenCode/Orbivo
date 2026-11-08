@@ -53,6 +53,7 @@ dotnet run --project src/Orbivo.App -- --no-xr --video tools/testmedia/out/equir
 dotnet run --project src/Orbivo.App -- --video tools/testmedia/out/equirect360_tb_8192x8192_hevc_8bit_30fps.mp4            # Video in der Brille (--stereo mono|tb|sbs erzwingt das Layout, --decoder auto|hw|sw den Decoder)
 powershell -NoProfile -ExecutionPolicy Bypass -File native\fetch-native.ps1   # native DLLs laden
 python tools/testmedia/make_testmedia.py            # Testbilder, -videos, Ambisonics-Test
+$env:ORBIVO_LONG_TESTS=1; dotnet test --project tests/Orbivo.Media.Tests -- --filter-class "*SoakTests"   # 30-Minuten-Dauertest mit Aufzeichnung (ORBIVO_SOAK_MINUTES kürzt ihn)
 ```
 FFmpeg-, Steam-Audio- und OpenXR-Loader-DLLs liegen in `native/win-x64/` (nicht im Git, siehe `native/README.md`) und werden beim Build ins Ausgabeverzeichnis kopiert.
 Gearbeitet wird auf dem Branch `development`.

@@ -7,14 +7,14 @@ Directory.Build.props          # Nullable, TreatWarningsAsErrors, LangVersion, x
 Directory.Packages.props       # zentrale, gepinnte Paketversionen
 src/
   Orbivo.Core/            # keine UI-, XR- oder Native-Abhängigkeiten
-    Commands/                  # PlayerCommand-Records (Open, Close, Play, Pause, Stop, Seek, Loop, Blackout, Fade, SetVideoFormat; später Recenter …)
+    Commands/                  # PlayerCommand-Records (Open, Close, Play, Pause, Stop, Seek, Loop, Blackout, Fade, SetVideoFormat, Recenter)
     Playback/                  # PlaybackStateMachine, SystemPlaybackClock, FramePacer, OutputFader (Blackout/Fade), MediaTime
     Playlists/                 # Playlist (Reihenfolge, aktuelles Video, Weiter/Zurück, Dateien aus Drag & Drop)
     Formats/                   # ProjectionType, StereoLayout, CubemapLayout, FisheyeParameters, VideoFormat, FormatOverrides,
                                # EmbeddedFormatMetadata, VideoFormatResolver (Rangfolge), SidecarFile (Laden/Speichern)
-    Geometry/                  # ProjectionMath (C#-Referenz der Shader-Mathematik), OrientationMath, FovAngles
+    Geometry/                  # ProjectionMath (C#-Referenz der Shader-Mathematik), OrientationMath, FovAngles, RecenterControl (M8)
     Audio/                     # AudioRingBuffer, AudioConversionPlan, Uhr; StereoPlacement, AudioCoordinates, ListenerOrientation (M7)
-    Logging/                   # SessionLogger (CSV), EventLog
+    Logging/                   # SessionRecorder (Kopf-CSV F50, Ereignis-Log F51), HeadSampleGate, SessionEventQueue, GermanCsv
     Status/                    # PlayerStatus-Snapshot (immutable record)
   Orbivo.Media/           # FFmpeg: Demux, Decode (D3D11VA), Metadaten (sv3d/st3d, Kanal-Layout)
   Orbivo.Audio/           # NAudio-Ausgabe (Output/), Steam-Audio-Interop (SteamAudio/), Ton fest am Bild (Spatial/)
@@ -30,6 +30,7 @@ tests/
   Orbivo.Core.Tests/      # ProjectionMath, Sidecar, Clock/Sync-Logik, Zustandsautomat
   Orbivo.Audio.Tests/     # Renderer und Ausgabe mit simulierten Geräten, Richtung mit echter phonon.dll (Pegel der Ohren)
   Orbivo.Xr.Tests/        # Shader gegen ProjectionMath (WARP), Richtungstest mit dem Testbild, alle Projektionen gegen Equirect 360, Maus-Steuerung
+  Orbivo.Media.Tests/     # Dekodieren mit echter GPU, Player über den Befehlskanal, A/V-Sync, 30-Minuten-Dauertest (opt-in)
 tools/
   testmedia/                   # Skripte (ffmpeg + Python) zum Erzeugen von Testvideos und Test-Ambisonics
 native/
@@ -49,6 +50,7 @@ docs/
 | XR-Render (`XrHost`) | OpenXR-Frame-Loop, wählt Frame nach Clock, rendert beide Augen, liest Head-Pose. Ohne laufende Session: Verbindungsaufbau und Wiederholung; holt dabei fällige Video-Frames ab, damit der Decoder mit der Uhr mitläuft | **nein** im Frame-Loop (wartet nur in `xrWaitFrame`); ohne Session darf er warten |
 | Vorschau-Render (nur `--no-xr`) | Fensternachrichten und Maus, rendert ein Auge ins Vorschaufenster | **nein** (wartet nur auf den Frame-Takt der Swapchain, wie `xrWaitFrame`) |
 | Live-Ansicht (`LiveViewPresenter`, nur wenn eingeschaltet) | kopiert das neueste Bild der Live-Ansicht ins Kindfenster im Operatorfenster und zeigt es an | ja (wartet auf den Frame-Takt seiner Swapchain); der Render-Thread wartet nie auf ihn |
+| Aufzeichnung (`SessionRecorder`) | holt Kopfproben (`HeadSampleGate`) und Ereignisse (`SessionEventQueue`) ab und schreibt die beiden CSV-Dateien; öffnet und schließt sie bei Start und Stopp | ja (Datei-I/O); Render- und Player-Thread warten nie auf ihn |
 
 Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC-Queues, `Volatile`/`Interlocked`). Die aktuelle Kopforientierung im Bildsystem (mit Ausrichtungs-Offset) veröffentlichen XR-Render- bzw. Vorschau-Thread jedes Bild als `ListenerOrientation` (`SnapshotCell`, Quaternion und Zeitstempel); der Audio-Thread liest sie einmal je Block.
 
@@ -132,6 +134,12 @@ Stand M7: Stereo direkt oder „fest am Bild“ (zwei virtuelle Lautsprecher, bi
 - **Surround:** virtuelle Lautsprecher wie bei Stereo (Steam Audio `iplBinauralEffect` pro Kanal).
 - **Externe Audiodatei** (falls die Aufnahmen getrennt geliefert werden): Sidecar-Feld `externalAudio` mit `path` und `offsetMs`. Eigener Demux/Decoder für Audio, gleiche Clock.
 
+## Recenter, Leerlauf-Ansicht und Aufzeichnung (M8)
+- **Recenter (F30/F31):** `RecenterControl` (Core) nimmt Anforderungen von jedem Thread an (`RequestRecenter`, `RequestReset`). Ausgeführt werden sie im Render-Thread mit der Kopfpose des nächsten Bilds (`Update`), daraus entsteht eine reine Yaw-Drehung `C = Ry(−Yaw)`. Sie wirkt als `C·Ansicht` vor Ausrichtungs-Offset und Projektion auf beide Augen, die Live-Ansicht und `ListenerOrientation`; Bild und Ton bleiben damit deckungsgleich. In der Vorschau dreht sie die Mausansicht. Der Wert gilt über Videowechsel und Wiederverbindung, er wird nicht gespeichert.
+- **Leerlauf-Ansicht (F7):** Liefert der Player kein Frame (kein Video, Bereit nach Stop), zeigt der Render-Thread `PanoramaSource.ForIdle(…)`: Schwarz, Standbild (mit eigenem Stereo-Layout, `StillImageTexture.PictureFormat`) oder See-through. See-through: Blend-Mode `ALPHA_BLEND` und `BlendTextureSourceAlphaBit` im Layer, die Augen werden mit `(0, 0, 0, 1 − Helligkeit)` gelöscht (vormultipliziertes Alpha), Schwarzbild und Fade decken das Kamerabild also ab. Bietet die Runtime `ALPHA_BLEND` nicht an (`xrEnumerateEnvironmentBlendModes`), bleibt es schwarz und der Status sagt es. Die Vorschau zeigt statt des Kamerabilds eine dunkle Fläche (`PanoramaRenderer.SeeThroughStandIn`).
+- **Aufzeichnung (F50–F52):** `SessionRecorder` (Core) besitzt einen eigenen Thread. Der Render-Thread gibt jedes Bild eine `HeadSample` an `HeadSampleGate` (lock-freie SPSC-Queue, 8192 Plätze, dünnt auf die gewählte Rate aus, allokiert nicht; voll = Zeile verloren und gezählt). Player-Control, App und `XrHost` (Verbindung, Sitzung, Fehler) melden Ereignisse an `ISessionEventLog` (`SessionEventQueue`, höchstens 10 000 wartend). Der Recorder schreibt alle 50 ms und flusht jede Sekunde. Zeiten: ein Anker (UTC und Stopwatch) je Aufzeichnung, jede Zeile = Anker + Stopwatch-Zeit, damit monoton. In der Brille ist der Zeitpunkt einer Kopfzeile die vorhergesagte Anzeigezeit des Bilds.
+- **Dateien:** je Aufzeichnung `JJJJ-MM-TT_hhmmss[_Proband]_kopf.csv` und `…_ereignisse.csv` im gewählten Ordner (Standard `Dokumente\Orbivo\Aufzeichnungen`), Semikolon, Dezimalkomma, UTF-8 mit BOM. Kopf-CSV: `Zeit_UTC;Sekunden;Video;Videozeit_s;Status;Inhalt;Helligkeit;Tracking;Kopf_qw…qz;Kopf_Yaw/Pitch/Roll_Grad;Blick_Video_Yaw/Pitch_Grad;Recenter_Yaw_Grad`. Ereignis-CSV: `Zeit_UTC;Sekunden;Ereignis;Video;Videozeit_s;Details`. Kann der Recorder nicht schreiben, beendet er die Aufzeichnung und meldet den Grund im Operatorfenster.
+
 ## Synchronisation
 - **Medienzeit** ist für Bild und Ton gleich: Ticks ab dem Beginn des Videostreams (`MediaDemuxer.OriginTicks`). Im Ringpuffer: Frame = Ticks × Samplerate / 10⁷.
 - **Audio-Clock (Master, Regel 4):** Die Frames, die an das Gerät gehen, sind ab dem Start des Streams nummeriert („Stream-Frames“). Ein Segment ordnet einem Stream-Frame eine Medienzeit zu (Play, Seek). Das Gerät meldet, welcher Stream-Frame zu welchem QPC-Zeitpunkt gehört wird. `AudioClockTracker` folgt dieser Position mit einem PI-Regler und lernt dabei die Drift des Geräts gegen QPC; Fehler über 30 ms setzen die Uhr neu. Vor dem ersten gehörten Frame eines Segments steht die Uhr am Anfang, nach dem Ende (Pause) am Ende.
@@ -148,6 +156,7 @@ Stand M7: Stereo direkt oder „fest am Bild“ (zwei virtuelle Lautsprecher, bi
 - Loader (`openxr_loader.dll`, Khronos) → Instance mit `XR_KHR_D3D11_enable` → System (HMD) → Grafik-Anforderungen (Adapter-LUID) → D3D11-Device auf diesem Adapter (einmal je App-Lauf) → Session (D3D11-Binding) → Reference Space `LOCAL` → Swapchain je Auge (sRGB, empfohlene Größe).
 - Session-State-Events laufen durch `XrSessionLifecycle` (`READY` → Begin, `STOPPING` → End, `LOSS_PENDING`/`EXITING` → Aufräumen und nach 2 s neu verbinden). Beim Beenden der App: `xrRequestExitSession`, höchstens 2 s warten.
 - Fehlt das Runtime (`XR_ERROR_RUNTIME_UNAVAILABLE`) oder die Brille (`XR_ERROR_FORM_FACTOR_UNAVAILABLE`): Status melden, alle 2 s erneut versuchen, die App läuft weiter. Ohne Brille wird nur `xrGetSystem` wiederholt, die Instance bleibt.
+- Wiederverbindung (N3): Device, Standbild, Live-Ansicht, Recenter und Leerlauf-Ansicht gehören dem `XrHost`, nicht der Session; sie gelten nach dem Neuverbinden weiter. Video und Ton laufen weiter, während die Brille fehlt. War schon einmal eine Brille verbunden, meldet der Status „Brille getrennt seit …“ bzw. „Varjo Base läuft nicht mehr“. Verbindungs- und Sitzungswechsel und `XrEventDataReferenceSpaceChangePending` (z. B. Recenter in Varjo Base) stehen im Log und im Ereignis-Log.
 - Pro Frame: `xrWaitFrame` → `xrBeginFrame` → `xrLocateViews` → je Auge Bild holen, rendern, freigeben → `xrEndFrame` mit einem Projection-Layer. Gerendert wird nur mit der Orientierung, im Layer steht die gemessene Pose.
 
 ## `--no-xr` Debug-Modus

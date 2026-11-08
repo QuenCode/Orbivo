@@ -69,7 +69,7 @@ Neu zugeschnitten am 2026-11-08 (`DECISIONS.md`): Der Ton der Videos ist Stereo,
 - Leerlauf-Ansicht (F7, `DECISIONS.md` 2026-11-07): Schwarz, See-through (`ALPHA_BLEND`) oder Standbild, wenn kein Video läuft; im UI wählbar und gespeichert. Regel 7 in `CLAUDE.md` und F6 anpassen
 - SessionLogger (CSV, F50) und EventLog (F51), im UI steuerbar
 - Brille trennen und neu verbinden, Varjo Base neu starten: App erholt sich (N3)
-- **Fertig, wenn:** Ein 30-minütiger Durchlauf mit mehreren Videos läuft ohne Fehler, die Logs sind vollständig
+- **Fertig, wenn:** Ein 30-minütiger Durchlauf mit mehreren Videos läuft ohne Fehler, die Logs sind vollständig ✔ (`SoakTests`, ohne Brille)
 - **Brillen-Test (Leerlauf):** See-through zeigt das Kamerabild vor Play und nach Stop, „Bild“ zeigt das gewählte Standbild richtig orientiert, Play wechselt sauber ins Video, Schwarzbild (B) bleibt schwarz
 
 ## M9 – Feinschliff und Auslieferung
