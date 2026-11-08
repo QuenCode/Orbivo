@@ -144,7 +144,7 @@
 | 2026-11-08 | M8: **Aufzeichnung** (F50–F52): Jedes Einschalten der Aufzeichnung (und jeder App-Start mit eingeschalteter Aufzeichnung) beginnt ein neues Dateipaar (Kopf-CSV und Ereignis-Log). Optionales Feld „Proband/Sitzung“ für den Dateinamen. CSV mit **Semikolon** als Trennzeichen und **Dezimalkomma**, UTF-8 mit BOM, damit ein deutsches Excel die Dateien per Doppelklick richtig öffnet | Entscheidung des Projektinhabers (Semikolon und Dezimalkomma statt Komma und Punkt) |
 
 ## Offene Punkte
-- **See-through mit der XR-3 (M8):** Ob Varjo `ALPHA_BLEND` anbietet und ob dafür in Varjo Base Mixed Reality eingeschaltet sein muss, ist ungeprüft (Brillen-Test M8). Das Log nennt beim Verbinden die angebotenen Blend-Modi.
+- **See-through mit der XR-3 (M8):** Varjo OpenXR Runtime 4.14.2 bietet mit der XR-3 `AlphaBlend` und `Opaque` an (Log vom 2026-11-08). Ob das Kamerabild wirklich erscheint und ob dafür in Varjo Base Mixed Reality eingeschaltet sein muss, ist ungeprüft (Brillen-Test M8). Das Log nennt beim Verbinden die angebotenen Blend-Modi.
 
 - **Schärfe von `PRIMARY_STEREO` auf der XR-3:** Ohne Quad-Views nutzt Varjo das Fokus-Display nicht voll. Mit echtem 8K-Material (ab M3) beurteilen, ob Quad-Views (`XR_VARJO_quad_views`) vorgezogen werden müssen.
 - **Kopf-Log mit 90 Hz (F50, M8):** Der Render-Thread darf nicht schreiben. Es braucht eine lock-freie Queue und einen eigenen Schreib-Thread; die Thread-Tabelle in ARCHITECTURE.md bekommt dann einen Logger-Thread.

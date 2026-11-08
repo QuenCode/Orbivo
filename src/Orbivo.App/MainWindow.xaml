@@ -389,7 +389,17 @@
                 </Style>
               </TextBlock.Style>
             </TextBlock>
-            <TextBlock Text="{Binding FileText}" ToolTip="{Binding FilePath}" Style="{StaticResource HintText}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Text="{Binding FileText}" ToolTip="{Binding FilePath}" TextTrimming="CharacterEllipsis">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Style.Triggers>
+                    <Trigger Property="Text" Value="">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </Trigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
           </StackPanel>
         </Grid>
       </GroupBox>
