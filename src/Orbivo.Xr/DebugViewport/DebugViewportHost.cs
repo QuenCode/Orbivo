@@ -43,7 +43,7 @@ public readonly record struct DebugViewportStatus(
 /// </summary>
 public sealed class DebugViewportHost : IDisposable
 {
-    public const string WindowTitle = "Orbivo â€“ Vorschau (Ersatz fÃ¼r die Brille)";
+    public const string WindowTitle = "Orbivo – Vorschau (Ersatz für die Brille)";
 
     private const int InitialClientWidth = 1280;
     private const int InitialClientHeight = 720;

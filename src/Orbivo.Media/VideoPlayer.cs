@@ -14,7 +14,7 @@ namespace Orbivo.Media;
 /// <param name="StereoLayout">
 /// Stereo layout from the command line (<c>--stereo</c>): wins over sidecar and metadata, this session only. Null = automatic.
 /// </param>
-/// <param name="FrameSlots">Number of decoded frames on the GPU (docs/ARCHITECTURE.md: 6â€“8).</param>
+/// <param name="FrameSlots">Number of decoded frames on the GPU (docs/ARCHITECTURE.md: 6–8).</param>
 /// <param name="Decoder">
 /// <c>--decoder auto|hw|sw</c>. Auto: hardware if the GPU can decode the video, else software; software as well if the
 /// hardware fails before the first frame.
@@ -78,7 +78,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     /// <summary>Why the loaded file is decoded in software after its hardware decoder failed; null otherwise.</summary>
     private string? _softwareFallbackReason;
 
-    // Format of the loaded file (F10â€“F14), control thread only.
+    // Format of the loaded file (F10–F14), control thread only.
     private SidecarFile? _sidecar;
     private FormatOverrides _overrides = FormatOverrides.None;
     private EmbeddedFormatMetadata? _metadata;
@@ -418,7 +418,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         {
             if (!decoder.HasFirstFrame)
             {
-                Fail("Das Video enthÃ¤lt keine Bilder");
+                Fail("Das Video enthält keine Bilder");
                 return;
             }
 
