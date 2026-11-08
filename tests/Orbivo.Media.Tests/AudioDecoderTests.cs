@@ -145,12 +145,15 @@ public sealed class AudioDecoderTests(HardwareDecodeFixture fixture)
                     continue;
                 }
 
-                if (first < 0 && Ring.AvailableFrames > 0)
+                // The position before the read that returns the first frames. (Checking AvailableFrames first raced
+                // with the decoder: sound arriving in between was read before "first" was set.)
+                long position = Ring.ReadPosition;
+                int read = Ring.Read(buffer, 4096);
+                if (first < 0 && read > 0)
                 {
-                    first = Ring.ReadPosition;
+                    first = position;
                 }
 
-                int read = Ring.Read(buffer, 4096);
                 for (int i = 0; i < read; i++)
                 {
                     left.Add(buffer[2 * i]);
