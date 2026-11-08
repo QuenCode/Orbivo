@@ -8,12 +8,9 @@ namespace Orbivo.Core.Logging;
 public static class LogPaths
 {
     /// <summary>
-    /// Default directory: <c>%LOCALAPPDATA%\Orbivo\logs</c>.
+    /// Default directory: <c>Logs</c> next to the executable (decision 2026-11-08).
     /// </summary>
-    public static string DefaultDirectory { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Orbivo",
-        "logs");
+    public static string DefaultDirectory { get; } = Path.Combine(AppContext.BaseDirectory, "Logs");
 
     /// <summary>
     /// File name for a session that started at <paramref name="localStartTime"/>,

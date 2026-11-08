@@ -81,6 +81,8 @@ public partial class App : Application
             _logger.LogWarning("Ignoring unknown command line arguments: {Arguments}", string.Join(" ", options.UnknownArguments));
         }
 
+        PruneOldLogs(logFilePath, _logger);
+
         string nativeDirectory = AppContext.BaseDirectory;
         NativeComponentStatus[] nativeComponents =
         [
@@ -318,6 +320,37 @@ public partial class App : Application
             _ => "Laden fehlgeschlagen",
         };
         return reason + " (Details im Log)";
+    }
+
+    /// <summary>Deletes session logs older than 30 days, keeping at least the last 30 sessions (decision 2026-11-08).</summary>
+    private static void PruneOldLogs(string currentLogPath, ILogger logger)
+    {
+        LogRetentionPolicy policy = LogRetentionPolicy.Default;
+        LogPruneResult result;
+        try
+        {
+            result = LogRetention.Prune(LogPaths.DefaultDirectory, policy, DateTime.UtcNow, currentLogPath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(exception, "Cleaning up old session logs in {Directory} failed.", LogPaths.DefaultDirectory);
+            return;
+        }
+
+        if (result.DeletedFiles > 0)
+        {
+            logger.LogInformation(
+                "Deleted {Count} session logs older than {Days} days ({Kilobytes} KB); the last {MinFiles} sessions are always kept.",
+                result.DeletedFiles,
+                policy.MaxAge.TotalDays,
+                result.DeletedBytes / 1024,
+                policy.MinFiles);
+        }
+
+        foreach (string failure in result.Failures)
+        {
+            logger.LogWarning("Old session log could not be deleted: {Failure}", failure);
+        }
     }
 
     /// <summary>Keeps output device and volume for the next start (decision M5).</summary>

@@ -39,7 +39,7 @@ Neue NuGet-Pakete oder native DLLs **nur nach Rückfrage**. Versionen in `Direct
 - `Nullable` aktiviert, `TreatWarningsAsErrors` an, `unsafe` nur in `Orbivo.Xr`, `.Media`, `.Audio`
 - Code, Bezeichner und Kommentare auf Englisch; **Operator-UI auf Deutsch**
 - Native Ressourcen (COM, FFmpeg, Steam Audio) immer mit `IDisposable` und klarer Ownership
-- Logging: `Microsoft.Extensions.Logging`, Datei-Log pro Sitzung unter `%LOCALAPPDATA%\Orbivo\logs`
+- Logging: `Microsoft.Extensions.Logging`, Datei-Log pro Sitzung im Ordner `Logs` neben der exe (älter als 30 Tage wird beim Start gelöscht, die letzten 30 Sitzungen bleiben immer)
 - Keine stillen Catch-Blöcke. Fehler loggen und als Status an die UI melden.
 
 ## Build & Test

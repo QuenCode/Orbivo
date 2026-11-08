@@ -7,11 +7,9 @@ public sealed class LogPathsTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "OrbivoTests", Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void DefaultDirectory_IsUnderLocalAppData()
+    public void DefaultDirectory_IsLogsNextToTheExecutable()
     {
-        string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-
-        Assert.Equal(Path.Combine(localAppData, "Orbivo", "logs"), LogPaths.DefaultDirectory);
+        Assert.Equal(Path.Combine(AppContext.BaseDirectory, "Logs"), LogPaths.DefaultDirectory);
     }
 
     [Fact]
