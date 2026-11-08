@@ -85,7 +85,8 @@ public sealed class AppSettingsTests : IDisposable
             IdleImagePath: @"C:\Bilder\raum.png",
             RecordingEnabled: true,
             RecordingFolder: @"D:\Studie",
-            HeadSampleRateHz: 30);
+            HeadSampleRateHz: 10,
+            RecordingPerVideo: true);
         saved.Save(FilePath);
 
         Assert.Contains("\"SeeThrough\"", File.ReadAllText(FilePath), StringComparison.Ordinal);
@@ -102,6 +103,7 @@ public sealed class AppSettingsTests : IDisposable
         Assert.Equal(IdleView.Black, settings.IdleView);
         Assert.Null(settings.IdleImagePath);
         Assert.False(settings.RecordingEnabled);
-        Assert.Equal(0, settings.HeadSampleRateHz);
+        Assert.Equal(30, settings.HeadSampleRateHz);
+        Assert.False(settings.RecordingPerVideo);
     }
 }

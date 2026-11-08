@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Orbivo.Core.Logging;
+using Orbivo.Core.Settings;
 
 namespace Orbivo.App.ViewModels;
 
@@ -13,13 +14,14 @@ public sealed record RecordingRateChoice(int RateHz, string Label)
 
 /// <summary>
 /// The "Aufzeichnung" group of the operator window (F50–F52): head log and event log on or off, target folder,
-/// participant/session label and head log rate. The app starts and stops the recorder on <see cref="EnabledChanged"/>;
-/// on, folder and rate are kept in the settings, the label only for this session.
+/// participant/session label, head log rate and "Nur bei laufendem Video". The app starts and stops the recorder on
+/// <see cref="EnabledChanged"/>; on, folder, rate and mode are kept in the settings, the label only for this session.
 /// </summary>
 public sealed class RecordingViewModel : ObservableObject
 {
     private bool _enabled;
     private bool _savedEnabled;
+    private bool _perVideo;
     private string _folder;
     private string _label = string.Empty;
     private RecordingRateChoice _selectedRate;
@@ -27,20 +29,22 @@ public sealed class RecordingViewModel : ObservableObject
     private StatusLevel _statusLevel = StatusLevel.Neutral;
     private string? _filePath;
 
-    public RecordingViewModel(bool enabled, string folder, int rateHz)
+    public RecordingViewModel(bool enabled, string folder, int rateHz, bool perVideo)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(folder);
         Rates =
         [
             new RecordingRateChoice(0, "Jedes Bild (90 Hz in der Brille)"),
             new RecordingRateChoice(45, "45 Hz"),
-            new RecordingRateChoice(30, "30 Hz"),
+            new RecordingRateChoice(30, "30 Hz (Standard)"),
             new RecordingRateChoice(10, "10 Hz"),
         ];
         _enabled = enabled;
         _savedEnabled = enabled;
         _folder = folder;
-        _selectedRate = Rates.FirstOrDefault(choice => choice.RateHz == rateHz) ?? Rates[0];
+        _perVideo = perVideo;
+        _selectedRate = Rates.FirstOrDefault(choice => choice.RateHz == rateHz)
+            ?? Rates.First(choice => choice.RateHz == AppSettings.DefaultHeadSampleRateHz);
     }
 
     /// <summary>The operator switched the recording on or off; the app starts or stops the recorder.</summary>
@@ -72,8 +76,26 @@ public sealed class RecordingViewModel : ObservableObject
         }
     }
 
-    /// <summary>Folder and label can be changed only while no recording runs.</summary>
+    /// <summary>Folder, label and mode can be changed only while no recording runs.</summary>
     public bool CanEdit => !_enabled;
+
+    /// <summary>
+    /// "Nur bei laufendem Video": while switched on, the recorder waits for Play; every video run (Play until Stop, end,
+    /// closing or another video) gets its own pair of files. Pause stays in the same files.
+    /// </summary>
+    public bool PerVideo
+    {
+        get => _perVideo;
+        set
+        {
+            if (_enabled || !SetProperty(ref _perVideo, value))
+            {
+                return;
+            }
+
+            SettingsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     public string Folder => _folder;
 
@@ -129,8 +151,8 @@ public sealed class RecordingViewModel : ObservableObject
 
     public string FileText => _filePath is null ? "Noch keine Datei" : Path.GetFileName(_filePath) + " (+ _ereignisse.csv)";
 
-    /// <summary>On, folder and rate to keep in the settings.</summary>
-    public (bool Enabled, string Folder, int RateHz) SavedChoice => (_savedEnabled, _folder, _selectedRate.RateHz);
+    /// <summary>On, folder, rate and mode to keep in the settings.</summary>
+    public (bool Enabled, string Folder, int RateHz, bool PerVideo) SavedChoice => (_savedEnabled, _folder, _selectedRate.RateHz, _perVideo);
 
     /// <summary>The operator picked a folder (only while no recording runs).</summary>
     public void ChooseFolder(string folder)
@@ -147,21 +169,22 @@ public sealed class RecordingViewModel : ObservableObject
     }
 
     /// <summary>What the recorder needs for the next start.</summary>
-    public RecordingOptions CreateOptions(string appVersion) => new(_folder, _label, _selectedRate.RateHz, appVersion);
+    public RecordingOptions CreateOptions(string appVersion) => new(_folder, _label, _selectedRate.RateHz, appVersion) { PerVideo = _perVideo };
 
     /// <summary>From the recorder, twice a second. A recording that stopped by itself switches the box off (not saved).</summary>
     public void ShowStatus(RecordingStatus status)
     {
         ArgumentNullException.ThrowIfNull(status);
         FilePath = status.HeadFilePath;
+        CultureInfo german = CultureInfo.GetCultureInfo("de-DE");
         if (status.Active)
         {
             string text = string.Create(
-                CultureInfo.GetCultureInfo("de-DE"),
-                $"Läuft seit {FormatDuration(status.Duration)} · {status.HeadRows:N0} Kopf-Zeilen · {status.EventRows:N0} Ereignisse");
+                german,
+                $"{(_perVideo ? $"Video {status.FilePairs} läuft" : "Läuft")} seit {FormatDuration(status.Duration)} · {status.HeadRows:N0} Kopf-Zeilen · {status.EventRows:N0} Ereignisse");
             if (status.DroppedRows > 0)
             {
-                StatusText = text + string.Create(CultureInfo.GetCultureInfo("de-DE"), $" · {status.DroppedRows:N0} Zeilen verloren");
+                StatusText = text + string.Create(german, $" · {status.DroppedRows:N0} Zeilen verloren");
                 StatusLevel = StatusLevel.Warning;
             }
             else
@@ -188,6 +211,17 @@ public sealed class RecordingViewModel : ObservableObject
             return;
         }
 
+        if (_enabled && status.Waiting)
+        {
+            StatusText = status.FilePairs == 0
+                ? "Bereit, wartet auf Play. Jedes Video bekommt ein eigenes Dateipaar"
+                : string.Create(
+                    german,
+                    $"Bereit, wartet auf Play · bisher {status.FilePairs} {(status.FilePairs == 1 ? "Dateipaar" : "Dateipaare")}, zuletzt {FormatDuration(status.Duration)}, {status.HeadRows:N0} Kopf-Zeilen");
+            StatusLevel = StatusLevel.Ok;
+            return;
+        }
+
         if (_enabled)
         {
             StatusText = "Startet …";
@@ -196,7 +230,7 @@ public sealed class RecordingViewModel : ObservableObject
         }
 
         StatusText = status.HeadFilePath is null ? "Aus" : string.Create(
-            CultureInfo.GetCultureInfo("de-DE"),
+            german,
             $"Aus · letzte Aufzeichnung {FormatDuration(status.Duration)}, {status.HeadRows:N0} Kopf-Zeilen, {status.EventRows:N0} Ereignisse");
         StatusLevel = StatusLevel.Neutral;
     }

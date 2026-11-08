@@ -110,7 +110,7 @@ public sealed class MainViewModel : ObservableObject
         Idle = new IdleViewModel(settings.IdleView, settings.IdleImagePath, options.NoXr);
         Idle.SettingsChanged += (_, _) => SettingsChanged?.Invoke(this, EventArgs.Empty);
         Idle.Changed += (_, _) => ShowOutput(_lastStatus);
-        Recording = new RecordingViewModel(settings.RecordingEnabled, settings.RecordingFolder ?? AppSettings.DefaultRecordingFolder, settings.HeadSampleRateHz);
+        Recording = new RecordingViewModel(settings.RecordingEnabled, settings.RecordingFolder ?? AppSettings.DefaultRecordingFolder, settings.HeadSampleRateHz, settings.RecordingPerVideo);
         Recording.SettingsChanged += (_, _) => SettingsChanged?.Invoke(this, EventArgs.Empty);
         _volumePercent = Math.Round(settings.Volume * 100);
         _soundLocked = settings.SoundLocked;
@@ -228,6 +228,7 @@ public sealed class MainViewModel : ObservableObject
         RecordingEnabled = Recording.SavedChoice.Enabled,
         RecordingFolder = string.Equals(Recording.SavedChoice.Folder, AppSettings.DefaultRecordingFolder, StringComparison.OrdinalIgnoreCase) ? null : Recording.SavedChoice.Folder,
         HeadSampleRateHz = Recording.SavedChoice.RateHz,
+        RecordingPerVideo = Recording.SavedChoice.PerVideo,
     };
 
     /// <summary>The "Brille im Leerlauf" group (F7).</summary>

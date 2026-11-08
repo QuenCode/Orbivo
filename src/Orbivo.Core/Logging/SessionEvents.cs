@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Orbivo.Core.Playback;
 
 namespace Orbivo.Core.Logging;
 
@@ -73,13 +74,21 @@ public enum SessionEventKind
 /// <param name="Details">Details in German, e.g. "von 0:12,0 nach 1:30,0".</param>
 /// <param name="VideoFile">Loaded video (full path); null = the one of the latest head sample.</param>
 /// <param name="VideoTime">Video time; null = the one of the latest head sample.</param>
-public sealed record SessionEvent(long Timestamp, SessionEventKind Kind, string Details, string? VideoFile = null, TimeSpan? VideoTime = null);
+public sealed record SessionEvent(long Timestamp, SessionEventKind Kind, string Details, string? VideoFile = null, TimeSpan? VideoTime = null)
+{
+    /// <summary>The new transport state, for <see cref="SessionEventKind.State"/> events from <see cref="ISessionEventLog.RecordState"/>.</summary>
+    public PlaybackState? PlaybackState { get; init; }
+}
 
 /// <summary>Takes events from any thread for the event log (F51). Never blocks; dropped while no recording runs.</summary>
 public interface ISessionEventLog
 {
     /// <summary>Any thread except the render and audio threads in their loops (allocates).</summary>
     void Record(SessionEventKind kind, string details, string? videoFile = null, TimeSpan? videoTime = null);
+
+    /// <summary>The player's transport state changed. The recorder starts and ends per-video files on it.</summary>
+    void RecordState(PlaybackState state, string? videoFile, TimeSpan? videoTime) =>
+        Record(SessionEventKind.State, SessionRecorder.DescribeState(state), videoFile, videoTime);
 }
 
 /// <summary>Collects events for the writer thread of the recording. Thread-safe.</summary>
@@ -99,18 +108,37 @@ public sealed class SessionEventQueue : ISessionEventLog
 
     public void Record(SessionEventKind kind, string details, string? videoFile = null, TimeSpan? videoTime = null)
     {
+        if (HasRoom())
+        {
+            _events.Enqueue(new SessionEvent(Stopwatch.GetTimestamp(), kind, details, videoFile, videoTime));
+        }
+    }
+
+    public void RecordState(PlaybackState state, string? videoFile, TimeSpan? videoTime)
+    {
+        if (HasRoom())
+        {
+            _events.Enqueue(new SessionEvent(Stopwatch.GetTimestamp(), SessionEventKind.State, SessionRecorder.DescribeState(state), videoFile, videoTime)
+            {
+                PlaybackState = state,
+            });
+        }
+    }
+
+    private bool HasRoom()
+    {
         if (Volatile.Read(ref _active) == 0)
         {
-            return;
+            return false;
         }
 
         if (_events.Count >= MaxPending)
         {
             Interlocked.Increment(ref _dropped);
-            return;
+            return false;
         }
 
-        _events.Enqueue(new SessionEvent(Stopwatch.GetTimestamp(), kind, details, videoFile, videoTime));
+        return true;
     }
 
     internal void Activate()

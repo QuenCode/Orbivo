@@ -44,9 +44,9 @@ Wiedergabe von 360°/180°-Videos mit räumlichem Ton auf einer Varjo XR-3 für 
 - F42 Live-Ansicht: was der Proband sieht, aus seinem Blickwinkel, im Operatorfenster. An- und abschaltbar (Standard aus), reduzierte Auflösung genügt
 
 ### Logging
-- F50 Pro Sitzung eine CSV-Datei: Zeitstempel (UTC, monoton), Videodatei, Video-Zeit, Wiedergabestatus, Kopforientierung (Quaternion und Yaw/Pitch/Roll), mit 90 Hz oder konfigurierbar reduziert
+- F50 Pro Sitzung eine CSV-Datei: Zeitstempel (Ortszeit des PCs, monoton), Videodatei, Video-Zeit, Wiedergabestatus, Kopforientierung (Quaternion und Yaw/Pitch/Roll), mit 90 Hz oder konfigurierbar reduziert
 - F51 Event-Log: Laden, Play, Pause, Seek, Blackout, Fade, Recenter, Formatwechsel, Fehler
-- F52 Logging im UI ein/aus, Zielordner wählbar
+- F52 Logging im UI ein/aus, Zielordner wählbar, wahlweise nur bei laufendem Video (ein Dateipaar je Video)
 
 ### Bedienung
 - F60 Tastaturkürzel für alle Kernfunktionen (Leertaste = Play/Pause, B = Blackout, R = Recenter, Pfeiltasten = Seek ±5 s/±30 s)

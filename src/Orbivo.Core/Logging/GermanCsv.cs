@@ -56,10 +56,13 @@ public static class GermanCsv
         line.Append(value.ToString(CultureInfo.InvariantCulture));
     }
 
-    /// <summary>UTC time as <c>2026-11-08 14:12:03,123</c> (Excel reads it as date and time).</summary>
-    public static void AppendUtc(StringBuilder line, DateTime utc)
+    /// <summary>
+    /// A UTC time as local time of this PC, <c>2026-11-08 15:12:03,123</c> (Excel reads it as date and time). Each row
+    /// is converted on its own, so a change to or from daylight saving time shows as a jump of the clock.
+    /// </summary>
+    public static void AppendLocalTime(StringBuilder line, DateTime utc)
     {
-        line.Append(utc.ToString("yyyy-MM-dd HH:mm:ss,fff", CultureInfo.InvariantCulture));
+        line.Append(DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss,fff", CultureInfo.InvariantCulture));
     }
 
     public static void AppendSeparator(StringBuilder line) => line.Append(Separator);

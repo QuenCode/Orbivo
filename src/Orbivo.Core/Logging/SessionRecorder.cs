@@ -17,6 +17,18 @@ public sealed record RecordingOptions(string Folder, string Label, int HeadSampl
 {
     /// <summary>What the headset shows while idle when the recording starts (German), written as the first idle view event.</summary>
     public string? IdleView { get; init; }
+
+    /// <summary>
+    /// "Nur bei laufendem Video": the recorder only waits; every Play starts a new pair of files, Stop, the end of the
+    /// video, closing it or loading another one ends it. Pause stays in the same files.
+    /// </summary>
+    public bool PerVideo { get; init; }
+
+    /// <summary>Transport state when the recording is switched on; with <see cref="PerVideo"/>, playing or paused starts a file at once.</summary>
+    public PlaybackState PlaybackAtStart { get; init; } = PlaybackState.NoMedia;
+
+    /// <summary>Loaded video when the recording is switched on, or null.</summary>
+    public string? VideoAtStart { get; init; }
 }
 
 /// <summary>State of the recording for the operator UI (a snapshot, CLAUDE.md rule 3).</summary>
@@ -28,6 +40,8 @@ public sealed record RecordingOptions(string Folder, string Label, int HeadSampl
 /// <param name="DroppedRows">Head and event rows lost because the writer fell behind.</param>
 /// <param name="Error">Why the recording stopped or could not start (German), or null.</param>
 /// <param name="Duration">Time since the start of the recording.</param>
+/// <param name="Waiting">"Nur bei laufendem Video" is on and no video plays: the recorder waits for Play.</param>
+/// <param name="FilePairs">Pairs of files written since the recording was switched on.</param>
 public sealed record RecordingStatus(
     bool Active,
     string? HeadFilePath,
@@ -36,7 +50,9 @@ public sealed record RecordingStatus(
     long EventRows,
     long DroppedRows,
     string? Error,
-    TimeSpan Duration)
+    TimeSpan Duration,
+    bool Waiting = false,
+    int FilePairs = 0)
 {
     public static RecordingStatus Idle { get; } = new(false, null, null, 0, 0, 0, null, TimeSpan.Zero);
 }
@@ -47,8 +63,9 @@ public sealed record RecordingStatus(
 /// else events through <see cref="Events"/>; neither ever waits for the disk.
 /// </summary>
 /// <remarks>
-/// Times: one anchor (UTC and Stopwatch) at the start of each recording; every row's UTC time is the anchor plus the
-/// Stopwatch time since, so the column is monotonic even if the system clock is adjusted (F50).
+/// Times: one anchor (UTC and Stopwatch) at the start of each pair of files; every row's time is the anchor plus the
+/// Stopwatch time since, so the column is monotonic even if the system clock is adjusted (F50). The file shows it as
+/// local time.
 /// </remarks>
 public sealed class SessionRecorder : IDisposable
 {
@@ -56,13 +73,19 @@ public sealed class SessionRecorder : IDisposable
     public const string EventFileSuffix = "_ereignisse.csv";
 
     public const string HeadHeader =
-        "Zeit_UTC;Sekunden;Video;Videozeit_s;Status;Inhalt;Helligkeit;Tracking;Kopf_qw;Kopf_qx;Kopf_qy;Kopf_qz;"
+        "Uhrzeit;Sekunden;Video;Videozeit_s;Status;Inhalt;Helligkeit;Tracking;Kopf_qw;Kopf_qx;Kopf_qy;Kopf_qz;"
         + "Kopf_Yaw_Grad;Kopf_Pitch_Grad;Kopf_Roll_Grad;Blick_Video_Yaw_Grad;Blick_Video_Pitch_Grad;Recenter_Yaw_Grad";
 
-    public const string EventHeader = "Zeit_UTC;Sekunden;Ereignis;Video;Videozeit_s;Details";
+    public const string EventHeader = "Uhrzeit;Sekunden;Ereignis;Video;Videozeit_s;Details";
 
     private static readonly TimeSpan DrainInterval = TimeSpan.FromMilliseconds(50);
     private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// While waiting for Play, events and samples of this long are kept, so the Play command that started a video is
+    /// in its file although the player reports "playing" a moment later.
+    /// </summary>
+    private static readonly long WaitingWindow = Stopwatch.Frequency * 5;
 
     private readonly ILogger _logger;
     private readonly RecenterControl? _recenter;
@@ -78,12 +101,20 @@ public sealed class SessionRecorder : IDisposable
     private int? _rateRequest;
 
     // Writer thread only.
+    private RecordingOptions? _session;
+    private int _rateHz;
+    private string? _idleView;
+    private readonly List<SessionEvent> _eventBatch = [];
+    private readonly Queue<SessionEvent> _waitingEvents = new();
+    private readonly Queue<HeadSample> _pendingSamples = new();
     private StreamWriter? _headWriter;
     private StreamWriter? _eventWriter;
     private DateTime _anchorUtc;
     private long _anchorTimestamp;
+    private long _sampleFloor;
     private long _lastFlush;
     private int _recenterVersion;
+    private SessionEventKind? _lastCommand;
     private string? _lastVideoPath;
     private string _lastVideoName = string.Empty;
     private HeadSample _lastSample;
@@ -93,6 +124,7 @@ public sealed class SessionRecorder : IDisposable
     private RecordingStatus _status = RecordingStatus.Idle;
     private long _headRows;
     private long _eventRows;
+    private long _droppedBase;
 
     /// <param name="logger">Diagnostic log.</param>
     /// <param name="recenter">Recenter, logged when the render thread carried it out; null = not logged.</param>
@@ -128,19 +160,29 @@ public sealed class SessionRecorder : IDisposable
                 {
                     HeadRows = Volatile.Read(ref _headRows),
                     EventRows = Volatile.Read(ref _eventRows),
-                    DroppedRows = Samples.Dropped + Events.Dropped,
-                    Duration = Stopwatch.GetElapsedTime(_anchorTimestamp),
+                    DroppedRows = Samples.Dropped + Events.Dropped - Volatile.Read(ref _droppedBase),
+                    Duration = Stopwatch.GetElapsedTime(Volatile.Read(ref _anchorTimestamp)),
                 }
                 : status;
         }
     }
 
-    /// <summary>File names of a recording: <c>2026-11-08_141203_P07_kopf.csv</c> and <c>…_ereignisse.csv</c>.</summary>
-    public static string FileStem(DateTime localStart, string label)
+    /// <summary>
+    /// File names of a recording: <c>2026-11-08_141203_P07_kopf.csv</c> and <c>…_ereignisse.csv</c>; with a video
+    /// (one pair of files per video) <c>2026-11-08_141203_P07_Wald_kopf.csv</c>.
+    /// </summary>
+    public static string FileStem(DateTime localStart, string label, string? videoFile = null)
     {
-        string stamp = localStart.ToString("yyyy-MM-dd_HHmmss", CultureInfo.InvariantCulture);
-        string clean = CleanLabel(label);
-        return clean.Length == 0 ? stamp : $"{stamp}_{clean}";
+        var stem = new StringBuilder(localStart.ToString("yyyy-MM-dd_HHmmss", CultureInfo.InvariantCulture));
+        foreach (string part in (ReadOnlySpan<string>)[CleanLabel(label), videoFile is null ? string.Empty : CleanLabel(Path.GetFileNameWithoutExtension(videoFile))])
+        {
+            if (part.Length > 0)
+            {
+                stem.Append('_').Append(part);
+            }
+        }
+
+        return stem.ToString();
     }
 
     /// <summary>The label as it goes into a file name: invalid characters become "_", at most 40 characters.</summary>
@@ -157,7 +199,10 @@ public sealed class SessionRecorder : IDisposable
         return clean.Length > 40 ? clean[..40] : clean;
     }
 
-    /// <summary>Starts a new recording (a running one ends first). UI thread; the files open on the writer thread.</summary>
+    /// <summary>
+    /// Starts a new recording (a running one ends first); with <see cref="RecordingOptions.PerVideo"/> it waits for
+    /// Play. UI thread; the files open on the writer thread.
+    /// </summary>
     public void Start(RecordingOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -236,8 +281,9 @@ public sealed class SessionRecorder : IDisposable
 
             try
             {
-                if (rate is { } hz && _headWriter is not null)
+                if (rate is { } hz && _session is not null)
                 {
+                    _rateHz = hz;
                     Samples.SetRate(hz);
                     WriteEvent(new SessionEvent(Stopwatch.GetTimestamp(), SessionEventKind.Recording, $"Kopf-Log: {DescribeRate(hz)}"));
                 }
@@ -245,7 +291,7 @@ public sealed class SessionRecorder : IDisposable
                 Drain();
                 if (stop || start is not null || disposing)
                 {
-                    EndRecording(disposing ? "App wird beendet" : start is not null ? "Neue Aufzeichnung" : "Vom Operator beendet");
+                    EndSession(disposing ? "App wird beendet" : start is not null ? "Neue Aufzeichnung" : "Vom Operator beendet");
                 }
 
                 if (disposing)
@@ -255,7 +301,7 @@ public sealed class SessionRecorder : IDisposable
 
                 if (start is not null)
                 {
-                    BeginRecording(start);
+                    BeginSession(start);
                 }
 
                 if (_headWriter is not null && Stopwatch.GetElapsedTime(_lastFlush) >= FlushInterval)
@@ -274,10 +320,61 @@ public sealed class SessionRecorder : IDisposable
         }
     }
 
-    private void BeginRecording(RecordingOptions options)
+    /// <summary>The operator switched the recording on: open the files, or wait for Play.</summary>
+    private void BeginSession(RecordingOptions options)
     {
-        DateTime localNow = DateTime.Now;
-        string stem = FileStem(localNow, options.Label);
+        _session = options;
+        _rateHz = options.HeadSampleRateHz;
+        _idleView = options.IdleView;
+        _waitingEvents.Clear();
+        _pendingSamples.Clear();
+
+        // Rows queued before belong to no recording.
+        while (Samples.TryTake(out _))
+        {
+        }
+
+        Events.Activate();
+        Samples.Activate(_rateHz);
+        Volatile.Write(ref _droppedBase, 0);
+        Volatile.Write(ref _status, new RecordingStatus(false, null, null, 0, 0, 0, null, TimeSpan.Zero, Waiting: options.PerVideo));
+        long now = Stopwatch.GetTimestamp();
+        if (!options.PerVideo)
+        {
+            OpenFiles(now, videoFile: null, sampleFloor: now - Stopwatch.Frequency, note: null);
+            return;
+        }
+
+        _logger.LogInformation("Recording switched on, one pair of files per video: waiting for Play (head log {Rate}).", DescribeRate(_rateHz));
+        if (options.PlaybackAtStart is PlaybackState.Playing or PlaybackState.Paused)
+        {
+            OpenFiles(now, options.VideoAtStart, sampleFloor: now, note: "Video lief schon beim Einschalten");
+        }
+    }
+
+    /// <summary>The operator switched the recording off, started a new one or the app ends.</summary>
+    private void EndSession(string reason)
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        Samples.Deactivate();
+        Drain();
+        Events.Deactivate();
+        EndFiles(reason);
+        _session = null;
+        _waitingEvents.Clear();
+        _pendingSamples.Clear();
+        Volatile.Write(ref _status, Volatile.Read(ref _status) with { Active = false, Waiting = false });
+    }
+
+    private void OpenFiles(long anchorTimestamp, string? videoFile, long sampleFloor, string? note)
+    {
+        RecordingOptions options = _session!;
+        DateTime localStart = DateTime.Now - Stopwatch.GetElapsedTime(anchorTimestamp);
+        string stem = FileStem(localStart, options.Label, options.PerVideo ? videoFile : null);
         Directory.CreateDirectory(options.Folder);
         string headPath = UniquePath(options.Folder, stem, HeadFileSuffix);
         string eventPath = Path.Combine(options.Folder, Path.GetFileName(headPath)[..^HeadFileSuffix.Length] + EventFileSuffix);
@@ -296,54 +393,55 @@ public sealed class SessionRecorder : IDisposable
 
         _headWriter.WriteLine(HeadHeader);
         _eventWriter.WriteLine(EventHeader);
-        _anchorTimestamp = Stopwatch.GetTimestamp();
-        _anchorUtc = DateTime.UtcNow;
-        _lastFlush = _anchorTimestamp;
+        Volatile.Write(ref _anchorTimestamp, anchorTimestamp);
+        _anchorUtc = DateTime.UtcNow - Stopwatch.GetElapsedTime(anchorTimestamp);
+        _sampleFloor = sampleFloor;
+        _lastFlush = Stopwatch.GetTimestamp();
         _hasLastSample = false;
+        _lastCommand = null;
         Volatile.Write(ref _headRows, 0);
         Volatile.Write(ref _eventRows, 0);
+        Volatile.Write(ref _droppedBase, Samples.Dropped + Events.Dropped);
         _recenterVersion = _recenter?.Version ?? 0;
-
-        // Rows queued before the anchor belong to no recording.
-        while (Samples.TryTake(out _))
-        {
-        }
-
-        Events.Activate();
-        Samples.Activate(options.HeadSampleRateHz);
-        Volatile.Write(ref _status, new RecordingStatus(true, headPath, eventPath, 0, 0, 0, null, TimeSpan.Zero));
+        int pairs = Volatile.Read(ref _status).FilePairs + 1;
+        Volatile.Write(ref _status, new RecordingStatus(true, headPath, eventPath, 0, 0, 0, null, TimeSpan.Zero, Waiting: false, pairs));
 
         string label = CleanLabel(options.Label);
-        WriteEvent(new SessionEvent(
-            _anchorTimestamp,
-            SessionEventKind.Recording,
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"Start. Orbivo {options.AppVersion}, Kopf-Log: {DescribeRate(options.HeadSampleRateHz)}, Proband/Sitzung: {(label.Length == 0 ? "–" : label)}, Rechner: {Environment.MachineName}, Zeitzone: {TimeZoneInfo.Local.Id}")));
-        if (options.IdleView is { } idleView)
+        var start = new StringBuilder();
+        start.Append(CultureInfo.InvariantCulture, $"Start. Orbivo {options.AppVersion}, Kopf-Log: {DescribeRate(_rateHz)}, Proband/Sitzung: {(label.Length == 0 ? "–" : label)}");
+        if (options.PerVideo)
         {
-            WriteEvent(new SessionEvent(_anchorTimestamp, SessionEventKind.IdleView, idleView + " (beim Start)"));
+            start.Append(CultureInfo.InvariantCulture, $", ein Dateipaar je Video, Video: {videoFile ?? "–"}");
+        }
+
+        start.Append(CultureInfo.InvariantCulture, $", Rechner: {Environment.MachineName}, Zeitzone: {TimeZoneInfo.Local.Id}");
+        if (note is not null)
+        {
+            start.Append(". ").Append(note);
+        }
+
+        WriteEvent(new SessionEvent(anchorTimestamp, SessionEventKind.Recording, start.ToString(), videoFile));
+        if (_idleView is { } idleView)
+        {
+            WriteEvent(new SessionEvent(anchorTimestamp, SessionEventKind.IdleView, idleView + " (beim Start)", videoFile));
         }
 
         if (_recenter is { } recenter && recenter.YawDegrees != 0f)
         {
-            WriteEvent(new SessionEvent(_anchorTimestamp, SessionEventKind.Recenter, DescribeRecenter(recenter.YawDegrees) + " (schon vor dem Start)"));
+            WriteEvent(new SessionEvent(anchorTimestamp, SessionEventKind.Recenter, DescribeRecenter(recenter.YawDegrees) + " (schon vor dem Start)", videoFile));
         }
 
-        _logger.LogInformation("Recording started: {HeadFile} and {EventFile}, head log {Rate}.", headPath, eventPath, DescribeRate(options.HeadSampleRateHz));
+        _logger.LogInformation("Recording started: {HeadFile} and {EventFile}, head log {Rate}.", headPath, eventPath, DescribeRate(_rateHz));
     }
 
-    private void EndRecording(string reason)
+    private void EndFiles(string reason)
     {
         if (_headWriter is null)
         {
             return;
         }
 
-        Samples.Deactivate();
-        Drain();
-        Events.Deactivate();
-        long dropped = Samples.Dropped + Events.Dropped;
+        long dropped = Samples.Dropped + Events.Dropped - Volatile.Read(ref _droppedBase);
         WriteEvent(new SessionEvent(
             Stopwatch.GetTimestamp(),
             SessionEventKind.Recording,
@@ -351,10 +449,11 @@ public sealed class SessionRecorder : IDisposable
                 CultureInfo.InvariantCulture,
                 $"Ende ({reason}). {Volatile.Read(ref _headRows)} Kopf-Zeilen, {Volatile.Read(ref _eventRows) + 1} Ereignisse{(dropped > 0 ? $", {dropped} Zeilen verloren" : string.Empty)}")));
         CloseFiles();
-        RecordingStatus last = Status;
+        RecordingStatus last = Volatile.Read(ref _status);
         Volatile.Write(ref _status, last with
         {
             Active = false,
+            Waiting = _session?.PerVideo == true,
             HeadRows = Volatile.Read(ref _headRows),
             EventRows = Volatile.Read(ref _eventRows),
             DroppedRows = dropped,
@@ -365,22 +464,114 @@ public sealed class SessionRecorder : IDisposable
 
     private void Drain()
     {
-        if (_headWriter is null)
+        if (_session is not { } session)
         {
             return;
         }
 
-        PollRecenter();
+        if (_headWriter is not null)
+        {
+            PollRecenter();
+        }
 
-        // Events and samples go to separate files; each file is in time order on its own.
+        _eventBatch.Clear();
         while (Events.TryTake(out SessionEvent? sessionEvent))
         {
-            WriteEvent(sessionEvent!);
+            _eventBatch.Add(sessionEvent!);
         }
 
         while (Samples.TryTake(out HeadSample sample))
         {
-            if (sample.Timestamp < _anchorTimestamp - Stopwatch.Frequency)
+            _pendingSamples.Enqueue(sample);
+        }
+
+        // Events and samples go to separate files; each file is in time order on its own. Samples up to an event are
+        // written before it, so a pair of files that ends on an event holds exactly the samples until then.
+        foreach (SessionEvent sessionEvent in _eventBatch)
+        {
+            if (sessionEvent.Kind == SessionEventKind.IdleView)
+            {
+                _idleView = sessionEvent.Details;
+            }
+
+            if (_headWriter is not null)
+            {
+                WriteSamplesBefore(sessionEvent.Timestamp);
+                WriteEvent(sessionEvent);
+                if (sessionEvent.Kind is SessionEventKind.Play or SessionEventKind.Stop or SessionEventKind.Close or SessionEventKind.Load)
+                {
+                    _lastCommand = sessionEvent.Kind;
+                }
+
+                if (session.PerVideo && sessionEvent.PlaybackState is { } state && !IsRunning(state))
+                {
+                    EndFiles(EndReason(state));
+                }
+            }
+            else if (session.PerVideo && sessionEvent.PlaybackState == PlaybackState.Playing)
+            {
+                StartVideoFiles(sessionEvent);
+            }
+            else
+            {
+                _waitingEvents.Enqueue(sessionEvent);
+            }
+        }
+
+        _eventBatch.Clear();
+        if (_headWriter is not null)
+        {
+            WriteSamplesBefore(long.MaxValue);
+            return;
+        }
+
+        long oldest = Stopwatch.GetTimestamp() - WaitingWindow;
+        while (_pendingSamples.TryPeek(out HeadSample old) && old.Timestamp < oldest)
+        {
+            _pendingSamples.Dequeue();
+        }
+
+        while (_waitingEvents.TryPeek(out SessionEvent? old) && old.Timestamp < oldest)
+        {
+            _waitingEvents.Dequeue();
+        }
+    }
+
+    /// <summary>A video began to play while waiting: the files start with the Play command that started it.</summary>
+    private void StartVideoFiles(SessionEvent playing)
+    {
+        long anchor = playing.Timestamp;
+        foreach (SessionEvent waiting in _waitingEvents)
+        {
+            if (waiting.Kind == SessionEventKind.Play && waiting.Timestamp >= playing.Timestamp - WaitingWindow)
+            {
+                anchor = waiting.Timestamp;
+            }
+        }
+
+        OpenFiles(anchor, playing.VideoFile, sampleFloor: anchor, note: null);
+        foreach (SessionEvent waiting in _waitingEvents)
+        {
+            if (waiting.Timestamp >= anchor)
+            {
+                WriteEvent(waiting);
+                if (waiting.Kind == SessionEventKind.Play)
+                {
+                    _lastCommand = SessionEventKind.Play;
+                }
+            }
+        }
+
+        _waitingEvents.Clear();
+        WriteEvent(playing);
+    }
+
+    private void WriteSamplesBefore(long timestamp)
+    {
+        while (_pendingSamples.TryPeek(out HeadSample sample) && sample.Timestamp < timestamp)
+        {
+            _pendingSamples.Dequeue();
+            if (sample.Timestamp < _sampleFloor)
             {
                 continue;
             }
@@ -389,6 +580,26 @@ public sealed class SessionRecorder : IDisposable
             _lastSample = sample;
             _hasLastSample = true;
         }
+    }
+
+    /// <summary>Playing and paused belong to the video's pair of files; every other state ends it.</summary>
+    private static bool IsRunning(PlaybackState state) => state is PlaybackState.Playing or PlaybackState.Paused;
+
+    private string EndReason(PlaybackState state)
+    {
+        return state switch
+        {
+            PlaybackState.Ended => "Video zu Ende",
+            PlaybackState.Failed => "Fehler beim Abspielen",
+            _ => _lastCommand switch
+            {
+                SessionEventKind.Stop => "Stop",
+                SessionEventKind.Close => "Video entladen",
+                SessionEventKind.Load => "Anderes Video geladen",
+                SessionEventKind.Play => "Video startet neu",
+                _ => "Zustand " + DescribeState(state),
+            },
+        };
     }
 
     private void PollRecenter()
@@ -485,7 +696,7 @@ public sealed class SessionRecorder : IDisposable
     {
         long elapsed = timestamp - _anchorTimestamp;
         double seconds = elapsed / (double)Stopwatch.Frequency;
-        GermanCsv.AppendUtc(line, _anchorUtc.AddTicks((long)(seconds * TimeSpan.TicksPerSecond)));
+        GermanCsv.AppendLocalTime(line, _anchorUtc.AddTicks((long)(seconds * TimeSpan.TicksPerSecond)));
         GermanCsv.AppendSeparator(line);
         GermanCsv.AppendNumber(line, seconds, 6);
     }
@@ -511,6 +722,9 @@ public sealed class SessionRecorder : IDisposable
         _logger.LogError(exception, "Writing the recording failed; the recording stops.");
         Samples.Deactivate();
         Events.Deactivate();
+        _session = null;
+        _waitingEvents.Clear();
+        _pendingSamples.Clear();
         try
         {
             CloseFiles();
@@ -524,6 +738,7 @@ public sealed class SessionRecorder : IDisposable
         Volatile.Write(ref _status, last with
         {
             Active = false,
+            Waiting = false,
             HeadRows = Volatile.Read(ref _headRows),
             EventRows = Volatile.Read(ref _eventRows),
             Error = $"Aufzeichnung gestoppt: {exception.Message}",

@@ -292,7 +292,12 @@ public partial class App : Application
         RecordingViewModel recording = _viewModel.Recording;
         if (recording.Enabled)
         {
-            _recorder.Start(recording.CreateOptions(_appVersion) with { IdleView = DescribeIdleView(_viewModel.Idle) });
+            _recorder.Start(recording.CreateOptions(_appVersion) with
+            {
+                IdleView = DescribeIdleView(_viewModel.Idle),
+                PlaybackAtStart = _player?.State ?? Core.Playback.PlaybackState.NoMedia,
+                VideoAtStart = _player?.FilePath,
+            });
         }
         else
         {

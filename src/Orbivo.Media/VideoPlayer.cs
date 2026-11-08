@@ -912,7 +912,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         if (_machine.State != _loggedState)
         {
             _loggedState = _machine.State;
-            _options.Events?.Record(SessionEventKind.State, SessionRecorder.DescribeState(_machine.State), _filePath, CurrentPosition());
+            _options.Events?.RecordState(_machine.State, _filePath, CurrentPosition());
         }
 
         VideoDecoder? decoder = _decoder;

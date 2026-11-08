@@ -295,6 +295,73 @@ public sealed class VideoPlayerTests(HardwareDecodeFixture fixture)
         Assert.Contains("Datei nicht gefunden", log[order[^1]].Details, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void PerVideoRecording_FollowsTheRealPlayer()
+    {
+        GraphicsDevice device = fixture.RequireHardware();
+        string path = Path.GetFullPath(TestVideos.Mono4K);
+        string folder = Path.Combine(Path.GetTempPath(), "orbivo-pervideo-" + Guid.NewGuid().ToString("N"));
+        var recorder = new SessionRecorder(TestOutputLoggerFactory.Instance.CreateLogger(nameof(SessionRecorder)), null);
+        var commands = Channel.CreateUnbounded<PlayerCommand>();
+        using var player = new VideoPlayer(device.Device, commands.Reader, new VideoPlayerOptions(StereoLayout: null) { Events = recorder.Events }, TestOutputLoggerFactory.Instance);
+        player.Start();
+
+        try
+        {
+            recorder.Start(new RecordingOptions(folder, "P01", 30, "test") { PerVideo = true });
+            WaitForRecorder(recorder, status => status.Waiting);
+            Send(commands, new OpenMediaCommand(path));
+            WaitForState(player, PlaybackState.Ready);
+
+            // Run 1 with a pause in between, run 2 after Stop.
+            Send(commands, new PlayCommand());
+            WaitForRecorder(recorder, status => status.Active);
+            Send(commands, new PauseCommand());
+            WaitForState(player, PlaybackState.Paused);
+            Send(commands, new PlayCommand());
+            WaitForState(player, PlaybackState.Playing);
+            Send(commands, new StopCommand());
+            WaitForState(player, PlaybackState.Ready);
+            WaitForRecorder(recorder, status => status is { Active: false, FilePairs: 1 });
+            Send(commands, new PlayCommand());
+            WaitForRecorder(recorder, status => status is { Active: true, FilePairs: 2 });
+            Send(commands, new StopCommand());
+            WaitForRecorder(recorder, status => status is { Active: false, Waiting: true, FilePairs: 2 });
+
+            string[] eventFiles = [.. Directory.GetFiles(folder, "*" + SessionRecorder.EventFileSuffix).OrderBy(file => file.Length)]; // the second pair has "_2"
+            Assert.Equal(2, eventFiles.Length);
+            foreach (string file in eventFiles)
+            {
+                Assert.Contains("_P01_" + SessionRecorder.CleanLabel(Path.GetFileNameWithoutExtension(path)), file, StringComparison.Ordinal); // cut to 40 characters
+                string[] lines = File.ReadAllLines(file);
+                Assert.Equal("Play", lines[2].Split(';')[2]);
+                Assert.Contains("Ende (Stop)", lines[^1], StringComparison.Ordinal);
+            }
+
+            Assert.Contains(File.ReadAllLines(eventFiles[0]), line => line.EndsWith(";Pause", StringComparison.Ordinal));
+        }
+        finally
+        {
+            player.ReleaseRenderThread();
+            commands.Writer.Complete();
+            recorder.Dispose();
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+    }
+
+    private static void WaitForRecorder(SessionRecorder recorder, Func<RecordingStatus, bool> condition)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        while (!condition(recorder.Status))
+        {
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(15), $"Timed out waiting for the recorder: {recorder.Status}");
+            Thread.Sleep(10);
+        }
+    }
+
     private sealed class CollectingEventLog : ISessionEventLog
     {
         private readonly ConcurrentQueue<SessionEvent> _events = new();

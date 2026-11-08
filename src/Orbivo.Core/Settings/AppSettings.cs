@@ -19,6 +19,7 @@ namespace Orbivo.Core.Settings;
 /// <param name="RecordingEnabled">True: head log and event log are written (F50–F52), from the start of the app on.</param>
 /// <param name="RecordingFolder">Folder for the recordings, null = <see cref="DefaultRecordingFolder"/>.</param>
 /// <param name="HeadSampleRateHz">Rows per second of the head log; 0 = every frame (90 Hz in the headset).</param>
+/// <param name="RecordingPerVideo">"Nur bei laufendem Video": one pair of files per video, nothing written while no video plays.</param>
 public sealed record AppSettings(
     string? AudioDeviceId = null,
     float Volume = AppSettings.DefaultVolume,
@@ -27,9 +28,13 @@ public sealed record AppSettings(
     string? IdleImagePath = null,
     bool RecordingEnabled = false,
     string? RecordingFolder = null,
-    int HeadSampleRateHz = 0)
+    int HeadSampleRateHz = AppSettings.DefaultHeadSampleRateHz,
+    bool RecordingPerVideo = false)
 {
     public const float DefaultVolume = 0.8f;
+
+    /// <summary>30 rows per second are enough for head movement and keep the files small.</summary>
+    public const int DefaultHeadSampleRateHz = 30;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

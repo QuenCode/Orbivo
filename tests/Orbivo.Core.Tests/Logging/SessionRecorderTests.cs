@@ -86,18 +86,19 @@ public sealed class SessionRecorderTests : IDisposable
         recorder.Dispose();
 
         double previous = double.MinValue;
-        DateTime previousUtc = DateTime.MinValue;
+        DateTime previousTime = DateTime.MinValue;
         foreach (string line in File.ReadAllLines(path).Skip(1))
         {
             string[] fields = line.Split(';');
             double seconds = double.Parse(fields[1], GermanCsv.Numbers);
-            DateTime utc = DateTime.ParseExact(fields[0], "yyyy-MM-dd HH:mm:ss,fff", System.Globalization.CultureInfo.InvariantCulture);
+            DateTime time = DateTime.ParseExact(fields[0], "yyyy-MM-dd HH:mm:ss,fff", System.Globalization.CultureInfo.InvariantCulture);
             Assert.True(seconds > previous);
-            Assert.True(utc >= previousUtc);
+            Assert.True(time >= previousTime);
+            Assert.True(Math.Abs((time - DateTime.Now).TotalMinutes) < 1, $"{time} is not the local time of this PC"); // not UTC
             Assert.Equal(string.Empty, fields[2]); // no video
             Assert.Equal(string.Empty, fields[3]);
             previous = seconds;
-            previousUtc = utc;
+            previousTime = time;
         }
 
         Assert.Equal(2.9, previous, 0.05);
@@ -131,6 +132,88 @@ public sealed class SessionRecorderTests : IDisposable
         Assert.Equal(2, Directory.GetFiles(_folder, "*" + SessionRecorder.HeadFileSuffix).Length);
         Assert.Equal(2, Directory.GetFiles(_folder, "*" + SessionRecorder.EventFileSuffix).Length);
         Assert.Contains("Ende (Vom Operator beendet)", File.ReadAllLines(firstFile[..^SessionRecorder.HeadFileSuffix.Length] + SessionRecorder.EventFileSuffix)[^1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PerVideo_WritesOnePairOfFilesForEachVideoRun()
+    {
+        var recorder = new SessionRecorder(NullLogger.Instance, null);
+        recorder.Start(Options("P07") with { PerVideo = true });
+        WaitUntil(() => recorder.Status.Waiting);
+        Assert.False(recorder.Status.Active);
+        string video = @"C:\Videos\Wald.mp4";
+
+        // Before Play: nothing is written.
+        recorder.Events.Record(SessionEventKind.Load, video, video, TimeSpan.Zero);
+        recorder.Events.RecordState(PlaybackState.Ready, video, TimeSpan.Zero);
+        recorder.Samples.Offer(Sample(Stopwatch.GetTimestamp(), Quaternion.Identity, video, 0));
+        Thread.Sleep(150);
+        Assert.Empty(Directory.Exists(_folder) ? Directory.GetFiles(_folder) : []);
+
+        // First run: Play, Pause, Play, Stop.
+        recorder.Events.Record(SessionEventKind.Play, string.Empty, video, TimeSpan.Zero);
+        Thread.Sleep(80); // the player reports "playing" a moment after the command
+        recorder.Events.RecordState(PlaybackState.Playing, video, TimeSpan.Zero);
+        OfferFrames(recorder, video, frames: 10);
+        recorder.Events.RecordState(PlaybackState.Paused, video, TimeSpan.FromSeconds(1));
+        OfferFrames(recorder, video, frames: 10);
+        recorder.Events.RecordState(PlaybackState.Playing, video, TimeSpan.FromSeconds(1));
+        OfferFrames(recorder, video, frames: 10);
+        WaitUntil(() => recorder.Status is { Active: true, HeadRows: 30 });
+        string firstHead = recorder.Status.HeadFilePath!;
+        recorder.Events.Record(SessionEventKind.Stop, string.Empty, video, TimeSpan.FromSeconds(2));
+        recorder.Events.RecordState(PlaybackState.Opening, video, TimeSpan.FromSeconds(2));
+        recorder.Events.RecordState(PlaybackState.Ready, video, TimeSpan.Zero);
+        OfferFrames(recorder, video, frames: 5); // after Stop: not written
+        WaitUntil(() => recorder.Status is { Active: false, Waiting: true, FilePairs: 1 });
+
+        // Second run ends with the end of the video.
+        recorder.Events.Record(SessionEventKind.Play, string.Empty, video, TimeSpan.Zero);
+        recorder.Events.RecordState(PlaybackState.Playing, video, TimeSpan.Zero);
+        OfferFrames(recorder, video, frames: 4);
+        WaitUntil(() => recorder.Status is { Active: true, FilePairs: 2, HeadRows: 4 });
+        string secondHead = recorder.Status.HeadFilePath!;
+        recorder.Events.RecordState(PlaybackState.Ended, video, TimeSpan.FromSeconds(9));
+        WaitUntil(() => recorder.Status is { Active: false, Waiting: true });
+        recorder.Dispose();
+
+        Assert.NotEqual(firstHead, secondHead);
+        Assert.EndsWith("_P07_Wald_kopf.csv", firstHead, StringComparison.Ordinal);
+        Assert.Equal(2, Directory.GetFiles(_folder, "*" + SessionRecorder.HeadFileSuffix).Length);
+        Assert.Equal(31, File.ReadAllLines(firstHead).Length); // header + 30 rows, none from before Play or after Stop
+
+        string[] events = File.ReadAllLines(firstHead[..^SessionRecorder.HeadFileSuffix.Length] + SessionRecorder.EventFileSuffix);
+        Assert.Contains(@"ein Dateipaar je Video, Video: C:\Videos\Wald.mp4", events[1], StringComparison.Ordinal);
+        Assert.Equal("Play", events[2].Split(';')[2]); // the command that started the video is in the file
+        Assert.Equal(0.0, double.Parse(events[2].Split(';')[1], GermanCsv.Numbers), 3);
+        Assert.DoesNotContain(events, line => line.Contains(";Laden;", StringComparison.Ordinal));
+        Assert.Contains(events, line => line.EndsWith(";Pause", StringComparison.Ordinal));
+        Assert.Contains("Ende (Stop)", events[^1], StringComparison.Ordinal);
+        string[] secondEvents = File.ReadAllLines(secondHead[..^SessionRecorder.HeadFileSuffix.Length] + SessionRecorder.EventFileSuffix);
+        Assert.Contains("Ende (Video zu Ende)", secondEvents[^1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PerVideo_StartsAtOnceIfAVideoAlreadyPlays_AndWritesNothingWithoutVideo()
+    {
+        var recorder = new SessionRecorder(NullLogger.Instance, null);
+        recorder.Start(Options(string.Empty) with { PerVideo = true });
+        WaitUntil(() => recorder.Status.Waiting);
+        recorder.Stop();
+        WaitUntil(() => !recorder.Status.Waiting);
+        Assert.False(Directory.Exists(_folder) && Directory.GetFiles(_folder).Length > 0);
+
+        recorder.Start(Options(string.Empty) with { PerVideo = true, PlaybackAtStart = PlaybackState.Paused, VideoAtStart = @"C:\See.mp4" });
+        WaitUntil(() => recorder.Status.Active);
+        string head = recorder.Status.HeadFilePath!;
+        recorder.Stop();
+        WaitUntil(() => !recorder.Status.Active && !recorder.Status.Waiting);
+        recorder.Dispose();
+
+        Assert.EndsWith("_See_kopf.csv", head, StringComparison.Ordinal);
+        string[] events = File.ReadAllLines(head[..^SessionRecorder.HeadFileSuffix.Length] + SessionRecorder.EventFileSuffix);
+        Assert.Contains("Video lief schon beim Einschalten", events[1], StringComparison.Ordinal);
+        Assert.Contains("Ende (Vom Operator beendet)", events[^1], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -238,6 +321,22 @@ public sealed class SessionRecorderTests : IDisposable
     }
 
     private RecordingOptions Options(string label) => new(_folder, label, 0, "test");
+
+    /// <summary>Samples spread over the next 10 ms per frame, as the render thread would offer them.</summary>
+    private static void OfferFrames(SessionRecorder recorder, string video, int frames)
+    {
+        long start = Stopwatch.GetTimestamp();
+        for (int frame = 0; frame < frames; frame++)
+        {
+            recorder.Samples.Offer(Sample(start + (frame * (Stopwatch.Frequency / 100)), Quaternion.Identity, video, frame / 100.0));
+        }
+
+        // The next events come after these samples.
+        while (Stopwatch.GetElapsedTime(start) < TimeSpan.FromMilliseconds((frames * 10) + 5))
+        {
+            Thread.Sleep(5);
+        }
+    }
 
     private static HeadSample Sample(long timestamp, Quaternion head, string? video, double ptsSeconds)
     {

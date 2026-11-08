@@ -359,8 +359,12 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
           </Grid.RowDefinitions>
-          <CheckBox Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Content="Aufzeichnen" IsChecked="{Binding Enabled}" Focusable="False" Margin="0,2,0,2"
-                    ToolTip="Schreibt Kopfbewegung (Kopf-CSV) und Bedienereignisse (Ereignis-CSV), Trennzeichen Semikolon, Dezimalkomma. Jedes Einschalten beginnt ein neues Dateipaar. Bleibt nach einem Neustart eingeschaltet." />
+          <WrapPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,2,0,2">
+            <CheckBox Content="Aufzeichnen" IsChecked="{Binding Enabled}" Focusable="False" Margin="0,0,24,0"
+                      ToolTip="Schreibt Kopfbewegung (Kopf-CSV) und Bedienereignisse (Ereignis-CSV), Trennzeichen Semikolon, Dezimalkomma, Uhrzeit dieses PCs. Jedes Einschalten beginnt ein neues Dateipaar. Bleibt nach einem Neustart eingeschaltet." />
+            <CheckBox Content="Nur bei laufendem Video" IsChecked="{Binding PerVideo}" IsEnabled="{Binding CanEdit}" Focusable="False"
+                      ToolTip="Ein Dateipaar je Video: Play beginnt es (Dateiname mit Videoname), Stop, Videoende, Entladen oder ein anderes Video beenden es. Pause bleibt in derselben Datei. Ohne laufendes Video wird nichts geschrieben. Nur änderbar, solange die Aufzeichnung aus ist; wird gespeichert." />
+          </WrapPanel>
           <TextBlock Grid.Row="1" Grid.Column="0" Text="Ordner:" VerticalAlignment="Center" Margin="0,2,16,2" />
           <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,2,0,2">
             <Button DockPanel.Dock="Right" Content="Ordner wählen …" Click="OnChooseRecordingFolderClick" Margin="6,0,0,0" Focusable="False"
