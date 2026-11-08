@@ -12,6 +12,7 @@ using Orbivo.Core.Audio;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Logging;
 using Orbivo.Core.Playback;
 using Orbivo.Core.Playlists;
 using Orbivo.Core.Settings;
@@ -109,6 +110,8 @@ public sealed class MainViewModel : ObservableObject
         Idle = new IdleViewModel(settings.IdleView, settings.IdleImagePath, options.NoXr);
         Idle.SettingsChanged += (_, _) => SettingsChanged?.Invoke(this, EventArgs.Empty);
         Idle.Changed += (_, _) => ShowOutput(_lastStatus);
+        Recording = new RecordingViewModel(settings.RecordingEnabled, settings.RecordingFolder ?? AppSettings.DefaultRecordingFolder, settings.HeadSampleRateHz);
+        Recording.SettingsChanged += (_, _) => SettingsChanged?.Invoke(this, EventArgs.Empty);
         _volumePercent = Math.Round(settings.Volume * 100);
         _soundLocked = settings.SoundLocked;
         Playlist = new Playlist();
@@ -214,7 +217,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>The operator changed the output device; the app saves the settings.</summary>
     public event EventHandler? SettingsChanged;
 
-    /// <summary>Settings to keep: output device, volume and their lock (not mute), idle view.</summary>
+    /// <summary>Settings to keep: output device, volume and their lock (not mute), idle view, recording.</summary>
     public AppSettings CurrentSettings => _loadedSettings with
     {
         AudioDeviceId = SelectedAudioDevice?.Id,
@@ -222,10 +225,23 @@ public sealed class MainViewModel : ObservableObject
         SoundLocked = SoundLocked,
         IdleView = Idle.SavedChoice.View,
         IdleImagePath = Idle.SavedChoice.ImagePath,
+        RecordingEnabled = Recording.SavedChoice.Enabled,
+        RecordingFolder = string.Equals(Recording.SavedChoice.Folder, AppSettings.DefaultRecordingFolder, StringComparison.OrdinalIgnoreCase) ? null : Recording.SavedChoice.Folder,
+        HeadSampleRateHz = Recording.SavedChoice.RateHz,
     };
 
     /// <summary>The "Brille im Leerlauf" group (F7).</summary>
     public IdleViewModel Idle { get; }
+
+    /// <summary>The "Aufzeichnung" group (F50–F52).</summary>
+    public RecordingViewModel Recording { get; }
+
+    /// <summary>Shows the recorder's status with every status refresh.</summary>
+    public void StartRecordingPolling(Func<RecordingStatus> getStatus)
+    {
+        ArgumentNullException.ThrowIfNull(getStatus);
+        AddRefresher(() => Recording.ShowStatus(getStatus()));
+    }
 
     /// <summary>
     /// Locks output device and volume against a slip (kept across restarts). Mute stays usable, as an emergency stop.

@@ -46,6 +46,8 @@ public partial class App : Application
     private LiveViewController? _liveView;
     private LiveViewFrames? _liveViewFrames;
     private StartupOptions? _options;
+    private SessionRecorder? _recorder;
+    private string _appVersion = "unbekannt";
 
     /// <summary>Device and hand-over of the render thread for the idle image, once the device exists (UI thread).</summary>
     private (GraphicsDevice Device, Action<StillImageTexture> Show)? _imageTarget;
@@ -86,9 +88,10 @@ public partial class App : Application
 
         RegisterGlobalExceptionHandlers();
 
+        _appVersion = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unbekannt";
         _logger.LogInformation(
             "Orbivo {Version} starting. OS: {Os}, runtime: {Runtime}, XR: {XrMode}, video decoder: {Decoder}.",
-            Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown",
+            _appVersion,
             RuntimeInformation.OSDescription,
             RuntimeInformation.FrameworkDescription,
             options.NoXr ? "disabled (--no-xr)" : "enabled",
@@ -131,7 +134,18 @@ public partial class App : Application
             _viewModel.Idle.UseSessionImage(Path.GetFullPath(options.ImagePath));
         }
 
-        _viewModel.Idle.Changed += (_, _) => ApplyIdleView();
+        _viewModel.Idle.Changed += (_, _) =>
+        {
+            ApplyIdleView();
+            _recorder?.Events.Record(SessionEventKind.IdleView, DescribeIdleView(_viewModel.Idle));
+        };
+
+        // The recorder starts before the render thread and the player, so their first events are in the log.
+        _recorder = new SessionRecorder(_loggerFactory.CreateLogger<SessionRecorder>(), _recenter);
+        _viewModel.Recording.EnabledChanged += (_, _) => ApplyRecording();
+        _viewModel.Recording.RateChanged += (_, _) => _recorder.SetHeadSampleRate(_viewModel.Recording.RateHz);
+        _viewModel.StartRecordingPolling(() => _recorder.Status);
+        ApplyRecording();
         _liveView = new LiveViewController(_loggerFactory.CreateLogger<LiveViewPresenter>());
         _viewModel.AttachLiveView(_liveView);
         var window = new MainWindow
@@ -174,6 +188,7 @@ public partial class App : Application
         _debugViewport?.Dispose();
         _liveViewFrames?.Dispose();
         _player?.Dispose();
+        _recorder?.Dispose();
         _audioOutput?.Dispose();
         _graphicsDevice?.Dispose();
         _logger?.LogInformation("Orbivo exiting with code {ExitCode}.", e.ApplicationExitCode);
@@ -190,6 +205,7 @@ public partial class App : Application
         _xrHost = new XrHost(loggerFactory, RequestDebugLayer);
         _xrHost.SetListener(_listener);
         _xrHost.SetRecenter(_recenter);
+        _xrHost.SetSessionLog(_recorder?.Samples, _recorder?.Events);
         _setIdleView = _xrHost.SetIdleView;
         ApplyIdleView();
         _xrHost.Start();
@@ -232,7 +248,7 @@ public partial class App : Application
             return;
         }
 
-        _player = new VideoPlayer(device.Device, _playerCommands.Reader, new VideoPlayerOptions(_options?.StereoLayout, Decoder: _options?.Decoder ?? DecoderPreference.Auto) { Recenter = _recenter }, loggerFactory, _audioOutput);
+        _player = new VideoPlayer(device.Device, _playerCommands.Reader, new VideoPlayerOptions(_options?.StereoLayout, Decoder: _options?.Decoder ?? DecoderPreference.Auto) { Recenter = _recenter, Events = _recorder?.Events }, loggerFactory, _audioOutput);
         attach(_player);
         _player.Start();
         viewModel.StartPlayerPolling(_player.GetStatus);
@@ -255,6 +271,7 @@ public partial class App : Application
         _debugViewport = new DebugViewportHost(_graphicsDevice, loggerFactory.CreateLogger<DebugViewportHost>());
         _debugViewport.SetListener(_listener);
         _debugViewport.SetRecenter(_recenter);
+        _debugViewport.SetSessionLog(_recorder?.Samples);
         _setIdleView = _debugViewport.SetIdleView;
         _imageTarget = (_graphicsDevice, _debugViewport.ShowImage);
         ApplyIdleView();
@@ -263,6 +280,32 @@ public partial class App : Application
         _debugViewport.Start();
         viewModel.StartViewportPolling(_debugViewport.GetStatus);
     }
+
+    /// <summary>Starts a new recording or ends the running one, as the operator switched it (F52). UI thread.</summary>
+    private void ApplyRecording()
+    {
+        if (_viewModel is null || _recorder is null)
+        {
+            return;
+        }
+
+        RecordingViewModel recording = _viewModel.Recording;
+        if (recording.Enabled)
+        {
+            _recorder.Start(recording.CreateOptions(_appVersion) with { IdleView = DescribeIdleView(_viewModel.Idle) });
+        }
+        else
+        {
+            _recorder.Stop();
+        }
+    }
+
+    private static string DescribeIdleView(IdleViewModel idle) => idle.View switch
+    {
+        Core.Playback.IdleView.SeeThrough => "See-through",
+        Core.Playback.IdleView.Image => "Standbild: " + (idle.ImagePath ?? "kein Bild gewählt"),
+        _ => "Schwarz",
+    };
 
     /// <summary>
     /// Hands the operator's idle view (F7) to the render thread and loads a newly chosen idle image once the device

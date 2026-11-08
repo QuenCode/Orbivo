@@ -1,4 +1,5 @@
 using Orbivo.Core.Formats;
+using Orbivo.Core.Playback;
 using Vortice.Direct3D11;
 
 namespace Orbivo.Media;
@@ -41,6 +42,12 @@ public interface IVideoFrameSource
     /// Render thread only: never blocks, never allocates.
     /// </summary>
     float GetOutputBrightness(long displayTimestamp);
+
+    /// <summary>Transport state for the head log (F50). Any thread; never blocks, never allocates.</summary>
+    PlaybackState State { get; }
+
+    /// <summary>Full path of the loaded video, or null, for the head log (F50). Any thread; never blocks, never allocates.</summary>
+    string? FilePath { get; }
 
     /// <summary>
     /// The render thread stops rendering for a while (headset session ended). Lets the player free GPU memory

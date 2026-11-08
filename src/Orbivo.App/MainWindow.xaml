@@ -262,6 +262,7 @@
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
         <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
 
@@ -344,8 +345,57 @@
         </Grid>
       </GroupBox>
 
+      <!-- Recording (F50-F52): head log and event log as German CSV; on, folder and rate kept in settings.json -->
+      <GroupBox Grid.Row="2" Header="Aufzeichnung (Kopf-CSV und Ereignis-Log)" DataContext="{Binding Recording}">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+          <CheckBox Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Content="Aufzeichnen" IsChecked="{Binding Enabled}" Focusable="False" Margin="0,2,0,2"
+                    ToolTip="Schreibt Kopfbewegung (Kopf-CSV) und Bedienereignisse (Ereignis-CSV), Trennzeichen Semikolon, Dezimalkomma. Jedes Einschalten beginnt ein neues Dateipaar. Bleibt nach einem Neustart eingeschaltet." />
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Ordner:" VerticalAlignment="Center" Margin="0,2,16,2" />
+          <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,2,0,2">
+            <Button DockPanel.Dock="Right" Content="Ordner wählen …" Click="OnChooseRecordingFolderClick" Margin="6,0,0,0" Focusable="False"
+                    IsEnabled="{Binding CanEdit}" ToolTip="Nur änderbar, solange keine Aufzeichnung läuft" />
+            <TextBlock Text="{Binding Folder}" ToolTip="{Binding Folder}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+          </DockPanel>
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="Proband/Sitzung:" VerticalAlignment="Center" Margin="0,2,16,2" />
+          <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Label, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEdit}" Margin="0,2,0,2"
+                   ToolTip="Optional, wird Teil der Dateinamen (z. B. 2026-11-08_141203_P07_kopf.csv). Wird nicht gespeichert." />
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="Kopf-Rate:" VerticalAlignment="Center" Margin="0,2,16,2" />
+          <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding Rates}" SelectedItem="{Binding SelectedRate}" DisplayMemberPath="Label" Focusable="False"
+                    MinWidth="200" HorizontalAlignment="Left" Margin="0,2,0,2"
+                    ToolTip="Zeilen pro Sekunde in der Kopf-CSV. Wirkt sofort, auch während einer Aufzeichnung." />
+          <StackPanel Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,4,0,0">
+            <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding StatusLevel}" Value="{x:Static vm:StatusLevel.Error}">
+                      <Setter Property="Foreground" Value="Firebrick" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding StatusLevel}" Value="{x:Static vm:StatusLevel.Warning}">
+                      <Setter Property="Foreground" Value="DarkGoldenrod" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+            <TextBlock Text="{Binding FileText}" ToolTip="{Binding FilePath}" Style="{StaticResource HintText}" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+        </Grid>
+      </GroupBox>
+
       <!-- Status (F40/F41, filled from M2 on) -->
-      <GroupBox Grid.Row="2" Header="Status">
+      <GroupBox Grid.Row="3" Header="Status">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <ItemsControl ItemsSource="{Binding StatusEntries}">
             <ItemsControl.ItemTemplate>

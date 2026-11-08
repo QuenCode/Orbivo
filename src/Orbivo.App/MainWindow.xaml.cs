@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -52,6 +53,19 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog(this) == true)
         {
             ViewModel.Idle.ChooseImage(dialog.FileName);
+        }
+    }
+
+    private void OnChooseRecordingFolderClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Ordner für die Aufzeichnungen wählen",
+            InitialDirectory = Directory.Exists(ViewModel.Recording.Folder) ? ViewModel.Recording.Folder : string.Empty,
+        };
+        if (dialog.ShowDialog(this) == true)
+        {
+            ViewModel.Recording.ChooseFolder(dialog.FolderName);
         }
     }
 

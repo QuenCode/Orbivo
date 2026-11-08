@@ -1,6 +1,8 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.Channels;
 using Orbivo.Core.Commands;
+using Orbivo.Core.Logging;
 using Orbivo.Core.Playback;
 using Orbivo.Core.Status;
 using Orbivo.Media.Tests.Support;
@@ -214,6 +216,95 @@ public sealed class VideoPlayerTests(HardwareDecodeFixture fixture)
 
         Assert.True(lastPts != long.MinValue, "no frame shown");
         return (last, distinct);
+    }
+
+    [Fact]
+    public void CommandsStatesAndErrors_GoToTheEventLog()
+    {
+        GraphicsDevice device = fixture.RequireHardware();
+        string path = Path.GetFullPath(TestVideos.Mono4K);
+        var events = new CollectingEventLog();
+        var commands = Channel.CreateUnbounded<PlayerCommand>();
+        using var player = new VideoPlayer(device.Device, commands.Reader, new VideoPlayerOptions(StereoLayout: null) { Events = events }, TestOutputLoggerFactory.Instance);
+        player.Start();
+
+        try
+        {
+            Assert.Equal(PlaybackState.NoMedia, player.State);
+            Send(commands, new OpenMediaCommand(path));
+            WaitForState(player, PlaybackState.Ready);
+            Assert.Equal(PlaybackState.Ready, player.State);
+            Assert.Equal(path, player.FilePath);
+
+            Send(commands, new PlayCommand());
+            WaitForState(player, PlaybackState.Playing);
+            Send(commands, new SeekCommand(TimeSpan.FromSeconds(5)));
+            Send(commands, new SetLoopCommand(true));
+            Send(commands, new FadeCommand(ToBlack: true, TimeSpan.FromSeconds(1.5)));
+            Send(commands, new SetVolumeCommand(0.5f));
+            Send(commands, new RecenterCommand());
+            Send(commands, new PauseCommand());
+            WaitForState(player, PlaybackState.Paused);
+            Send(commands, new CloseMediaCommand());
+            WaitForState(player, PlaybackState.NoMedia);
+            Assert.Null(player.FilePath);
+
+            Send(commands, new OpenMediaCommand(Path.Combine(TestVideos.OutputDirectory, "does-not-exist.mp4")));
+            WaitForState(player, PlaybackState.Failed);
+        }
+        finally
+        {
+            player.ReleaseRenderThread();
+            commands.Writer.Complete();
+        }
+
+        SessionEvent[] log = events.Snapshot();
+        string Line(SessionEvent e) => $"{SessionEventQueue.Label(e.Kind)}|{e.Details}";
+        string[] lines = log.Select(Line).ToArray();
+        int Index(string line)
+        {
+            int index = Array.FindIndex(lines, l => l.StartsWith(line, StringComparison.Ordinal));
+            Assert.True(index >= 0, $"missing '{line}' in:\n{string.Join("\n", lines)}");
+            return index;
+        }
+
+        // In order, as the operator gave the commands and the player reacted.
+        int[] order =
+        [
+            Index("Laden|" + path),
+            Index("Zustand|Bereit"),
+            Index("Play|"),
+            Index("Zustand|Läuft"),
+            Index("Seek|von 0:00:0"),
+            Index("Loop|an"),
+            Index("Fade|nach Schwarz, 1,5 s"),
+            Index("Lautstärke|50 %"),
+            Index("Recenter|Angefordert"),
+            Index("Pause|"),
+            Index("Zustand|Pause"),
+            Index("Entladen|"),
+            Index("Zustand|Kein Video"),
+            Index("Fehler|"),
+        ];
+        Assert.Equal(order.Order(), order);
+        Assert.Contains("nach 0:00:05,000", lines[order[4]], StringComparison.Ordinal);
+
+        SessionEvent seek = log[order[4]];
+        Assert.Equal(path, seek.VideoFile);
+        Assert.NotNull(seek.VideoTime);
+        Assert.Contains("Datei nicht gefunden", log[order[^1]].Details, StringComparison.Ordinal);
+    }
+
+    private sealed class CollectingEventLog : ISessionEventLog
+    {
+        private readonly ConcurrentQueue<SessionEvent> _events = new();
+
+        public void Record(SessionEventKind kind, string details, string? videoFile = null, TimeSpan? videoTime = null)
+        {
+            _events.Enqueue(new SessionEvent(Stopwatch.GetTimestamp(), kind, details, videoFile, videoTime));
+        }
+
+        public SessionEvent[] Snapshot() => [.. _events];
     }
 
     private static void Send(Channel<PlayerCommand> commands, PlayerCommand command)

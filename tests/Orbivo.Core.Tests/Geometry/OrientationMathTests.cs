@@ -86,4 +86,34 @@ public sealed class OrientationMathTests
     {
         Assert.Equal(expectedDegrees, Degrees(OrientationMath.WrapAngle(Radians(inputDegrees))), 1e-3);
     }
+
+    [Theory]
+    [InlineData(0, 0, 0)]
+    [InlineData(30, 0, 0)]
+    [InlineData(0, 25, 0)]
+    [InlineData(0, 0, 40)]
+    [InlineData(-120, 35, -20)]
+    [InlineData(170, -60, 75)]
+    [InlineData(45, 80, 10)]
+    public void ToYawPitchRoll_UndoesYawPitchRoll(double yawDegrees, double pitchDegrees, double rollDegrees)
+    {
+        // OrientationOffset composes yaw * pitch * roll, like a head pose.
+        Quaternion orientation = new OrientationOffset(yawDegrees, pitchDegrees, rollDegrees).ToContentRotation();
+
+        (float yaw, float pitch, float roll) = OrientationMath.ToYawPitchRoll(orientation);
+
+        Assert.Equal(yawDegrees, Degrees(yaw), 1e-2);
+        Assert.Equal(pitchDegrees, Degrees(pitch), 1e-2);
+        Assert.Equal(rollDegrees, Degrees(roll), 1e-2);
+    }
+
+    [Fact]
+    public void ToYawPitchRoll_RollIsCounterclockwiseForThePerson()
+    {
+        // Head tilted to the left (counterclockwise as the person sees it): the head's up axis leans to -X.
+        Quaternion tilted = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, Radians(20));
+        Assert.True(Vector3.Transform(Vector3.UnitY, tilted).X < 0f);
+
+        Assert.Equal(20, Degrees(OrientationMath.ToYawPitchRoll(tilted).Roll), 1e-3);
+    }
 }

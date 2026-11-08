@@ -222,7 +222,7 @@ internal sealed unsafe class XrSession : IDisposable
                 }
 
                 offset = source.Format.Offset;
-                content = ContentOf(source);
+                content = source.Content;
                 seeThrough = source.IsSeeThrough;
 
                 // Blackout and fade (F5) also cover the idle view; without a player there is nothing to dim.
@@ -285,21 +285,6 @@ internal sealed unsafe class XrSession : IDisposable
 
         _xr.DestroySpace(Space);
         _xr.DestroySession(Handle);
-    }
-
-    private static HeadsetContent ContentOf(in PanoramaSource source)
-    {
-        if (source.IsVideo)
-        {
-            return HeadsetContent.Video;
-        }
-
-        if (source.IsSeeThrough)
-        {
-            return HeadsetContent.SeeThrough;
-        }
-
-        return source.IsBlack ? HeadsetContent.Black : HeadsetContent.Image;
     }
 
     /// <summary>Asks the runtime for its environment blend modes and logs them (decision 2026-11-07: write to the log).</summary>

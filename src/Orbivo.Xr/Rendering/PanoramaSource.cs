@@ -31,6 +31,12 @@ public readonly struct PanoramaSource
 
     public bool IsBlack => !IsVideo && !IsSeeThrough && Image is null;
 
+    /// <summary>What the headset shows with this source, for the head log (F50).</summary>
+    public HeadsetContent Content => IsVideo ? HeadsetContent.Video
+        : IsSeeThrough ? HeadsetContent.SeeThrough
+        : IsBlack ? HeadsetContent.Black
+        : HeadsetContent.Image;
+
     /// <summary>True for <see cref="SeeThrough"/>.</summary>
     public bool IsSeeThrough { get; }
 

@@ -36,6 +36,27 @@ public static class OrientationMath
         return (yaw, pitch);
     }
 
+    /// <summary>
+    /// Yaw, pitch and roll (radians) of a head pose, in the order OpenXR heads turn: yaw about the world Y axis, then
+    /// pitch about the head's X axis, then roll about its Z axis (positive = counterclockwise as the person sees it).
+    /// <c>orientation = yaw · pitch · roll</c>. Looking straight up or down, yaw is 0 and the turn goes into roll.
+    /// </summary>
+    public static (float Yaw, float Pitch, float Roll) ToYawPitchRoll(Quaternion orientation)
+    {
+        orientation = Quaternion.Normalize(orientation);
+        (float yaw, float pitch) = ToYawPitch(orientation);
+
+        // What is left after taking out yaw and pitch is a pure turn about Z.
+        Quaternion rest = Quaternion.Conjugate(FromYawPitch(yaw, pitch)) * orientation;
+        if (rest.W < 0f)
+        {
+            rest = Quaternion.Negate(rest);
+        }
+
+        float roll = WrapAngle(2f * MathF.Atan2(rest.Z, rest.W));
+        return (yaw, pitch, roll);
+    }
+
     /// <summary>Wraps an angle in radians into (−π, π].</summary>
     public static float WrapAngle(float radians)
     {

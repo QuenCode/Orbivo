@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Logging;
 using Orbivo.Core.Playback;
 using Orbivo.Media;
 using Orbivo.Xr.Graphics;
@@ -45,6 +46,8 @@ public sealed class XrHost : IDisposable
     private LiveViewFrames? _liveView;
     private ListenerOrientation? _listener;
     private RecenterControl? _recenter;
+    private HeadSampleGate? _headSamples;
+    private ISessionEventLog? _events;
     private int _idleView = (int)IdleView.Black;
     private volatile bool _stopRequested;
 
@@ -123,6 +126,16 @@ public sealed class XrHost : IDisposable
     public void SetRecenter(RecenterControl? recenter)
     {
         Volatile.Write(ref _recenter, recenter);
+    }
+
+    /// <summary>
+    /// Hands every rendered frame's head pose to the head log (F50) through <paramref name="samples"/>, which thins it
+    /// out and drops it while no recording runs. <paramref name="events"/> gets connection changes (F51). Any thread.
+    /// </summary>
+    public void SetSessionLog(HeadSampleGate? samples, ISessionEventLog? events)
+    {
+        Volatile.Write(ref _headSamples, samples);
+        Volatile.Write(ref _events, events);
     }
 
     /// <summary>
@@ -219,6 +232,7 @@ public sealed class XrHost : IDisposable
                     if (SetState(XrConnectionState.Failed) || newError)
                     {
                         _logger.LogError(exception, "Headset output failed. Retrying in {Seconds} s.", failureDelay.TotalSeconds);
+                        Volatile.Read(ref _events)?.Record(SessionEventKind.Error, "Brille: " + exception.Message);
                     }
 
                     SetSessionState(XrSessionState.None);
@@ -489,6 +503,23 @@ public sealed class XrHost : IDisposable
 
     private void PublishFrame(in XrFrameResult result)
     {
+        HeadSampleGate? samples = Volatile.Read(ref _headSamples);
+        if (samples is { IsActive: true })
+        {
+            IVideoFrameSource? video = Volatile.Read(ref _videoSource);
+            samples.Offer(new HeadSample(
+                result.DisplayTimestamp,
+                result.HeadTracked,
+                result.TrackedHead,
+                result.HeadInContent,
+                Volatile.Read(ref _recenter)?.YawDegrees ?? 0f,
+                result.Content,
+                result.Brightness,
+                video?.State ?? PlaybackState.NoMedia,
+                video?.FilePath,
+                result.VideoPtsTicks));
+        }
+
         Volatile.Write(ref _displayRefreshHz, XrConversions.RefreshRateHz(result.PredictedDisplayPeriod));
         Volatile.Write(ref _headTracked, result.HeadTracked ? 1 : 0);
         if (result.HeadTracked)
@@ -503,12 +534,22 @@ public sealed class XrHost : IDisposable
     /// <summary>Sets the state; returns true if it changed (used to log a state only once).</summary>
     private bool SetState(XrConnectionState state)
     {
-        return Interlocked.Exchange(ref _state, (int)state) != (int)state;
+        bool changed = Interlocked.Exchange(ref _state, (int)state) != (int)state;
+        if (changed)
+        {
+            Volatile.Read(ref _events)?.Record(SessionEventKind.Headset, XrEventText.Connection(state, Volatile.Read(ref _runtime)));
+        }
+
+        return changed;
     }
 
     private void SetSessionState(XrSessionState state)
     {
-        Volatile.Write(ref _sessionState, (int)state);
+        if (Interlocked.Exchange(ref _sessionState, (int)state) != (int)state)
+        {
+            Volatile.Read(ref _events)?.Record(SessionEventKind.Headset, XrEventText.Session(state));
+        }
+
         if (state == XrSessionState.None)
         {
             Volatile.Write(ref _framesPerSecond, 0f);

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Logging;
 using Orbivo.Core.Playback;
 using Orbivo.Media;
 using Orbivo.Xr.Graphics;
@@ -64,6 +65,7 @@ public sealed class DebugViewportHost : IDisposable
     private LiveViewFrames? _liveView;
     private ListenerOrientation? _listener;
     private RecenterControl? _recenter;
+    private HeadSampleGate? _headSamples;
     private int _idleView = (int)IdleView.Black;
 
     // Status, written by the render thread, read by the UI.
@@ -136,6 +138,15 @@ public sealed class DebugViewportHost : IDisposable
     public void SetRecenter(RecenterControl? recenter)
     {
         Volatile.Write(ref _recenter, recenter);
+    }
+
+    /// <summary>
+    /// Hands every rendered frame's view to the head log (F50), with the mouse view standing in for the head (--no-xr).
+    /// Any thread.
+    /// </summary>
+    public void SetSessionLog(HeadSampleGate? samples)
+    {
+        Volatile.Write(ref _headSamples, samples);
     }
 
     /// <summary>
@@ -258,19 +269,40 @@ public sealed class DebugViewportHost : IDisposable
             }
 
             view.GetViews(views);
-            Quaternion correction = Volatile.Read(ref _recenter)?.Update(views[0].Orientation, headTracked: true) ?? Quaternion.Identity;
+            Quaternion tracked = views[0].Orientation;
+            RecenterControl? recenter = Volatile.Read(ref _recenter);
+            Quaternion correction = recenter?.Update(tracked, headTracked: true) ?? Quaternion.Identity;
             views[0] = RecenterControl.Apply(views[0], correction);
 
             // Flip model with one frame of latency: the frame appears with the next vertical blank, close enough to now.
             IVideoFrameSource? video = Volatile.Read(ref _videoSource);
             long displayTimestamp = Stopwatch.GetTimestamp();
-            PanoramaSource source = video is not null && video.TryGetFrame(displayTimestamp, out VideoFrame videoFrame)
+            VideoFrame videoFrame = default;
+            bool hasFrame = video is not null && video.TryGetFrame(displayTimestamp, out videoFrame);
+            PanoramaSource source = hasFrame
                 ? PanoramaSource.FromVideo(videoFrame)
                 : PanoramaSource.ForIdle((IdleView)Volatile.Read(ref _idleView), image);
             float brightness = video?.GetOutputBrightness(displayTimestamp) ?? 1f;
             renderer.Render(_device.ImmediateContext, swapChain.RenderTargetView, swapChain.Width, swapChain.Height, views[0], Eye.Left, source, brightness);
             Volatile.Read(ref _liveView)?.RenderIfDue(renderer, _device.ImmediateContext, views[0], source, brightness, displayTimestamp);
-            Volatile.Read(ref _listener)?.Publish(source.Format.Offset.ApplyToView(views[0].Orientation), displayTimestamp);
+            Quaternion headInContent = source.Format.Offset.ApplyToView(views[0].Orientation);
+            Volatile.Read(ref _listener)?.Publish(headInContent, displayTimestamp);
+            HeadSampleGate? samples = Volatile.Read(ref _headSamples);
+            if (samples is { IsActive: true })
+            {
+                samples.Offer(new HeadSample(
+                    displayTimestamp,
+                    Tracked: true,
+                    tracked,
+                    headInContent,
+                    recenter?.YawDegrees ?? 0f,
+                    source.Content,
+                    brightness,
+                    video?.State ?? PlaybackState.NoMedia,
+                    video?.FilePath,
+                    hasFrame ? videoFrame.PtsTicks : long.MinValue));
+            }
+
             swapChain.Present();
 
             frame++;

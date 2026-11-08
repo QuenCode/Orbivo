@@ -5,6 +5,7 @@ using Orbivo.Core.Audio;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Logging;
 using Orbivo.Core.Playback;
 using Orbivo.Core.Status;
 using Vortice.Direct3D11;
@@ -27,6 +28,9 @@ public sealed record VideoPlayerOptions(StereoLayout? StereoLayout, int FrameSlo
 
     /// <summary>Recenter (F30), shared with the render thread that carries it out. Null: recenter commands are ignored.</summary>
     public RecenterControl? Recenter { get; init; }
+
+    /// <summary>Event log of the recording (F51): commands, state changes and errors. Null: nothing is recorded.</summary>
+    public ISessionEventLog? Events { get; init; }
 }
 
 /// <summary>
@@ -104,6 +108,11 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     // Render thread only.
     private VideoFrameQueue? _renderQueue;
     private long _lastShownPts = long.MinValue;
+
+    // State and file for the render thread's head log (F50), written by the control thread.
+    private int _publishedState = (int)PlaybackState.NoMedia;
+    private string? _publishedFile;
+    private PlaybackState _loggedState = PlaybackState.NoMedia;
 
     // Status, written by the control thread, read by the UI.
     private PlayerStatus _status = PlayerStatus.Empty;
@@ -217,6 +226,12 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
 
         return true;
     }
+
+    /// <inheritdoc />
+    public PlaybackState State => (PlaybackState)Volatile.Read(ref _publishedState);
+
+    /// <inheritdoc />
+    public string? FilePath => Volatile.Read(ref _publishedFile);
 
     /// <inheritdoc />
     public float GetOutputBrightness(long displayTimestamp)
@@ -336,6 +351,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     private void Handle(PlayerCommand command)
     {
         _logger.LogInformation("Command {Command} in state {State}.", command.GetType().Name, _machine.State);
+        RecordCommand(command);
         switch (command)
         {
             case OpenMediaCommand open:
@@ -388,6 +404,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
                 _audio?.SelectDevice(device.DeviceId);
                 break;
             case SetVideoFormatCommand format:
+                RecordFormatChange(_overrides, format.Overrides);
                 SetFormat(format.Overrides);
                 break;
             case RecenterCommand:
@@ -401,6 +418,55 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
                 break;
         }
     }
+
+    /// <summary>Writes the operator's command into the event log (F51), with the video time before it takes effect.</summary>
+    private void RecordCommand(PlayerCommand command)
+    {
+        ISessionEventLog? events = _options.Events;
+        if (events is null)
+        {
+            return;
+        }
+
+        (SessionEventKind Kind, string Details)? entry = command switch
+        {
+            OpenMediaCommand open => (SessionEventKind.Load, Path.GetFullPath(open.Path) + (open.Play ? " (startet sofort)" : string.Empty)),
+            PlayCommand => (SessionEventKind.Play, string.Empty),
+            PauseCommand => (SessionEventKind.Pause, string.Empty),
+            StopCommand => (SessionEventKind.Stop, string.Empty),
+            CloseMediaCommand => (SessionEventKind.Close, string.Empty),
+            SeekCommand seek => (SessionEventKind.Seek, $"von {SessionEventText.Time(CurrentPosition())} nach {SessionEventText.Time(seek.Position)}"),
+            SetLoopCommand loop => (SessionEventKind.Loop, loop.Enabled ? "an" : "aus"),
+            SetBlackoutCommand blackout => (SessionEventKind.Blackout, blackout.Black ? "an" : "aus"),
+            FadeCommand fade => (SessionEventKind.Fade, $"{(fade.ToBlack ? "nach Schwarz" : "zum Bild")}, {SessionEventText.Seconds(fade.Duration)}"),
+            SetVolumeCommand volume => (SessionEventKind.Volume, string.Create(GermanCsv.Numbers, $"{volume.Level * 100:0} %")),
+            SetMuteCommand mute => (SessionEventKind.Mute, mute.Muted ? "an" : "aus"),
+            SetAudioDeviceCommand device => (SessionEventKind.AudioDevice, device.DeviceId ?? "Windows-Standard"),
+            RecenterCommand => (SessionEventKind.Recenter, "Angefordert"),
+            ResetRecenterCommand => (SessionEventKind.Recenter, "Zurücksetzen angefordert"),
+            _ => null,
+        };
+
+        if (entry is { } e)
+        {
+            string? file = command is OpenMediaCommand open2 ? Path.GetFullPath(open2.Path) : _filePath;
+            events.Record(e.Kind, e.Details, file, command is OpenMediaCommand ? TimeSpan.Zero : CurrentPosition());
+        }
+    }
+
+    private void RecordFormatChange(FormatOverrides before, FormatOverrides after)
+    {
+        if (_options.Events is not { } events || _filePath is null)
+        {
+            return;
+        }
+
+        SessionEventKind kind = SessionEventText.OnlySoundChanged(before, after) ? SessionEventKind.Sound : SessionEventKind.Format;
+        events.Record(kind, SessionEventText.FormatChanges(before, after), _filePath, CurrentPosition());
+    }
+
+    /// <summary>Video time now (control thread), for the event log.</summary>
+    private TimeSpan CurrentPosition() => _filePath is null ? TimeSpan.Zero : GetStatus().Position;
 
     private void PollDecoder()
     {
@@ -830,6 +896,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     private void Fail(string message)
     {
         _logger.LogWarning("Player failed: {Message}", message);
+        _options.Events?.Record(SessionEventKind.Error, message, _filePath, CurrentPosition());
         _videoVisible = false;
         _clock.Stop();
         _machine.MediaFailed();
@@ -840,6 +907,14 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
 
     private void PublishStatus(string? error)
     {
+        Volatile.Write(ref _publishedState, (int)_machine.State);
+        Volatile.Write(ref _publishedFile, _filePath);
+        if (_machine.State != _loggedState)
+        {
+            _loggedState = _machine.State;
+            _options.Events?.Record(SessionEventKind.State, SessionRecorder.DescribeState(_machine.State), _filePath, CurrentPosition());
+        }
+
         VideoDecoder? decoder = _decoder;
         Volatile.Write(ref _statusDecoder, decoder);
         Volatile.Write(ref _status, new PlayerStatus(
