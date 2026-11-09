@@ -80,6 +80,18 @@ Neu zugeschnitten am 2026-11-08 (`DECISIONS.md`): Der Ton der Videos ist Stereo,
 - **Fertig, wenn:** `release.ps1 -Version 1.0.0` baut ein geprüftes Paket, alle Tests grün ✔ (Probelauf mit `-PackageOnly`)
 - **Brillen-Test:** ZIP auf dem Brillen-Rechner entpacken und starten (`docs/RELEASE.md`, „Kurzer Brillen-Test“), Anleitung über F1, Playlist nach Neustart wieder da
 
-## Später – Ambisonics und Surround
-- Ambisonics Ordnung 1–3 (AmbiX, FuMa → AmbiX → N3D), kopfgetrackt; 5.1/7.1 über virtuelle Lautsprecher; Erkennung des Audio-Modus (F21, F23)
-- Testdateien liegen bereit (`make_testmedia.py --what audio`)
+## M10 – Ambisonics
+Begonnen am 2026-11-09 (`DECISIONS.md`): Das echte Material hat Ambisonics-Ton, AAC mit 4 Kanälen, 48 kHz, etwa 259 kb/s.
+- Erkennung des Audio-Modus (F23): Sidecar `audioMode` vor Metadaten (`SA3D`) vor Kanalzahl; 4 Kanäle ohne Angabe = AmbiX 1. Ordnung
+- Dekodieren aller Kanäle ohne Mischen (swresample nur für die Samplerate), FuMa 1. Ordnung → AmbiX, Ringpuffer mit bis zu 16 Kanälen
+- Binaural mit dem Ambisonics-Decode-Effekt von Steam Audio (Ordnung 1–3, eingebaute HRTF), Kopfrichtung wie bei Stereo; „Ton fest am Bild“ aus = Klangfeld dreht mit dem Kopf
+- „Tonformat“ im Operatorfenster (Automatisch, Kanäle, AmbiX, FuMa), Status mit Quelle der Erkennung; Ereignis „Ton“ in der Aufzeichnung
+- Testvideos `ambisonics_richtungstest_…` (`make_testmedia.py --what ambisonics`: mit `SA3D`, ohne Metadaten, FuMa mit Sidecar, 3. Ordnung mit 16 Kanälen)
+- Analyse-Werkzeug für das echte Material (`tools/tonanalyse`, liefert nur technische Daten)
+- **Fertig, wenn:** Richtung bei allen Testvideos gemessen (dekodiertes Feld passt zur Quelle, Ohrpegel folgt Kopfdrehung), keine Knackser beim Drehen, Lautheit je Ordnung wie Stereo (±1,5 dB), Audio-Thread allokiert nicht ✔ (ohne Brille). Auswertung des echten Materials (`Tonanalyse-Ergebnis.txt`) steht aus
+- **Hör-Test:** Ambisonics-Richtungstest: Der Ton kommt aus dem leuchtenden Kasten, auch oben und unten und beim Kopfdrehen. Schalter „Ton fest am Bild“ aus: Das Klangfeld dreht mit dem Kopf. Gleiches Ergebnis mit allen vier Testvideos. Dann mit echtem Material
+
+## Später – Surround und externer Ton
+- 5.1/7.1 über virtuelle Lautsprecher (F21)
+- Externe Tondatei neben dem Video (Sidecar `externalAudio`)
+- FuMa 2. und 3. Ordnung nur, wenn Material es verlangt

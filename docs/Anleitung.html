@@ -236,7 +236,7 @@ ein Vorschaufenster, in dem man mit der Maus herumschaut (ziehen = drehen, Mausr
   <tr><td>Playlist (links oben)</td><td>Videos sammeln, ordnen, laden; automatisch weiter, wiederholen.</td></tr>
   <tr><td>Format (links)</td><td>Projektion, Stereo-Layout, Ausrichtung des geladenen Videos. Wird pro Video gespeichert.</td></tr>
   <tr><td>Live-Ansicht (links unten)</td><td>Zeigt, was der Proband sieht. Bei jedem Start aus.</td></tr>
-  <tr><td>Ton (rechts oben)</td><td>Ton fest am Bild, Breite, Ausgabegerät, Sperre.</td></tr>
+  <tr><td>Ton (rechts oben)</td><td>Audio-Modus, Tonformat, Ton fest am Bild, Breite, Ausgabegerät, Sperre.</td></tr>
   <tr><td>Brille im Leerlauf</td><td>Was die Brille zeigt, solange kein Video läuft: Schwarz, Kamerabild oder Standbild.</td></tr>
   <tr><td>Aufzeichnung</td><td>Kopfbewegung und Ereignisse als CSV-Dateien schreiben.</td></tr>
   <tr><td>Status</td><td>Zustand von Brille, Bildausgabe, Video, Decoder, Ton, A/V-Abweichung, Blickrichtung, Bibliotheken, Log-Datei.</td></tr>
@@ -338,11 +338,27 @@ kopiert, kopiert das Sidecar mit. „Alles automatisch“ verwirft die Einstellu
 <!-- ============================================================= -->
 <h2 id="ton">10. Ton</h2>
 <ul>
-  <li><strong>Ton fest am Bild</strong> (Standard an): Linker und rechter Kanal kommen von zwei unsichtbaren Lautsprechern im Video,
-    links und rechts der Bildmitte. Dreht der Proband den Kopf, bleibt der Ton beim Bild. Aus: Stereo geht unverändert auf die Kopfhörer
-    und dreht mit dem Kopf (richtig für Aufnahmen, die schon binaural sind). Wird pro Video im Sidecar gespeichert.</li>
-  <li><strong>Breite</strong>: Winkel der beiden Lautsprecher zur Bildmitte, 30–90°, Standard 75°.</li>
-  <li>Mono-Ton hat keine Richtung und bleibt immer auf beiden Ohren. Mehrkanal-Ton wird auf Stereo gemischt.</li>
+  <li><strong>Audio-Modus</strong> (oberste Zeile, nur Anzeige): wie der Ton gerade gespielt wird, z.&nbsp;B. „Ton fest am Bild, Lautsprecher bei ±75°“ oder
+    „Ambisonics 1. Ordnung (AmbiX), binaural, Klangfeld fest am Bild“. Ein Hinweis dahinter erklärt Abweichungen.</li>
+  <li><strong>Tonformat</strong>: wie die Kanäle der Tonspur gemeint sind. Meist bleibt es auf <em>Automatisch</em>; in Klammern steht, was
+    Orbivo erkannt hat und woher (Metadaten oder aus der Kanalzahl geschätzt).
+    <ul>
+      <li><em>Automatisch</em>: Ambisonics laut Metadaten im Video. Ohne Metadaten gelten 4, 9 oder 16 Kanäle als Ambisonics AmbiX
+        (1., 2. oder 3. Ordnung), alles andere als Kanäle.</li>
+      <li><em>Kanäle</em>: Mono und Stereo wie sie sind, mehr Kanäle werden auf Stereo gemischt (z.&nbsp;B. wenn 4 Kanäle kein Ambisonics sind).</li>
+      <li><em>Ambisonics AmbiX</em>: das übliche Ambisonics-Format (Kanäle W Y Z X).</li>
+      <li><em>Ambisonics FuMa</em>: ältere Aufnahmen (Kanäle W X Y Z), nur 1. Ordnung (4 Kanäle).</li>
+    </ul>
+    Klingt Ambisonics falsch (Ton von der falschen Seite, von oben statt vorne, dumpf), das andere Ambisonics-Format versuchen.
+    Beim Umschalten setzt der Ton kurz neu an. Die Wahl wird pro Video im Sidecar gespeichert.</li>
+  <li><strong>Ambisonics</strong> enthält das ganze Klangfeld rundherum. Orbivo berechnet daraus binaural, was der Proband mit seiner
+    Kopfhaltung hört: Geräusche kommen aus ihrer Richtung im Video, auch von oben und unten.</li>
+  <li><strong>Ton fest am Bild</strong> (Standard an): Der Ton steht fest im Video. Dreht der Proband den Kopf, bleibt der Ton beim Bild.
+    Bei Stereo kommen linker und rechter Kanal von zwei unsichtbaren Lautsprechern links und rechts der Bildmitte, bei Ambisonics bleibt
+    das ganze Klangfeld am Bild. Aus: Der Ton dreht mit dem Kopf. Stereo geht dann unverändert auf die Kopfhörer (richtig für Aufnahmen,
+    die schon binaural sind), Ambisonics wird immer so gehört, als schaue der Proband nach vorne. Wird pro Video im Sidecar gespeichert.</li>
+  <li><strong>Breite</strong> (nur Stereo): Winkel der beiden Lautsprecher zur Bildmitte, 30–90°, Standard 75°.</li>
+  <li>Mono-Ton hat keine Richtung und bleibt immer auf beiden Ohren.</li>
   <li><strong>Tonausgabe</strong>: das Gerät der Kopfhörer. „Windows-Standard“ folgt dem Standardgerät; ein fest gewähltes Gerät wird nie
     automatisch gewechselt. Fehlt es, läuft das Video still weiter, Orbivo versucht es alle 2 Sekunden erneut. „Aktualisieren“ liest die
     Liste neu ein, z.&nbsp;B. nach dem Einstecken.</li>
@@ -649,7 +665,7 @@ Pitch = asin(vorn_y)</pre>
   <tr><td>Loop</td><td>Wiederholen an oder aus.</td></tr>
   <tr><td>Schwarzbild, Fade</td><td>An/aus bzw. Aus- und Einblenden mit Dauer.</td></tr>
   <tr><td>Recenter</td><td>Recenter ausgeführt oder zurückgesetzt, mit Winkel.</td></tr>
-  <tr><td>Format, Ton</td><td>Der Operator hat Format/Ausrichtung bzw. Ton fest am Bild/Breite geändert.</td></tr>
+  <tr><td>Format, Ton</td><td>Der Operator hat Format/Ausrichtung bzw. Ton fest am Bild, Breite oder Tonformat geändert.</td></tr>
   <tr><td>Lautstärke, Stumm, Tonausgabe</td><td>Änderungen am Ton.</td></tr>
   <tr><td>Leerlauf</td><td>Leerlauf-Ansicht gewählt (auch beim Start der Aufzeichnung).</td></tr>
   <tr><td>Brille</td><td>Verbindung, Sitzung, Trennung, Wiederverbindung, Recenter in Varjo Base.</td></tr>
@@ -704,6 +720,8 @@ Um alle Einstellungen zurückzusetzen, Orbivo beenden und <code>settings.json</c
   <tr><td>Vorne im Video ist nicht vorne</td><td>Proband in die gewünschte Richtung schauen lassen, <kbd>R</kbd>. Für ein Video dauerhaft: Format → Ausrichtung (Yaw).</td></tr>
   <tr><td>Kein Ton</td><td>Stumm (<kbd>M</kbd>)? Schwarzbild? Lautstärke? „Tonausgabe“ im Status prüfen, Gerät wählen, „Aktualisieren“. Ist die Sperre an, erst entsperren.</td></tr>
   <tr><td>Ton kommt nicht aus der Richtung des Bildes</td><td>„Ton fest am Bild“ an? Bei Mono-Ton gibt es keine Richtung. Windows-„Spatial Sound“ für die Kopfhörer ausschalten.</td></tr>
+  <tr><td>Ambisonics klingt verdreht, von oben oder dumpf</td><td>„Tonformat“ prüfen: das andere Ambisonics-Format (AmbiX bzw. FuMa) wählen. Sind die 4 Kanäle gar kein Ambisonics, „Kanäle“ wählen.</td></tr>
+  <tr><td>Audio-Modus sagt „Notbehelf links/rechts“</td><td>Steam Audio fehlt oder ließ sich nicht starten (Grund dahinter, Status „Bibliotheken“). Der Ton ist hörbar, aber ohne Richtung im Bild. ZIP neu entpacken.</td></tr>
   <tr><td>Video ruckelt</td><td>Status „Decoder“: Software-Dekodierung oder „Puffer läuft leer“ heißt, das Video ist für diesen Rechner zu schwer (z.&nbsp;B. 8K mit 60 fps). Andere Programme schließen, Netzteil anschließen (Laptop).</td></tr>
   <tr><td>Aufzeichnung stoppt mit roter Meldung</td><td>Ordner erreichbar? Platz auf der Platte? Ordner neu wählen und wieder einschalten.</td></tr>
   <tr><td>FFmpeg / Steam Audio / OpenXR rot</td><td>Programmdateien unvollständig: ZIP neu entpacken.</td></tr>

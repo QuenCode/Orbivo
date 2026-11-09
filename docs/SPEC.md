@@ -28,9 +28,9 @@ Wiedergabe von 360°/180°-Videos mit räumlichem Ton auf einer Varjo XR-3 für 
 
 ### Ton
 - F20 **Stereo „Ton fest am Bild“** (M7): Linker und rechter Kanal kommen binaural von zwei virtuellen Lautsprechern im Video (Standard 75° links und rechts der Bildmitte), **kopfgetrackt**: Dreht der Proband den Kopf, wandert der Ton mit dem Bild. Pro Video im UI und Sidecar abschaltbar, Breite einstellbar. Mono bleibt ohne Richtung, Mehrkanal wird auf Stereo gemischt
-- F21 *(später)* Ambisonics, Ordnung 1 bis 3, AmbiX (ACN/SN3D) und FuMa, kopfgetrackt binaural; 5.1/7.1 über virtuelle Lautsprecher
+- F21 **Ambisonics** (M10): Ordnung 1 bis 3 als AmbiX (ACN/SN3D), FuMa nur 1. Ordnung; binaural und kopfgetrackt, „Ton fest am Bild“ gilt für das ganze Klangfeld. *(später)* 5.1/7.1 über virtuelle Lautsprecher
 - F22 Bereits binaurales Material: Durchreichen ohne Verarbeitung (manuell wählbar: „Ton fest am Bild“ aus)
-- F23 Audio-Modus wird automatisch erkannt (Kanalzahl, später Metadaten) und ist im UI und Sidecar übersteuerbar
+- F23 Audio-Modus wird automatisch erkannt (Ambisonics-Metadaten `SA3D`, sonst Kanalzahl: 4, 9 oder 16 Kanäle ohne Lautsprecher-Angabe gelten als AmbiX) und ist im UI („Tonformat“) und Sidecar (`audioMode`) übersteuerbar
 - F24 Ausgabegerät für den Probanden im UI wählbar und wird gespeichert
 - F25 Latenz von Kopfdrehung bis Tonänderung ≤ 30 ms angestrebt
 

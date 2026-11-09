@@ -107,12 +107,12 @@ Alle Formeln stehen in `ProjectionMath.cs` und in `projection.hlsl`. Die Unit-Te
 Standbilder (`--image`) bleiben ein Testwerkzeug für Equirect 360 ohne Sidecar.
 
 ## Audio
-Stand M7: Stereo direkt oder „fest am Bild“ (zwei virtuelle Lautsprecher, binaural mit Steam Audio). Ambisonics und Surround folgen später.
+Stand M10: Stereo direkt oder „fest am Bild“ (zwei virtuelle Lautsprecher, binaural mit Steam Audio, M7) und Ambisonics Ordnung 1–3 binaural (M10). Surround folgt später.
 
 ### Datenfluss Ton
-1. `MediaDemuxer` wählt die Tonspur (`av_find_best_stream`, passend zum Videostream) und füllt die Audio-`PacketQueue`.
-2. `AudioDecoder` dekodiert; `AudioConversionPlan` legt die Umrechnung fest: Stereo durchreichen, Mono auf beide Seiten, Mehrkanal auf Stereo mischen, Resampling auf die Samplerate des Ausgabegeräts. Ergebnis: float32 Stereo interleaved mit Medienposition.
-3. `AudioRingBuffer` (Core, SPSC, 2¹⁷ Frames ≈ 2,7 s bei 48 kHz) ist medienadressiert: Der Leser holt „Daten ab Medienzeit t“, zu späte Daten werden übersprungen, Lücken werden Stille. Flush (Seek, Stop) als Handshake: Die alten Daten bleiben lesbar, bis die Ausgabe ausgeblendet und bestätigt hat.
+1. `MediaDemuxer` wählt die Tonspur (`av_find_best_stream`, passend zum Videostream) und füllt die Audio-`PacketQueue`. Das Kanal-Layout jeder Tonspur liest er **vor** `avformat_find_stream_info` (`EmbeddedAudioLayout`): Danach meldet FFmpeg für AAC mit `SA3D` nur noch „4.0“ statt „ambisonic 1“.
+2. `AudioDecoder` dekodiert; `AudioModeResolver` (Core) bestimmt den Audio-Modus (siehe „Ambisonics“), `AudioConversionPlan` legt die Umrechnung fest: Stereo durchreichen, Mono auf beide Seiten, Mehrkanal auf Stereo mischen, Ambisonics ungemischt (alle Kanäle, `AV_CHANNEL_ORDER_UNSPEC` auf beiden Seiten von swresample), Resampling auf die Samplerate des Ausgabegeräts. Ergebnis: float32 interleaved mit Medienposition, 2 Kanäle bzw. 4/9/16 bei Ambisonics.
+3. `AudioRingBuffer` (Core, SPSC, 2¹⁷ Frames ≈ 2,7 s bei 48 kHz) ist medienadressiert: Der Leser holt „Daten ab Medienzeit t“, zu späte Daten werden übersprungen, Lücken werden Stille. Flush (Seek, Stop) als Handshake: Die alten Daten bleiben lesbar, bis die Ausgabe ausgeblendet und bestätigt hat. Jeder Platz fasst `AmbisonicsLayout.MaxChannels` = 16 Kanäle (8 MB), jede Generation (`Start`) nennt ihre Kanalzahl (`FrameChannels`); der Renderer liest sie mit jedem Block.
 4. `AudioOutput` (Orbivo.Audio) besitzt den Audio-Out-Thread und das Gerät. Der Player spricht nur über `IAudioOutput` (Core) mit ihr: Befehle (Attach, Play, Pause, Hold, Lautstärke, Stumm, Gerät) über eine lock-freie Queue, Uhr und Status über Snapshots.
 5. `AudioRenderer` (Zustände Still / Läuft / Blendet zur Pause aus / Blendet zum Halt aus) holt pro Periode die Frames zur gehörten Medienzeit, wendet Transport-Rampe (5 ms Smoothstep) und Verstärkung an und zählt Aussetzer. `SampleWriter` schreibt in das Geräteformat (float32, int16/24/32; Stereo auf die ersten zwei Kanäle, ein Mono-Gerät bekommt den Mittelwert).
 6. Verstärkung = `level³(Lautstärke)` × (stumm ? 0 : 1) × `level³(Fade/Schwarzbild)` zu dem Zeitpunkt, an dem der erste Frame der Periode gehört wird, geglättet mit 5 ms (`GainSmoother`).
@@ -131,9 +131,16 @@ Stand M7: Stereo direkt oder „fest am Bild“ (zwei virtuelle Lautsprecher, bi
 - **Erzeugen:** Kontext, HRTF und Effekte legt der Audio-Thread beim Öffnen des Geräts an (zwischen den Perioden), passend zur Samplerate. Scheitert das (z. B. `phonon.dll` fehlt), bleibt es bei Stereo direkt, der Status meldet den Grund.
 - **Status:** `AudioOutputStatus.Spatial` (verfügbar, aktiv, Wahl, Spitzenlast je Block, Problem); das Operatorfenster zeigt den Modus in der Gruppe „Ton“ und die Last in „Tonausgabe“.
 
+### Ambisonics (M10)
+- **Erkennung:** `AudioModeResolver.Resolve(Layout, Wahl)` (Core): Sidecar `audioMode` vor Metadaten vor Kanalzahl. Metadaten = FFmpeg meldet `AV_CHANNEL_ORDER_AMBISONIC` (aus `SA3D` in MP4, Ordnung über `av_channel_layout_ambisonic_order`). Ohne Metadaten gelten 4, 9 oder 16 Kanäle ohne benannte Lautsprecher als AmbiX der Ordnung 1–3, alles andere als „Kanäle“. Ergebnis `ResolvedAudioMode` mit Quelle, automatischem Modus (für „Automatisch (…)“) und deutschem Hinweis (z. B. FuMa höherer Ordnung, zu wenige Kanäle).
+- **Umrechnung im Decoder-Thread:** `AmbisonicsFrames.ToAmbiX` kopiert die ersten (Ordnung+1)² Kanäle in den Ring, weitere Kanäle fallen weg. FuMa 1. Ordnung (W X Y Z, W −3 dB) wird zu AmbiX: W·√2, Reihenfolge W Y Z X. Wechselt die Wahl, öffnet der Player den Ton-Decoder an derselben Stelle neu (`RestartAudioDecoder`).
+- **Achsen:** AmbiX: X vorne, Y links, Z oben. Im Bildsystem (OpenXR) ist das X = −Z, Y = −X, Z = +Y (`AudioCoordinates`). Steam Audio liest ACN 1 = links, 2 = oben, 3 = vorne (gegen den eigenen Encoder geprüft, `SteamAmbisonicsSpatializerTests`), also dieselbe Reihenfolge wie AmbiX.
+- **Normierung:** Steam Audio erwartet orthonormierte Kanäle (N3D/√(4π)). `SteamAmbisonicsSpatializer` skaliert jeden AmbiX-Kanal mit √((2l+1)/4π) (l = Grad des Kanals) und gleicht die Lautheit je Ordnung aus (×2,5 / ×2,1 / ×1,8, gemessen mit Rauschen gegen Stereo direkt).
+- **Verarbeitung:** `AmbisonicsStage` (wie `SpatialStage` ein `BlockStage`, 256 Frames, ein Block Verzögerung, Vorauslesen im Renderer) gibt jeden Block an `iplAmbisonicsDecodeEffect` (Ordnung 3 angelegt, eingebaute HRTF, Stereo-Lautsprecher-Layout, binaural). Die Kopfrichtung geht als Hörer-Achsen (rechts, oben, vorne) im Bildsystem hinein (`AudioCoordinates.ListenerAxes`). „Ton fest am Bild“ aus = Hörer schaut immer nach vorne, das Feld dreht mit dem Kopf.
+- **Notbehelf:** Fehlt Steam Audio oder scheitert das Anlegen, spielt der Renderer zwei Nieren nach links und rechts, 0,5·(W ± Y), kopffest. Der Status nennt den Grund (`SpatialAudioStatus.AmbisonicsProblem`).
+- **Status:** `AudioConversionPlan.Mode` im Ton-Status, `VideoFormatStatus.AudioMode` für die Auswahl im Operatorfenster, `SpatialAudioStatus.FieldBinaural` für „binaural“.
+
 ### Später (geplant)
-- Die Kanal-Layout-Erkennung bestimmt den `AudioMode`: `Stereo`, `Surround`, `Ambisonics(order, convention)`, `Binaural`.
-- **Ambisonics:** FuMa wird beim Dekodieren nach AmbiX (ACN/SN3D) konvertiert. Steam Audio rechnet intern in N3D, daher vor der Verarbeitung SN3D → N3D (`iplAudioBufferConvertAmbisonics`). Danach Rotation mit der **inversen** Kopforientierung (aus `ListenerOrientation`) und binaurales Decoding über Steam Audio (`iplAmbisonicsBinauralEffect` oder Rotation und Decode). Die Blockverarbeitung mit Vorauslesen aus M7 lässt sich übernehmen.
 - **Surround:** virtuelle Lautsprecher wie bei Stereo (Steam Audio `iplBinauralEffect` pro Kanal).
 - **Externe Audiodatei** (falls die Aufnahmen getrennt geliefert werden): Sidecar-Feld `externalAudio` mit `path` und `offsetMs`. Eigener Demux/Decoder für Audio, gleiche Clock.
 
@@ -190,7 +197,8 @@ Vorzeichen von `orientationOffsetDeg`: wie überall Rechte-Hand-Regel, Yaw posit
   "cubemapLayout": "6x1",
   "orientationOffsetDeg": { "yaw": 30, "pitch": 0, "roll": 0 },
   "audioFixedToPicture": null,
-  "stereoWidthDeg": 60
+  "stereoWidthDeg": 60,
+  "audioMode": "AmbiX"
 }
 ```
 - **`null` oder fehlend = automatisch** (Metadaten, sonst Schätzung). Geschrieben werden immer alle Formatfelder.
@@ -199,6 +207,7 @@ Vorzeichen von `orientationOffsetDeg`: wie überall Rechte-Hand-Regel, Yaw posit
 - `fisheye`: `{ "fovDeg": 180, "centerX": 0.5, "centerY": 0.5, "radius": 0.5 }` (fehlende Felder: diese Standardwerte).
 - `orientationOffsetDeg`: je Achse höchstens ±360°; `null` = keine Drehung.
 - `audioFixedToPicture` (M7): `true`/`false`, `null` = an (Ton fest am Bild). `stereoWidthDeg`: 30–90, `null` = 75.
-- Geplante Felder (`audioMode`, `externalAudio`) und alle unbekannten Felder bleiben beim Speichern erhalten.
+- `audioMode` (M10): `Channels` (Mono, Stereo, Mehrkanal auf Stereo), `AmbiX` (Ordnung aus der Kanalzahl), `FuMa` (nur 1. Ordnung); `null` = automatisch (Metadaten, sonst Kanalzahl).
+- Das geplante Feld `externalAudio` und alle unbekannten Felder bleiben beim Speichern erhalten.
 - Speichern: bei jeder Änderung im Operatorfenster, über eine `.tmp`-Datei. Ist nichts mehr eingestellt und gibt es keine fremden Felder, wird die Datei gelöscht.
 - Ungültige Felder werden mit Hinweis ignoriert. Eine Datei, die kein JSON ist, wird gemeldet, ignoriert und vor dem ersten Überschreiben als `.orbivo.json.bak` gesichert. Eine Datei mit `version` > 1 wird gelesen, aber nie überschrieben.

@@ -7,6 +7,12 @@ Was sich von Version zu Version für Operatoren und Auswertung ändert. Neue Ein
 
 ## Unveröffentlicht
 
+- Ambisonics-Ton (1. bis 3. Ordnung, AmbiX und FuMa 1. Ordnung): Das Klangfeld wird binaural berechnet und bleibt beim Kopfdrehen am Bild, Geräusche kommen auch von oben und unten aus ihrer Richtung
+- Ambisonics wird an den Metadaten des Videos erkannt; ohne Metadaten gelten 4, 9 oder 16 Kanäle als Ambisonics AmbiX
+- Neue Auswahl „Tonformat“ im Operatorfenster (Automatisch, Kanäle, AmbiX, FuMa), pro Video im Sidecar gespeichert (Feld `audioMode`)
+- „Ton fest am Bild“ gilt auch für Ambisonics; die Breite nur noch für Stereo
+- Aufzeichnung: Ein Wechsel des Tonformats steht als Ereignis „Ton“ im Ereignis-Log (Details „Tonformat: …“)
+
 ## 1.0.0 – 2026-11-08
 
 Erste ausgelieferte Version.
