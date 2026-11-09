@@ -1,4 +1,4 @@
-namespace Orbivo.Audio.Ambisonics;
+namespace Orbivo.Core.Audio;
 
 /// <summary>
 /// Channel layout helpers for full-sphere Ambisonics in ACN channel ordering.
@@ -7,6 +7,9 @@ public static class AmbisonicsLayout
 {
     public const int MinSupportedOrder = 1;
     public const int MaxSupportedOrder = 3;
+
+    /// <summary>Channels of the highest supported order (16): the most a track can carry into the ring buffer.</summary>
+    public const int MaxChannels = (MaxSupportedOrder + 1) * (MaxSupportedOrder + 1);
 
     /// <summary>Number of channels for a full-sphere order: (order + 1)².</summary>
     public static int GetChannelCount(int order)
@@ -33,6 +36,13 @@ public static class AmbisonicsLayout
 
         order = 0;
         return false;
+    }
+
+    /// <summary>Degree l of the ACN channel <paramref name="acn"/> (0 for W, 1 for Y, Z, X, ...).</summary>
+    public static int GetDegree(int acn)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(acn);
+        return (int)Math.Sqrt(acn);
     }
 
     /// <summary>

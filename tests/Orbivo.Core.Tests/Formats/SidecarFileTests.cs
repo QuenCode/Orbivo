@@ -1,4 +1,5 @@
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
+using Orbivo.Core.Audio;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
 
@@ -142,7 +143,7 @@ public sealed class SidecarFileTests : IDisposable
         Assert.Equal(overrides, SidecarFile.Load(Video).Overrides);
         JsonObject root = JsonNode.Parse(File.ReadAllText(SidecarPath))!.AsObject();
         Assert.Equal(
-            ["version", "projection", "stereoLayout", "swapEyes", "fisheye", "cubemapLayout", "orientationOffsetDeg", "audioFixedToPicture", "stereoWidthDeg"],
+            ["version", "projection", "stereoLayout", "swapEyes", "fisheye", "cubemapLayout", "orientationOffsetDeg", "audioFixedToPicture", "stereoWidthDeg", "audioMode"],
             root.Select(pair => pair.Key));
         Assert.Equal("Cubemap", root["projection"]!.GetValue<string>());
         Assert.Null(root["fisheye"]);
@@ -161,15 +162,49 @@ public sealed class SidecarFileTests : IDisposable
     public void Save_KeepsUnknownFields()
     {
         File.WriteAllText(SidecarPath, """
-            { "version": 1, "projection": "Eac", "audioMode": { "type": "Ambisonics", "order": 1 }, "externalAudio": null }
+            { "version": 1, "projection": "Eac", "externalAudio": { "path": "ton.wav", "offsetMs": 40 }, "note": null }
             """);
 
         SidecarFile.Load(Video).Save(FormatOverrides.None);
 
         JsonObject root = JsonNode.Parse(File.ReadAllText(SidecarPath))!.AsObject();
         Assert.Null(root["projection"]);
-        Assert.Equal(1, root["audioMode"]!["order"]!.GetValue<int>());
-        Assert.True(root.ContainsKey("externalAudio"));
+        Assert.Equal(40, root["externalAudio"]!["offsetMs"]!.GetValue<int>());
+        Assert.True(root.ContainsKey("note"));
+    }
+
+    [Theory]
+    [InlineData("\"FuMa\"", AudioModeChoice.FuMa)]
+    [InlineData("\"ambix\"", AudioModeChoice.AmbiX)]
+    [InlineData("\"Channels\"", AudioModeChoice.Channels)]
+    public void Load_AudioMode(string json, AudioModeChoice expected)
+    {
+        File.WriteAllText(SidecarPath, $$"""{ "version": 1, "audioMode": {{json}} }""");
+
+        SidecarFile sidecar = SidecarFile.Load(Video);
+
+        Assert.Empty(sidecar.Warnings);
+        Assert.Equal(new FormatOverrides(AudioMode: expected), sidecar.Overrides);
+    }
+
+    [Fact]
+    public void Load_UnknownAudioMode_IsIgnoredWithAWarning()
+    {
+        File.WriteAllText(SidecarPath, """{ "audioMode": { "type": "Ambisonics", "order": 1 } }""");
+
+        SidecarFile sidecar = SidecarFile.Load(Video);
+
+        Assert.Null(sidecar.Overrides.AudioMode);
+        Assert.Contains(sidecar.Warnings, warning => warning.Contains("audioMode", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Save_AudioMode_RoundTrips()
+    {
+        SidecarFile.Load(Video).Save(new FormatOverrides(AudioMode: AudioModeChoice.FuMa));
+
+        Assert.Equal("FuMa", JsonNode.Parse(File.ReadAllText(SidecarPath))!["audioMode"]!.GetValue<string>());
+        Assert.Equal(AudioModeChoice.FuMa, SidecarFile.Load(Video).Overrides.AudioMode);
     }
 
     [Fact]

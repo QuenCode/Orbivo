@@ -1,6 +1,6 @@
-using Orbivo.Audio.Ambisonics;
+using Orbivo.Core.Audio;
 
-namespace Orbivo.Audio.Tests.Ambisonics;
+namespace Orbivo.Core.Tests.Audio;
 
 public sealed class AmbisonicsLayoutTests
 {

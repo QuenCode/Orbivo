@@ -65,7 +65,7 @@ internal sealed unsafe class AudioDecoder : IDisposable
         _logger = logger;
         Plan = plan;
         Info = new AudioTrackInfo(codecName, plan);
-        _swrChannels = plan.Channels == ChannelHandling.MonoOnBoth ? 1 : AudioConversionPlan.OutputChannels;
+        _swrChannels = plan.Channels == ChannelHandling.MonoOnBoth ? 1 : AudioConversionPlan.StereoChannels;
         _streamTimeBase = demuxer.Format->streams[demuxer.AudioStreamIndex]->time_base;
         _frame = ffmpeg.av_frame_alloc();
         _thread = new Thread(DecodeThread)
@@ -230,7 +230,7 @@ internal sealed unsafe class AudioDecoder : IDisposable
 
         // Mono stays one channel here and is copied to both sides afterwards: swresample would lower it by 3 dB.
         AVChannelLayout output;
-        ffmpeg.av_channel_layout_default(&output, plan.Channels == ChannelHandling.MonoOnBoth ? 1 : AudioConversionPlan.OutputChannels);
+        ffmpeg.av_channel_layout_default(&output, plan.Channels == ChannelHandling.MonoOnBoth ? 1 : AudioConversionPlan.StereoChannels);
         SwrContext* swr = null;
         try
         {
@@ -501,7 +501,7 @@ internal sealed unsafe class AudioDecoder : IDisposable
         }
 
         position += skip;
-        stereo = stereo[(int)(skip * AudioConversionPlan.OutputChannels)..];
+        stereo = stereo[(int)(skip * AudioConversionPlan.StereoChannels)..];
 
         if (!_ring.IsStarted)
         {
@@ -521,8 +521,8 @@ internal sealed unsafe class AudioDecoder : IDisposable
             else if (position < writePosition)
             {
                 // Overlap (sound read again after a video reseek): drop what is already there.
-                long overlap = Math.Min(writePosition - position, stereo.Length / AudioConversionPlan.OutputChannels);
-                stereo = stereo[(int)(overlap * AudioConversionPlan.OutputChannels)..];
+                long overlap = Math.Min(writePosition - position, stereo.Length / AudioConversionPlan.StereoChannels);
+                stereo = stereo[(int)(overlap * AudioConversionPlan.StereoChannels)..];
             }
         }
 
@@ -551,7 +551,7 @@ internal sealed unsafe class AudioDecoder : IDisposable
             else
             {
                 written = _ring.Write(samples);
-                samples = samples[(written * AudioConversionPlan.OutputChannels)..];
+                samples = samples[(written * AudioConversionPlan.StereoChannels)..];
             }
 
             if (written == 0)
@@ -565,9 +565,9 @@ internal sealed unsafe class AudioDecoder : IDisposable
 
     private ReadOnlySpan<float> ToStereo(int frames)
     {
-        if (_swrChannels == AudioConversionPlan.OutputChannels)
+        if (_swrChannels == AudioConversionPlan.StereoChannels)
         {
-            return _converted.AsSpan(0, frames * AudioConversionPlan.OutputChannels);
+            return _converted.AsSpan(0, frames * AudioConversionPlan.StereoChannels);
         }
 
         if (_stereo.Length < frames * 2)

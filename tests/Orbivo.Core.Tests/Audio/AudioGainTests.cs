@@ -89,7 +89,7 @@ public sealed class AudioGainTests
         AudioConversionPlan plan = AudioConversionPlan.Create(channels, 48_000, 48_000);
         Assert.Equal(expected, plan.Channels);
         Assert.Equal(expected == ChannelHandling.Downmix, plan.IsDownmix);
-        Assert.Equal(2, AudioConversionPlan.OutputChannels);
+        Assert.Equal(2, AudioConversionPlan.StereoChannels);
     }
 
     [Fact]

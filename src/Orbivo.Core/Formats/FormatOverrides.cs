@@ -1,3 +1,4 @@
+using Orbivo.Core.Audio;
 using Orbivo.Core.Geometry;
 
 namespace Orbivo.Core.Formats;
@@ -13,6 +14,7 @@ namespace Orbivo.Core.Formats;
 /// <param name="Offset">Orientation offset, or null for none.</param>
 /// <param name="AudioFixedToPicture">Stereo sound fixed to the picture (M7), or null for the default (on).</param>
 /// <param name="StereoWidthDegrees">Angle of the virtual stereo speakers, or null for the default (75°).</param>
+/// <param name="AudioMode">How the sound track is meant (channels, AmbiX, FuMa; M10), or null for automatic.</param>
 public sealed record FormatOverrides(
     ProjectionType? Projection = null,
     StereoLayout? Layout = null,
@@ -21,12 +23,14 @@ public sealed record FormatOverrides(
     FisheyeParameters? Fisheye = null,
     OrientationOffset? Offset = null,
     bool? AudioFixedToPicture = null,
-    double? StereoWidthDegrees = null)
+    double? StereoWidthDegrees = null,
+    AudioModeChoice? AudioMode = null)
 {
     public static FormatOverrides None { get; } = new();
 
     /// <summary>True if nothing is overridden; then no sidecar is needed.</summary>
     public bool IsEmpty =>
         Projection is null && Layout is null && SwapEyes is null && Cubemap is null && Fisheye is null
-        && (Offset is null || Offset.Value.IsZero) && AudioFixedToPicture is null && StereoWidthDegrees is null;
+        && (Offset is null || Offset.Value.IsZero) && AudioFixedToPicture is null && StereoWidthDegrees is null
+        && AudioMode is null;
 }

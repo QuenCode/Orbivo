@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Orbivo.Core.Audio;
 using Orbivo.Core.Geometry;
 
 namespace Orbivo.Core.Formats;
@@ -10,7 +11,7 @@ namespace Orbivo.Core.Formats;
 /// docs/ARCHITECTURE.md). Holds the operator's format choices; null fields mean automatic.
 /// </summary>
 /// <remarks>
-/// Fields Orbivo does not know (or does not handle yet, such as <c>audioMode</c>) are kept when saving. Invalid
+/// Fields Orbivo does not know (or does not handle yet, such as <c>externalAudio</c>) are kept when saving. Invalid
 /// fields are ignored with a warning. A file that cannot be read at all is copied to <c>.bak</c> before it is
 /// overwritten. A file from a newer Orbivo (<c>version</c> above <see cref="CurrentVersion"/>) is read but never
 /// written, nor is one that could not be opened.
@@ -23,7 +24,7 @@ public sealed class SidecarFile
     private static readonly JsonSerializerOptions WriteOptions = new() { WriteIndented = true };
 
     private static readonly string[] KnownKeys =
-        ["version", "projection", "stereoLayout", "swapEyes", "fisheye", "cubemapLayout", "orientationOffsetDeg", "audioFixedToPicture", "stereoWidthDeg"];
+        ["version", "projection", "stereoLayout", "swapEyes", "fisheye", "cubemapLayout", "orientationOffsetDeg", "audioFixedToPicture", "stereoWidthDeg", "audioMode"];
 
     private readonly JsonObject _root;
 
@@ -112,7 +113,8 @@ public sealed class SidecarFile
             ReadFisheye(root, warnings),
             ReadOffset(root, warnings),
             ReadBool(root, "audioFixedToPicture", warnings),
-            ReadStereoWidth(root, warnings));
+            ReadStereoWidth(root, warnings),
+            ReadEnum<AudioModeChoice>(root, "audioMode", warnings));
         return new SidecarFile(path, root, overrides, warnings, broken: false, readOnly: newer);
     }
 
@@ -165,6 +167,7 @@ public sealed class SidecarFile
                 : null,
             ["audioFixedToPicture"] = overrides.AudioFixedToPicture,
             ["stereoWidthDeg"] = overrides.StereoWidthDegrees,
+            ["audioMode"] = overrides.AudioMode?.ToString(),
         };
         foreach ((string key, JsonNode? value) in _root)
         {
