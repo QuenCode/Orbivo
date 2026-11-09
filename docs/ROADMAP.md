@@ -88,7 +88,7 @@ Begonnen am 2026-11-09 (`DECISIONS.md`): Das echte Material hat Ambisonics-Ton, 
 - „Tonformat“ im Operatorfenster (Automatisch, Kanäle, AmbiX, FuMa), Status mit Quelle der Erkennung; Ereignis „Ton“ in der Aufzeichnung
 - Testvideos `ambisonics_richtungstest_…` (`make_testmedia.py --what ambisonics`: mit `SA3D`, ohne Metadaten, FuMa mit Sidecar, 3. Ordnung mit 16 Kanälen)
 - Analyse-Werkzeug für das echte Material (`tools/tonanalyse`, liefert nur technische Daten)
-- **Fertig, wenn:** Richtung bei allen Testvideos gemessen (dekodiertes Feld passt zur Quelle, Ohrpegel folgt Kopfdrehung), keine Knackser beim Drehen, Lautheit je Ordnung wie Stereo (±1,5 dB), Audio-Thread allokiert nicht ✔ (ohne Brille). Auswertung des echten Materials (`Tonanalyse-Ergebnis.txt`) steht aus
+- **Fertig, wenn:** Richtung bei allen Testvideos gemessen (dekodiertes Feld passt zur Quelle, Ohrpegel folgt Kopfdrehung), keine Knackser beim Drehen, Lautheit je Ordnung wie Stereo (±1,5 dB), Audio-Thread allokiert nicht ✔ (ohne Brille). Echtes Material analysiert: AmbiX mit `SA3D`, wird automatisch erkannt ✔
 - **Hör-Test:** Ambisonics-Richtungstest: Der Ton kommt aus dem leuchtenden Kasten, auch oben und unten und beim Kopfdrehen. Schalter „Ton fest am Bild“ aus: Das Klangfeld dreht mit dem Kopf. Gleiches Ergebnis mit allen vier Testvideos. Dann mit echtem Material
 
 ## Später – Surround und externer Ton

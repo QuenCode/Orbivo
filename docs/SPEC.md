@@ -67,6 +67,6 @@ Wiedergabe von 360°/180°-Videos mit räumlichem Ton auf einer Varjo XR-3 für 
 - Eye-Tracking (eventuell später, die XR-3 hätte es)
 
 ## Offene Punkte
-- Konkretes Video-Format der Aufnahmen (Codec, Auflösung, Projektion, Stereo-Layout)
-- Konkretes Audio-Format: Stand 2026-11-08 Stereo im Video. Falls später Ambisonics: Ordnung, AmbiX/FuMa, im Video eingebettet oder separate WAV
+- Konkretes Video-Format der Aufnahmen: Stand 2026-11-09 ein Beispiel mit HEVC 5760 × 2880, 59,94 fps, Mono, Equirect 360. Ob alle Aufnahmen so sind, ist offen
+- Audio-Format: Stand 2026-11-09 Ambisonics 1. Ordnung, AmbiX mit `SA3D`, AAC 4 Kanäle, 48 kHz, im Video eingebettet (M10)
 - Falls Audio als separate Datei: Sidecar-Feld für externe Audiodatei mit Offset → siehe `ARCHITECTURE.md`

@@ -112,6 +112,52 @@ public sealed class SteamAmbisonicsSpatializerTests : IDisposable
         Assert.InRange(((Db(left) + Db(right)) / 2) - Db(input), -1.5, 1.5);
     }
 
+    /// <summary>
+    /// Real recordings (M10 analysis of the project's material) are mostly diffuse, with W well above the directional
+    /// channels. Such fields should not play much louder or quieter than a single source with the same W level.
+    /// Measured with phonon.dll 4.8.1: W only −2.6 dB, half the directional energy −2.0 dB, ideal diffuse −0.7 dB
+    /// (first order; third order −0.6 dB) relative to a source in front.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 0.0)]
+    [InlineData(1, 0.5)]
+    [InlineData(1, 1.0)]
+    [InlineData(3, 1.0)]
+    public void DiffuseField_IsAboutAsLoudAsAFrontSourceWithTheSameW(int order, double directionalShare)
+    {
+        int frames = _spatializer.BlockFrames;
+        int channels = AmbisonicsLayout.GetChannelCount(order);
+        float[] input = DiffuseField(order, directionalShare, Blocks * frames, seed: 2);
+        var output = new float[2 * frames];
+        double ears = 0;
+        double w = 0;
+        int counted = 0;
+        _spatializer.Reset();
+        for (int block = 0; block < Blocks; block++)
+        {
+            _spatializer.Process(input.AsSpan(channels * block * frames, channels * frames), channels, output, Quaternion.Identity);
+            if (block < WarmUpBlocks)
+            {
+                continue;
+            }
+
+            for (int i = 0; i < frames; i++)
+            {
+                ears += ((output[2 * i] * (double)output[2 * i]) + (output[(2 * i) + 1] * (double)output[(2 * i) + 1])) / 2;
+                double sample = input[channels * ((block * frames) + i)];
+                w += sample * sample;
+            }
+
+            counted += frames;
+        }
+
+        (double left, double right) = EarLevels(Front, order, Quaternion.Identity);
+        double frontGain = ((Db(left) + Db(right)) / 2) - Db(0.25 / Math.Sqrt(3));
+        double diffuseGain = Db(Math.Sqrt(ears / counted)) - Db(Math.Sqrt(w / counted));
+        _output.WriteLine($"order {order}, directional share {directionalShare:0.0}: diffuse {diffuseGain:+0.0;-0.0} dB, front source {frontGain:+0.0;-0.0} dB (ear level relative to W)");
+        Assert.InRange(diffuseGain - frontGain, -3.5, 1.5);
+    }
+
     [Fact]
     public void TurningTheHead_DoesNotClick()
     {
@@ -265,6 +311,50 @@ public sealed class SteamAmbisonicsSpatializerTests : IDisposable
             for (int c = 0; c < gains.Length; c++)
             {
                 samples[(gains.Length * i) + c] = value * gains[c];
+            }
+        }
+
+        return samples;
+    }
+
+    /// <summary>
+    /// Independent noise from 64 random directions; the directional channels are scaled by
+    /// <paramref name="directionalShare"/> (0 = W only, 1 = an ideal diffuse field, where the first order carries as much
+    /// energy as W in SN3D).
+    /// </summary>
+    private static float[] DiffuseField(int order, double directionalShare, int frames, int seed)
+    {
+        const int Sources = 64;
+        var random = new Random(seed);
+        int channels = AmbisonicsLayout.GetChannelCount(order);
+        var gains = new float[Sources][];
+        for (int s = 0; s < Sources; s++)
+        {
+            Vector3 direction;
+            do
+            {
+                direction = new Vector3((float)((random.NextDouble() * 2) - 1), (float)((random.NextDouble() * 2) - 1), (float)((random.NextDouble() * 2) - 1));
+            }
+            while (direction.LengthSquared() is > 1 or < 0.01f);
+
+            gains[s] = AmbiXGains(Vector3.Normalize(direction), order);
+            for (int c = 1; c < channels; c++)
+            {
+                gains[s][c] *= (float)directionalShare;
+            }
+        }
+
+        var samples = new float[channels * frames];
+        float scale = 0.25f / MathF.Sqrt(Sources);
+        for (int i = 0; i < frames; i++)
+        {
+            for (int s = 0; s < Sources; s++)
+            {
+                float value = (float)((random.NextDouble() * 2) - 1) * scale;
+                for (int c = 0; c < channels; c++)
+                {
+                    samples[(channels * i) + c] += value * gains[s][c];
+                }
             }
         }
 
