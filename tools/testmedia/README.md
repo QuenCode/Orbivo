@@ -7,6 +7,7 @@ Erzeugt Testmaterial, mit dem sich Projektion, Stereo, Bildrate, A/V-Sync und Ra
 - daraus 20-Sekunden-Testvideos (HEVC) mit Timecode, bewegtem Marker und Sync-Blitz mit Piepton, mit Projektions-Metadaten (`sv3d`/`st3d`) und teils mit Sidecar (`<Video>.orbivo.json`)
 - einen Ambisonics-Richtungstest 1. Ordnung (AmbiX und FuMa) mit deutschen Ansagen
 - ein Stereo-Richtungstestvideo für „Ton fest am Bild“ (M7)
+- Ambisonics-Richtungstestvideos (M10): AAC mit `SA3D`, ohne Metadaten, FuMa mit Sidecar, 3. Ordnung
 
 Die Ergebnisse landen in `tools/testmedia/out/` und sind nicht im Git.
 
@@ -29,6 +30,7 @@ python tools/testmedia/make_testmedia.py --formats cubemap,eac            # nur 
 python tools/testmedia/make_testmedia.py --what audio                     # nur der Ambisonics-Test
 python tools/testmedia/make_testmedia.py --what decoder                   # nur die Videos für den Software-Decoder
 python tools/testmedia/make_testmedia.py --what stereo                    # nur das Stereo-Richtungstestvideo (M7)
+python tools/testmedia/make_testmedia.py --what ambisonics                # nur die Ambisonics-Richtungstestvideos (M10)
 python tools/testmedia/make_testmedia.py --bit-depth 10 --fps 60          # HEVC Main10, 60 fps
 python tools/testmedia/make_testmedia.py --long                           # nur das 10-Minuten-Video für den A/V-Langtest (M5)
 ```
@@ -41,7 +43,7 @@ $env:ORBIVO_LONG_TESTS = '1'; dotnet test --project tests/Orbivo.Media.Tests
 
 | Option | Standard | Bedeutung |
 |---|---|---|
-| `--what` | `images,videos,audio,decoder,stereo` | Was erzeugt wird |
+| `--what` | `images,videos,audio,decoder,stereo,ambisonics` | Was erzeugt wird |
 | `--sizes` | `4k,8k` | Größenklassen (siehe Tabelle unten) |
 | `--layouts` | `mono,tb,sbs` | Stereo-Layouts (nur Equirect 360) |
 | `--formats` | alle | Projektionen: `equirect360`, `equirect180`, `cubemap`, `eac`, `fisheye` |
@@ -137,7 +139,29 @@ Je Richtung kommt erst die Ansage, dann drei Rauschimpulse aus derselben Richtun
 - `ambix_foa_richtungstest.wav`: AmbiX, Kanäle W, Y, Z, X (ACN), SN3D
 - `fuma_foa_richtungstest.wav`: FuMa, Kanäle W, X, Y, Z, W um 3 dB abgesenkt
 
-Der Player spielt Ambisonics noch nicht ab (für später geplant, siehe docs/ROADMAP.md). Die Dateien bleiben als Testmaterial dafür.
+Die WAV-Dateien sind reines Tonmaterial. Zum Abspielen im Player dienen die Videos im nächsten Abschnitt.
+
+## Ambisonics-Richtungstest als Video (M10)
+
+`--what ambisonics` erzeugt vier Videos `ambisonics_richtungstest_equirect360_mono_4096x2048_hevc_8bit_30fps…`
+(4K Equirect 360 Mono, etwa 26 s, Ton wie oben):
+
+| Endung | Ton | Erwartung im Player |
+|---|---|---|
+| `.mp4` | AAC, 4 Kanäle, 256 kb/s, AmbiX, **`SA3D`-Box** | „Ambisonics 1. Ordnung (AmbiX, Metadaten)“ |
+| `_ohne_metadaten.mp4` | wie oben ohne `SA3D` | „Ambisonics 1. Ordnung (AmbiX, aus Kanalzahl geschätzt)“ |
+| `_fuma.mp4` + `.orbivo.json` | AAC, FuMa (W X Y Z, W −3 dB), Sidecar `"audioMode": "FuMa"` | „Ambisonics 1. Ordnung (FuMa, Sidecar)“ |
+| `_3o_16ch.mkv` | PCM 16 Bit, 16 Kanäle, AmbiX 3. Ordnung, ohne Metadaten | „Ambisonics 3. Ordnung (AmbiX, aus Kanalzahl geschätzt)“ |
+
+Im Bild steht auf jeder waagerechten Richtung ein Kasten mit dem Namen der Richtung, für oben und unten eine Kappe
+um den Pol. Der Kasten (bzw. die Kappe) der Richtung, aus der gerade Ton kommt, leuchtet grün, unter VORNE steht
+„Ton von – …“. Ist das Klangfeld fest am Bild, kommt der Ton immer aus dem leuchtenden Kasten, egal wohin der Kopf
+zeigt.
+
+**`SA3D` schreiben:** Der AAC-Encoder von ffmpeg nimmt kein Ambisonics-Layout an (swresample lehnt es ab), also
+schreibt ffmpeg auch kein `SA3D`. `spherical.py` hängt die Box nach dem Kodieren an den Ton-Sample-Eintrag (`mp4a`,
+Spatial-Audio-RFC von Google). ffmpeg kodiert die vier Kanäle als „4.0“; beim Dekodieren kommen sie in derselben
+Reihenfolge zurück (geprüft mit `tools/tonanalyse`).
 
 ## Stereo-Richtungstest (M7)
 

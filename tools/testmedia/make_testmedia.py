@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from orbivo_testmedia import ambisonics, conventions, equirect, projections, speech, spherical, stereo, variants, video
+from orbivo_testmedia import ambisonics, ambisonics_video, conventions, equirect, projections, speech, spherical, stereo, variants, video
 from orbivo_testmedia.wavfile import write_wav
 
 TOOL_DIR = Path(__file__).resolve().parent
@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="output directory (default: %(default)s)")
     parser.add_argument("--ffmpeg", type=Path, default=DEFAULT_FFMPEG, help="ffmpeg.exe (default: %(default)s)")
-    parser.add_argument("--what", default="images,videos,audio,decoder,stereo",
+    parser.add_argument("--what", default="images,videos,audio,decoder,stereo,ambisonics",
                         help="images, videos, audio, decoder, stereo (comma separated)")
     parser.add_argument("--sizes", default="4k,8k", help="4k, 8k (comma separated)")
     parser.add_argument("--layouts", default="mono,tb,sbs", help="equirect 360 only: mono, tb, sbs (comma separated)")
@@ -355,9 +355,70 @@ def generate_stereo_direction(args, manifest) -> None:
     })
 
 
+# Variants of the Ambisonics direction test video (M10): file suffix, Ambisonics order, convention of the WAV,
+# container, sound codec arguments, SA3D written, sidecar.
+AMBISONICS_VARIANTS = (
+    ("", 1, "ambix", ".mp4", ["-c:a", "aac", "-b:a", "256k"], True, None),
+    ("_ohne_metadaten", 1, "ambix", ".mp4", ["-c:a", "aac", "-b:a", "256k"], False, None),
+    ("_fuma", 1, "fuma", ".mp4", ["-c:a", "aac", "-b:a", "256k"], False, {"version": 1, "audioMode": "FuMa"}),
+    ("_3o_16ch", 3, "ambix", ".mkv", ["-c:a", "pcm_s16le"], False, None),
+)
+
+
+def generate_ambisonics_direction(args, manifest) -> None:
+    """Ambisonics direction test videos (M10): 4K mono equirect, a lit box at the direction the sound comes from."""
+    if not args.ffmpeg.exists():
+        sys.exit(f"ffmpeg not found: {args.ffmpeg} (see native/README.md or pass --ffmpeg)")
+    codec = video.CODECS[args.codec]
+    if codec.name not in video.available_encoders(args.ffmpeg):
+        sys.exit(f"Encoder {codec.name} is not available in {args.ffmpeg}")
+    words = {direction.key: direction.spoken for direction in conventions.AUDIO_DIRECTIONS}
+    work = args.out / "_work"
+    work.mkdir(parents=True, exist_ok=True)
+    signals, voice = speech.synthesize(words, work, ambisonics.SAMPLE_RATE)
+    if signals is None:
+        log(f"WARNING: no German voice ({voice}); the Ambisonics videos contain noise bursts only")
+
+    layout = equirect.LAYOUTS["mono"]
+    width, height = equirect.FRAME_SIZES[("mono", "4k")]
+    still = work / "ambisonics_still.png"
+    Image.fromarray(equirect.render_frame(layout, width, height)).save(still, compress_level=3)
+
+    for suffix, order, convention, extension, audio_args, sa3d, sidecar in AMBISONICS_VARIANTS:
+        samples, events = ambisonics.build_direction_test(signals, order=order)
+        if convention == "fuma":
+            samples = ambisonics.ambix_to_fuma(samples)
+        duration = round(samples.shape[1] / ambisonics.SAMPLE_RATE + ambisonics_video.TAIL_S, 1)
+        settings = video.VideoSettings(codec, 8, args.fps, duration)
+        audio = work / f"ambisonics_richtungstest_{order}o_{convention}.wav"
+        write_wav(audio, samples, ambisonics.SAMPLE_RATE, bits=24)
+
+        name = f"ambisonics_richtungstest_equirect360_mono_{width}x{height}_{codec.short}_8bit_{args.fps}fps{suffix}{extension}"
+        output = args.out / name
+        elapsed = ambisonics_video.encode(args.ffmpeg, still, audio, output, width, height, settings, events, audio_args)
+        metadata = None
+        if extension == ".mp4":
+            metadata = spherical.SphericalMetadata("mono", "equirect")
+            tag(output, metadata)
+        if sa3d:
+            spherical.inject_audio(output, spherical.SpatialAudioMetadata(order))
+        sidecar_name = write_sidecar(output, sidecar)
+        log(f"{name} ({elapsed:.0f} s)")
+        manifest["videos"].append({
+            "file": name, "projection": "equirect360", "layout": "mono", "width": width, "height": height,
+            "metadata": (metadata.describe() if metadata else "none") + (", SA3D" if sa3d else ""),
+            "sidecar": sidecar_name, "encoder": codec.name, "pix_fmt": settings.pix_fmt, "fps": args.fps,
+            "duration_s": duration, "color": "BT.709, limited range",
+            "audio": f"Ambisonics order {order}, {'FuMa (W X Y Z, W -3 dB)' if convention == 'fuma' else 'AmbiX (ACN/SN3D)'}, "
+                     f"{(order + 1) ** 2} channels, {' '.join(audio_args[1:])}",
+            "speech_voice": voice if signals is not None else None,
+            "events": events,
+        })
+
+
 def main() -> None:
     args = parse_args()
-    what = split(args.what, {"images", "videos", "audio", "decoder", "stereo"}, "--what")
+    what = split(args.what, {"images", "videos", "audio", "decoder", "stereo", "ambisonics"}, "--what")
     sizes = split(args.sizes, {"4k", "8k"}, "--sizes")
     layouts = split(args.layouts, set(equirect.LAYOUTS), "--layouts")
     formats = split(args.formats, set(variants.PROJECTION_KEYS), "--formats")
@@ -384,6 +445,8 @@ def main() -> None:
         generate_decoder_cases(args, manifest)
     if "stereo" in what:
         generate_stereo_direction(args, manifest)
+    if "ambisonics" in what:
+        generate_ambisonics_direction(args, manifest)
 
     # Keep the entries of files that were not generated this time (e.g. the short videos when only --long ran).
     if manifest_path.exists():
