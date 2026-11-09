@@ -436,3 +436,7 @@ native/_downloads/
 tools/testmedia/out/
 # Python virtual environments
 .venv/
+
+# Orbivo-Tonanalyse: built kit and local results
+tools/tonanalyse/out/
+tools/tonanalyse/Tonanalyse-Ergebnis*.txt

@@ -1,4 +1,5 @@
-"""Writes Spherical Video V2 metadata (st3d, sv3d) into an MP4 file, with the Python standard library only.
+"""Writes Spherical Video V2 metadata (st3d, sv3d) and Spatial Audio metadata (SA3D) into an MP4 file, with the Python
+standard library only.
 
 ffmpeg reads these boxes (side data "Spherical Mapping" / "Stereo 3D"), but its command line cannot attach them
 to a newly encoded stream. So the boxes are added afterwards to the video track's sample entry
@@ -21,6 +22,7 @@ from pathlib import Path
 
 CONTAINERS = {b"moov", b"trak", b"mdia", b"minf", b"stbl"}
 VISUAL_SAMPLE_ENTRY_HEADER = 8 + 78  # box header + VisualSampleEntry fields before the child boxes
+AUDIO_SAMPLE_ENTRY_HEADER = 8 + 28  # box header + AudioSampleEntry (version 0) fields before the child boxes
 STEREO_MODES = {"mono": 0, "tb": 1, "sbs": 2}
 
 
@@ -81,8 +83,25 @@ def _children(data: bytes, start: int, end: int):
         offset += size
 
 
-def _find_video_sample_entry(data: bytes, moov: tuple[int, int, int]) -> list[tuple[int, int]]:
-    """Path [(offset, header size), ...] from moov down to the video sample entry."""
+@dataclass(frozen=True)
+class SpatialAudioMetadata:
+    order: int = 1
+    channel_map: tuple[int, ...] | None = None  # None = identity
+
+    def build(self) -> bytes:
+        channels = (self.order + 1) ** 2
+        mapping = self.channel_map if self.channel_map is not None else tuple(range(channels))
+        if len(mapping) != channels:
+            raise ValueError("channel map must list (order + 1)^2 channels")
+        payload = struct.pack(">BBIBBI", 0, 0, self.order, 0, 0, channels) + b"".join(struct.pack(">I", c) for c in mapping)
+        return _box(b"SA3D", payload)
+
+    def describe(self) -> str:
+        return f"SA3D order {self.order}"
+
+
+def _find_sample_entry(data: bytes, moov: tuple[int, int, int], handler_type: bytes = b"vide") -> list[tuple[int, int]]:
+    """Path [(offset, header size), ...] from moov down to the first sample entry of a `handler_type` track."""
     moov_offset, moov_size, moov_header = moov
     for trak_offset, trak_size, kind, trak_header in _children(data, moov_offset + moov_header, moov_offset + moov_size):
         if kind != b"trak":
@@ -102,7 +121,7 @@ def _find_video_sample_entry(data: bytes, moov: tuple[int, int, int]) -> list[tu
             path.append((found[0], found[2]))
             node = found
         else:
-            if handler != b"vide":
+            if handler != handler_type:
                 continue
             for offset, size, kind, header in _children(data, node[0] + node[2], node[0] + node[1]):
                 if kind == b"stsd":
@@ -110,14 +129,14 @@ def _find_video_sample_entry(data: bytes, moov: tuple[int, int, int]) -> list[tu
                     path.append((offset, header))
                     path.append((entry, 8))
                     return path
-    raise ValueError("no video track found")
+    raise ValueError(f"no {handler_type.decode()} track found")
 
 
-def _strip_existing(entry: bytes) -> bytes:
-    """The sample entry without old st3d/sv3d boxes."""
-    keep = entry[:VISUAL_SAMPLE_ENTRY_HEADER]
-    for offset, size, kind, _ in _children(entry, VISUAL_SAMPLE_ENTRY_HEADER, len(entry)):
-        if kind not in (b"st3d", b"sv3d"):
+def _strip_existing(entry: bytes, header: int = VISUAL_SAMPLE_ENTRY_HEADER, kinds=(b"st3d", b"sv3d")) -> bytes:
+    """The sample entry without old boxes of the given kinds."""
+    keep = entry[:header]
+    for offset, size, kind, _ in _children(entry, header, len(entry)):
+        if kind not in kinds:
             keep += entry[offset:offset + size]
     return keep
 
@@ -143,6 +162,20 @@ def _shift_chunk_offsets(moov: bytearray, delta: int) -> None:
 
 def inject(path: Path, metadata: SphericalMetadata) -> None:
     """Writes st3d/sv3d into the video sample entry of `path` (replacing old ones)."""
+    _rewrite_sample_entry(path, b"vide", lambda entry: _strip_existing(entry) + build_boxes(metadata))
+
+
+def inject_audio(path: Path, metadata: SpatialAudioMetadata) -> None:
+    """Writes SA3D into the sound sample entry of `path` (replacing an old one)."""
+    def rewrite(entry: bytes) -> bytes:
+        version = struct.unpack(">H", entry[16:18])[0]
+        if version != 0:
+            raise ValueError("only version 0 sound sample entries are supported")
+        return _strip_existing(entry, AUDIO_SAMPLE_ENTRY_HEADER, (b"SA3D",)) + metadata.build()
+    _rewrite_sample_entry(path, b"soun", rewrite)
+
+
+def _rewrite_sample_entry(path: Path, handler_type: bytes, rewrite) -> None:
     data = path.read_bytes()
     top = list(_children(data, 0, len(data)))
     moov = next(((o, s, h) for o, s, k, h in top if k == b"moov"), None)
@@ -150,11 +183,11 @@ def inject(path: Path, metadata: SphericalMetadata) -> None:
     if moov is None or mdat is None:
         raise ValueError(f"{path.name}: moov or mdat missing")
 
-    path_boxes = _find_video_sample_entry(data, moov)
+    path_boxes = _find_sample_entry(data, moov, handler_type)
     entry_offset = path_boxes[-1][0]
     entry_size = struct.unpack(">I", data[entry_offset:entry_offset + 4])[0]
     old_entry = data[entry_offset:entry_offset + entry_size]
-    new_entry = _strip_existing(old_entry) + build_boxes(metadata)
+    new_entry = rewrite(old_entry)
     new_entry = struct.pack(">I", len(new_entry)) + new_entry[4:]
     delta = len(new_entry) - len(old_entry)
 

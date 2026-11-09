@@ -1,0 +1,25 @@
+Orbivo-Tonanalyse
+=================
+
+Zweck: Zeigt, wie der Ton eines Videos technisch aufgebaut ist (Codec, Kanäle, Ambisonics-Metadaten,
+Kanalreihenfolge und Normierung). Damit lässt sich prüfen, ob Orbivo den Ton richtig verarbeitet.
+
+Benutzung
+1. ZIP entpacken (Ordner muss beschreibbar sein, z. B. Desktop oder USB-Stick).
+2. Video auf "Tonanalyse.cmd" ziehen - oder doppelklicken und im Dialog das Video wählen.
+   Mehrere Videos auf einmal gehen auch.
+3. Das Ergebnis erscheint im Fenster und in "Tonanalyse-Ergebnis.txt" im selben Ordner.
+4. Die Datei durchlesen und weitergeben.
+
+Dauer: etwa 10 bis 60 Sekunden je Video (es werden höchstens die ersten 10 Minuten Ton ausgewertet).
+
+Datenschutz
+- Im Ergebnis stehen nur technische Kennwerte und über die ganze Dauer zusammengefasste Zahlen.
+- Nicht enthalten: Datei- und Ordnernamen, Metadaten-Texte (Kamera, Software, Datum, Ort/GPS, Sprache, Titel),
+  Tonausschnitte, ein zeitlicher Verlauf.
+- Die Benutzer- und Gerätedaten im Video (MP4-Bereiche udta/meta) werden nicht gelesen.
+- Keine Netzwerkverbindung, keine Änderung am Video. Geschrieben wird nur die Ergebnisdatei.
+
+Inhalt
+- Tonanalyse.cmd, Tonanalyse.ps1: das Skript (PowerShell, im Klartext lesbar)
+- ffmpeg\: FFmpeg (LGPL, unverändert, Build von BtbN/FFmpeg-Builds), Lizenz in ffmpeg\FFmpeg-LICENSE.txt
