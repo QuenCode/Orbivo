@@ -38,9 +38,21 @@ internal enum RendererState
 /// then read that many frames ahead, so the frame written for media frame <c>m</c> is still the sound of <c>m</c>.
 /// Switching between fixed and plain stereo while sound plays dips through silence like a ring flush.
 /// </para>
+/// <para>
+/// An Ambisonics sound field (M10; the ring generation has 4, 9 or 16 channels) goes through an
+/// <see cref="AmbisonicsStage"/>, with the same delay of one block. Fixed to the picture, the field stays in place
+/// while the head turns; otherwise it turns with the head. Without Steam Audio a first order cardioid pair (left and
+/// right) stands in, head-locked.
+/// </para>
 /// </remarks>
 internal sealed class AudioRenderer
 {
+    /// <summary>A sound field is read and rendered in pieces of at most this many frames.</summary>
+    private const int FieldChunkFrames = 512;
+
+    /// <summary>Gain of the fallback cardioid pair: 0.5 (W ± Y), so a source at the side never exceeds its level.</summary>
+    private const float FallbackGain = 0.5f;
+
     private readonly AudioRingBuffer _ring;
     private readonly AudioPlaybackClock _clock;
     private readonly long _timestampFrequency;
@@ -56,26 +68,31 @@ internal sealed class AudioRenderer
     private bool _pendingPlay;
     private int _holdSequence;
 
-    // Sound fixed to the picture (M7).
+    // Sound fixed to the picture (M7) and Ambisonics (M10).
     private SpatialStage? _stage;
+    private AmbisonicsStage? _ambisonicsStage;
     private float[] _primeBuffer = [];
+    private float[] _fieldPrimeBuffer = [];
+    private readonly float[] _field;
     private StereoPlacement _placement = StereoPlacement.HeadLocked;
-    private bool _spatialActive;
+    private bool _fixedInEffect;
     private bool _placementPending;
     private bool _needsPrime;
+    private int _sourceChannels = 2;
 
-    /// <param name="ring">Decoded sound (2 channels).</param>
+    /// <param name="ring">Decoded sound (2 channels per frame, or an Ambisonics field of up to <see cref="AudioRingBuffer.Channels"/>).</param>
     /// <param name="clock">The clock this renderer publishes.</param>
     /// <param name="sampleRate">Rate of the first device stream.</param>
     /// <param name="timestampFrequency">Stopwatch ticks per second.</param>
     public AudioRenderer(AudioRingBuffer ring, AudioPlaybackClock clock, int sampleRate, long timestampFrequency)
     {
-        if (ring.Channels != 2)
+        if (ring.Channels < 2)
         {
-            throw new ArgumentException("The renderer plays stereo.", nameof(ring));
+            throw new ArgumentException("The renderer needs at least two channels per frame.", nameof(ring));
         }
 
         _ring = ring;
+        _field = ring.Channels > 2 ? new float[ring.Channels * FieldChunkFrames] : [];
         _clock = clock;
         _timestampFrequency = timestampFrequency;
         _sampleRate = sampleRate;
@@ -103,14 +120,26 @@ internal sealed class AudioRenderer
     /// <summary>A play is waiting for the end of a fade-out or for the next period.</summary>
     public bool PlayPending => _pendingPlay;
 
-    /// <summary>The sound is fixed to the picture right now (stage present and chosen).</summary>
-    public bool SpatialActive => _spatialActive;
+    /// <summary>
+    /// The sound is fixed to the picture right now: chosen, and the stage for the current sound (stereo or Ambisonics)
+    /// is there for this rate.
+    /// </summary>
+    public bool SpatialActive => _fixedInEffect && CurrentStageUsable;
+
+    /// <summary>Channels per frame of the sound played last: 2, or 4, 9 or 16 for Ambisonics.</summary>
+    public int SourceChannels => _sourceChannels;
+
+    /// <summary>An Ambisonics field plays and is rendered binaurally (not through the fallback pair).</summary>
+    public bool FieldBinaural => _sourceChannels > 2 && AmbisonicsStageUsable(_sourceChannels);
 
     /// <summary>The placement the player asked for last.</summary>
     public StereoPlacement Placement => _placement;
 
     /// <summary>The spatial stage for the current rate, or null if Steam Audio is not available.</summary>
     public SpatialStage? Stage => _stage;
+
+    /// <summary>The Ambisonics stage for the current rate, or null if Steam Audio is not available.</summary>
+    public AmbisonicsStage? AmbisonicsStage => _ambisonicsStage;
 
     /// <summary>
     /// Sets the spatial stage for the current device rate (null: plain stereo only). The renderer owns it from now on
@@ -133,9 +162,29 @@ internal sealed class AudioRenderer
             }
         }
 
-        _spatialActive = WantsSpatial;
+        _fixedInEffect = _placement.FixedToPicture;
         _placementPending = false;
-        _needsPrime = _spatialActive;
+        _needsPrime = true;
+    }
+
+    /// <summary>
+    /// Sets the Ambisonics stage for the current device rate (null: the fallback pair only). The renderer owns it from
+    /// now on and disposes the previous one. Between periods, right after <see cref="Attach"/>.
+    /// </summary>
+    public void SetAmbisonicsStage(AmbisonicsStage? stage)
+    {
+        if (!ReferenceEquals(stage, _ambisonicsStage))
+        {
+            _ambisonicsStage?.Dispose();
+            _ambisonicsStage = stage;
+        }
+
+        if (stage is not null && _fieldPrimeBuffer.Length < stage.MaxChannels * stage.LatencyFrames)
+        {
+            _fieldPrimeBuffer = new float[stage.MaxChannels * stage.LatencyFrames];
+        }
+
+        _needsPrime = true;
     }
 
     /// <summary>
@@ -150,18 +199,16 @@ internal sealed class AudioRenderer
             _stage.WidthDegrees = placement.WidthDegrees;
         }
 
-        bool wanted = WantsSpatial;
-        if (wanted == _spatialActive)
+        if (placement.FixedToPicture == _fixedInEffect)
         {
             _placementPending = false;
             return;
         }
 
-        if (State == RendererState.Silent)
+        if (State == RendererState.Silent || !CurrentStageUsable)
         {
-            _spatialActive = wanted;
-            _needsPrime = wanted;
-            _placementPending = false;
+            // Nothing heard, or nothing that would sound different: switch at once.
+            ApplyPlacement();
         }
         else
         {
@@ -169,7 +216,22 @@ internal sealed class AudioRenderer
         }
     }
 
-    private bool WantsSpatial => _placement.FixedToPicture && _stage is not null && _stage.SampleRate == _sampleRate;
+    private bool StereoStageUsable => _stage is not null && _stage.SampleRate == _sampleRate;
+
+    private bool AmbisonicsStageUsable(int channels) =>
+        _ambisonicsStage is not null && _ambisonicsStage.SampleRate == _sampleRate && _ambisonicsStage.Supports(channels);
+
+    /// <summary>A stage renders the current sound, so being fixed to the picture or not can be heard.</summary>
+    private bool CurrentStageUsable => _sourceChannels > 2 ? AmbisonicsStageUsable(_sourceChannels) : StereoStageUsable;
+
+    private void ApplyPlacement()
+    {
+        _fixedInEffect = _placement.FixedToPicture;
+        _placementPending = false;
+
+        // A delay line holds sound rendered the other way.
+        _needsPrime = true;
+    }
 
     /// <summary>
     /// A new device stream (other device, the first one after the silent stand-in, or a new rate). Stream frames
@@ -198,10 +260,8 @@ internal sealed class AudioRenderer
 
         _tracker.Stand(_heldMediaTicks);
 
-        // The stage belongs to the old rate until SetStage brings one for the new rate.
-        _spatialActive = WantsSpatial;
-        _placementPending = false;
-        _needsPrime = _spatialActive;
+        // The stages belong to the old rate until SetStage brings ones for the new rate.
+        ApplyPlacement();
         Publish();
     }
 
@@ -286,8 +346,7 @@ internal sealed class AudioRenderer
 
                 if (_placementPending)
                 {
-                    _spatialActive = WantsSpatial;
-                    _placementPending = false;
+                    ApplyPlacement();
                 }
 
                 if (_pendingPlay)
@@ -322,12 +381,11 @@ internal sealed class AudioRenderer
 
                     if (_placementPending)
                     {
-                        _spatialActive = WantsSpatial;
-                        _placementPending = false;
+                        ApplyPlacement();
                     }
 
                     // After a flush or a switch, the delay line holds sound that does not follow on.
-                    _needsPrime = _spatialActive;
+                    _needsPrime = true;
                     _ramp.FadeIn();
                 }
                 else
@@ -342,15 +400,28 @@ internal sealed class AudioRenderer
                 chunk = Math.Min(chunk, _ramp.RemainingFrames);
             }
 
+            // The channel count changes only with a new ring generation, after a flush (faded out) or a start.
+            int channels = _ring.HasStart && _ring.SampleRate == _sampleRate ? _ring.FrameChannels : _sourceChannels;
+            if (channels != _sourceChannels)
+            {
+                _sourceChannels = channels;
+                _needsPrime = true;
+            }
+
             Span<float> target = stereo.Slice(2 * done, 2 * chunk);
-            if (_spatialActive)
+            if (channels > 2)
+            {
+                FetchField(target, chunk, channels);
+            }
+            else if (SpatialActive)
             {
                 FetchSpatial(target, chunk);
             }
             else
             {
-                Fetch(target, chunk, _mediaFrame);
+                Fetch(target, chunk, _mediaFrame, 2);
             }
+
             for (int i = 0; i < chunk; i++)
             {
                 float gain = _ramp.Next() * _gain.Next(targetGain);
@@ -387,7 +458,7 @@ internal sealed class AudioRenderer
         _tracker.BeginSegment(_written, _heldMediaTicks, heardTimestamp);
         _ramp.Close();
         _ramp.FadeIn();
-        _needsPrime = _spatialActive;
+        _needsPrime = true;
         State = RendererState.Playing;
     }
 
@@ -403,23 +474,80 @@ internal sealed class AudioRenderer
         {
             stage.Reset();
             Span<float> prime = _primeBuffer.AsSpan(0, 2 * latency);
-            Fetch(prime, latency, _mediaFrame);
+            Fetch(prime, latency, _mediaFrame, 2);
             stage.Prime(prime);
             _needsPrime = false;
         }
 
-        Fetch(destination, frames, _mediaFrame + latency);
+        Fetch(destination, frames, _mediaFrame + latency, 2);
         stage.Exchange(destination, frames);
     }
 
-    /// <summary>Copies the sound for media frames <paramref name="firstMediaFrame"/> … + <paramref name="frames"/>; silence where there is none.</summary>
-    private void Fetch(Span<float> destination, int frames, long firstMediaFrame)
+    /// <summary>
+    /// The sound field for media frames <see cref="_mediaFrame"/> … + <paramref name="frames"/>, rendered for the ears:
+    /// through the Ambisonics stage (read one block ahead, like <see cref="FetchSpatial"/>), or the fallback pair.
+    /// </summary>
+    private void FetchField(Span<float> stereo, int frames, int channels)
+    {
+        AmbisonicsStage? stage = AmbisonicsStageUsable(channels) ? _ambisonicsStage : null;
+        int ahead = 0;
+        if (stage is not null)
+        {
+            stage.FixedToPicture = _fixedInEffect;
+            ahead = stage.LatencyFrames;
+            if (_needsPrime || !stage.IsPrimed || stage.InputChannels != channels)
+            {
+                stage.SetChannels(channels);
+                Span<float> prime = _fieldPrimeBuffer.AsSpan(0, channels * ahead);
+                Fetch(prime, ahead, _mediaFrame, channels);
+                stage.Prime(prime);
+                _needsPrime = false;
+            }
+        }
+
+        int done = 0;
+        while (done < frames)
+        {
+            int count = Math.Min(frames - done, FieldChunkFrames);
+            Span<float> field = _field.AsSpan(0, channels * count);
+            Span<float> piece = stereo.Slice(2 * done, 2 * count);
+            Fetch(field, count, _mediaFrame + done + ahead, channels);
+            if (stage is not null)
+            {
+                stage.Exchange(field, piece, count);
+            }
+            else
+            {
+                DecodeFallback(field, piece, count, channels);
+            }
+
+            done += count;
+        }
+    }
+
+    /// <summary>Two first order cardioids, to the left and to the right: 0.5 (W ± Y). Head-locked.</summary>
+    private static void DecodeFallback(ReadOnlySpan<float> field, Span<float> stereo, int frames, int channels)
+    {
+        for (int i = 0; i < frames; i++)
+        {
+            float w = field[i * channels];
+            float y = field[(i * channels) + 1];
+            stereo[2 * i] = FallbackGain * (w + y);
+            stereo[(2 * i) + 1] = FallbackGain * (w - y);
+        }
+    }
+
+    /// <summary>
+    /// Copies the sound for media frames <paramref name="firstMediaFrame"/> … + <paramref name="frames"/> with
+    /// <paramref name="channels"/> per frame; silence where there is none (or the ring holds frames of another size).
+    /// </summary>
+    private void Fetch(Span<float> destination, int frames, long firstMediaFrame, int channels)
     {
         int done = 0;
         long media = firstMediaFrame;
         while (done < frames)
         {
-            if (!_ring.HasStart || _ring.SampleRate != _sampleRate)
+            if (!_ring.HasStart || _ring.SampleRate != _sampleRate || _ring.FrameChannels != channels)
             {
                 break;
             }
@@ -440,13 +568,13 @@ internal sealed class AudioRenderer
             {
                 // The data starts later (a gap in the track, or sound that starts after the picture): silence.
                 int gap = (int)Math.Min(position - media, frames - done);
-                destination.Slice(2 * done, 2 * gap).Clear();
+                destination.Slice(channels * done, channels * gap).Clear();
                 done += gap;
                 media += gap;
                 continue;
             }
 
-            int read = _ring.Read(destination[(2 * done)..], frames - done);
+            int read = _ring.Read(destination[(channels * done)..], frames - done);
             if (read == 0)
             {
                 break;
@@ -458,7 +586,7 @@ internal sealed class AudioRenderer
 
         if (done < frames)
         {
-            destination[(2 * done)..(2 * frames)].Clear();
+            destination[(channels * done)..(channels * frames)].Clear();
             bool ended = _ring.HasStart && _ring.EndOfData;
             if (State == RendererState.Playing && !ended && !RateMismatch)
             {

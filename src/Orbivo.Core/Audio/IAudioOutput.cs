@@ -24,7 +24,14 @@ public enum AudioEndpointState
 /// <param name="Placement">What the player asked for (from the video's sidecar).</param>
 /// <param name="PeakLoad">Highest share of real time one block took to compute in the last second (0.05 = 5 %).</param>
 /// <param name="Problem">Why it is not available (German), or null.</param>
-public sealed record SpatialAudioStatus(bool Available, bool Active, StereoPlacement Placement, double PeakLoad, string? Problem);
+public sealed record SpatialAudioStatus(bool Available, bool Active, StereoPlacement Placement, double PeakLoad, string? Problem)
+{
+    /// <summary>An Ambisonics field plays and is rendered binaurally with Steam Audio (M10).</summary>
+    public bool FieldBinaural { get; init; }
+
+    /// <summary>German text if Ambisonics cannot be rendered binaurally (it then plays through a fallback pair), or null.</summary>
+    public string? AmbisonicsProblem { get; init; }
+}
 
 /// <summary>Snapshot of the sound output for the operator UI.</summary>
 /// <param name="State">Device state.</param>

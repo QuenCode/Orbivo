@@ -112,7 +112,8 @@ public sealed class AudioRingBuffer : IDisposable
     /// </summary>
     /// <param name="startFrame">Media position of the first frame.</param>
     /// <param name="sampleRate">Sample rate of the data; the consumer plays it only on a device stream of the same rate.</param>
-    public void Start(long startFrame, int sampleRate) => Start(startFrame, sampleRate, Channels);
+    /// <remarks>The data is stereo (two samples per frame), or one sample per frame in a ring of one channel.</remarks>
+    public void Start(long startFrame, int sampleRate) => Start(startFrame, sampleRate, Math.Min(2, Channels));
 
     /// <summary>As <see cref="Start(long, int)"/>, for data with <paramref name="channels"/> samples per frame.</summary>
     /// <param name="startFrame">Media position of the first frame.</param>

@@ -10,6 +10,12 @@ namespace Orbivo.Core.Audio;
 /// an azimuth is measured like a yaw, positive to the LEFT. Steam Audio uses the same axes (phonon.h: "+x right, +y up,
 /// −z ahead"), and its binaural effect takes the direction from the listener to the source in the listener's own
 /// frame. So a direction relative to the head goes to Steam Audio unchanged; only the head rotation is taken out here.
+/// <para>
+/// Ambisonics (M10): AmbiX names its axes X front, Y left, Z up, so in the content frame X = −Z, Y = −X, Z = +Y.
+/// Steam Audio's Ambisonics channels lie the same way (ACN 1 left, 2 up, 3 ahead; pinned by
+/// <c>SteamAmbisonicsSpatializerTests</c>), so an AmbiX field goes in with its channels in place, only rescaled.
+/// The decoder takes the listener's axes in the frame of the field (<see cref="ListenerAxes"/>).
+/// </para>
 /// </remarks>
 public static class AudioCoordinates
 {
@@ -33,6 +39,19 @@ public static class AudioCoordinates
         Vector3 relative = Vector3.Transform(contentDirection, Quaternion.Conjugate(headInContent));
         float length = relative.Length();
         return length > 1e-6f ? relative / length : OrientationFront;
+    }
+
+    /// <summary>
+    /// The head's right, up and ahead axes in the content frame, i.e. in the frame of a sound field fixed to the picture:
+    /// what Steam Audio's Ambisonics decoder takes as the listener orientation. Allocation-free.
+    /// </summary>
+    public static (Vector3 Right, Vector3 Up, Vector3 Ahead) ListenerAxes(Quaternion headInContent)
+    {
+        Quaternion head = Quaternion.Normalize(headInContent);
+        return (
+            Vector3.Transform(Vector3.UnitX, head),
+            Vector3.Transform(Vector3.UnitY, head),
+            Vector3.Transform(OrientationFront, head));
     }
 
     /// <summary>

@@ -56,6 +56,46 @@ public sealed class AudioOutputTests
     }
 
     [Fact]
+    public void AmbisonicsField_PlaysBinaurally_WithoutAllocations()
+    {
+        var provider = new SimulatedEndpointProvider(new SimulatedEndpointOptions(LatencyFrames: 480, RecordFrames: 3 * Rate));
+        using var output = new AudioOutput(() => provider, "sim", 1f, NullLogger.Instance, ambisonicsFactory: rate => new WToBothEars(rate));
+        AudioRingBuffer ring = output.Ring;
+        Assert.Equal(AmbisonicsLayout.MaxChannels, ring.Channels);
+
+        int generation = ring.RequestFlush();
+        Assert.True(ring.WaitForFlush(generation, Timeout));
+        ring.Start(0, output.SampleRate, 4);
+        var data = new float[4 * 2 * Rate];
+        for (int i = 0; i < 2 * Rate; i++)
+        {
+            data[4 * i] = Signal(i);
+        }
+
+        Assert.Equal(2 * Rate, ring.Write(data));
+        output.Hold(0);
+        output.Play();
+        Thread.Sleep(400);
+        long allocatedAfterWarmUp = output.PeriodAllocatedBytes;
+        Thread.Sleep(600);
+
+        AudioOutputStatus status = output.GetStatus();
+        Assert.True(status.Spatial!.FieldBinaural);
+        Assert.Null(status.Spatial.AmbisonicsProblem);
+        Assert.Equal(0, status.UnderrunFrames);
+        Assert.Equal(0, output.PeriodAllocatedBytes - allocatedAfterWarmUp);
+
+        // W reaches both ears, aligned to the media position like stereo.
+        ReadOnlySpan<float> recorded = provider.Latest!.Recorded;
+        int start = FirstSound(recorded);
+        for (int media = 300; media < Rate / 2; media += 997)
+        {
+            Assert.Equal(Signal(media), recorded[2 * (start + media)]);
+            Assert.Equal(Signal(media), recorded[(2 * (start + media)) + 1]);
+        }
+    }
+
+    [Fact]
     public void Clock_FollowsADriftingDevice()
     {
         var provider = new SimulatedEndpointProvider(new SimulatedEndpointOptions(DriftPpm: 500, LatencyFrames: 960, RecordFrames: 4 * Rate));
@@ -226,6 +266,33 @@ public sealed class AudioOutputTests
     }
 
     private static float Signal(long media) => 0.01f + ((media % 4096) / 8192f);
+
+    /// <summary>A stand-in for Steam Audio that plays W on both ears.</summary>
+    private sealed class WToBothEars(int sampleRate) : Spatial.IAmbisonicsSpatializer
+    {
+        public int BlockFrames => 256;
+
+        public int SampleRate => sampleRate;
+
+        public int MaxOrder => 3;
+
+        public void Reset()
+        {
+        }
+
+        public void Process(ReadOnlySpan<float> ambiX, int channels, Span<float> stereoOut, System.Numerics.Quaternion headInContent)
+        {
+            for (int i = 0; i < BlockFrames; i++)
+            {
+                stereoOut[2 * i] = ambiX[i * channels];
+                stereoOut[(2 * i) + 1] = ambiX[i * channels];
+            }
+        }
+
+        public void Dispose()
+        {
+        }
+    }
 
     /// <summary>Stands in for the decoder: flush, start at <paramref name="firstFrame"/>, write.</summary>
     private static void Fill(AudioOutput output, long firstFrame, int frames, float? constant = null)

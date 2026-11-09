@@ -4,8 +4,8 @@ using System.Runtime.InteropServices;
 namespace Orbivo.Audio.SteamAudio;
 
 /// <summary>
-/// P/Invoke declarations for the part of Steam Audio 4.8.1 (<c>phonon.h</c>) that Orbivo uses: context, HRTF and the
-/// binaural effect. Written against exactly <see cref="SteamAudioRuntime.ExpectedVersion"/>; an update of phonon.dll
+/// P/Invoke declarations for the part of Steam Audio 4.8.1 (<c>phonon.h</c>) that Orbivo uses: context, HRTF, the
+/// binaural effect and the Ambisonics decode effect (M10); the Ambisonics encode effect serves the tests. Written against exactly <see cref="SteamAudioRuntime.ExpectedVersion"/>; an update of phonon.dll
 /// needs a check of these structs against the new header (native/README.md).
 /// </summary>
 /// <remarks>
@@ -45,6 +45,28 @@ internal static unsafe partial class Phonon
 
     [LibraryImport(Library, EntryPoint = "iplBinauralEffectApply")]
     public static partial IplAudioEffectState BinauralEffectApply(nint effect, IplBinauralEffectParams* parameters, IplAudioBuffer* input, IplAudioBuffer* output);
+
+    [LibraryImport(Library, EntryPoint = "iplAmbisonicsDecodeEffectCreate")]
+    public static partial IplError AmbisonicsDecodeEffectCreate(nint context, IplAudioSettings* audioSettings, IplAmbisonicsDecodeEffectSettings* effectSettings, nint* effect);
+
+    [LibraryImport(Library, EntryPoint = "iplAmbisonicsDecodeEffectRelease")]
+    public static partial void AmbisonicsDecodeEffectRelease(nint* effect);
+
+    [LibraryImport(Library, EntryPoint = "iplAmbisonicsDecodeEffectReset")]
+    public static partial void AmbisonicsDecodeEffectReset(nint effect);
+
+    /// <summary>Rotates an N3D sound field and renders it; cannot work in place.</summary>
+    [LibraryImport(Library, EntryPoint = "iplAmbisonicsDecodeEffectApply")]
+    public static partial IplAudioEffectState AmbisonicsDecodeEffectApply(nint effect, IplAmbisonicsDecodeEffectParams* parameters, IplAudioBuffer* input, IplAudioBuffer* output);
+
+    [LibraryImport(Library, EntryPoint = "iplAmbisonicsEncodeEffectCreate")]
+    public static partial IplError AmbisonicsEncodeEffectCreate(nint context, IplAudioSettings* audioSettings, IplAmbisonicsEncodeEffectSettings* effectSettings, nint* effect);
+
+    [LibraryImport(Library, EntryPoint = "iplAmbisonicsEncodeEffectRelease")]
+    public static partial void AmbisonicsEncodeEffectRelease(nint* effect);
+
+    [LibraryImport(Library, EntryPoint = "iplAmbisonicsEncodeEffectApply")]
+    public static partial IplAudioEffectState AmbisonicsEncodeEffectApply(nint effect, IplAmbisonicsEncodeEffectParams* parameters, IplAudioBuffer* input, IplAudioBuffer* output);
 }
 
 internal enum IplError
@@ -88,6 +110,23 @@ internal enum IplHrtfInterpolation
     Bilinear = 1,
 }
 
+internal enum IplSpeakerLayoutType
+{
+    Mono = 0,
+    Stereo = 1,
+    Quadraphonic = 2,
+    Surround51 = 3,
+    Surround71 = 4,
+    Custom = 5,
+}
+
+/// <summary>IPLbool.</summary>
+internal enum IplBool
+{
+    False = 0,
+    True = 1,
+}
+
 [StructLayout(LayoutKind.Sequential)]
 internal struct IplContextSettings
 {
@@ -129,6 +168,56 @@ internal unsafe struct IplAudioBuffer
 internal struct IplBinauralEffectSettings
 {
     public nint Hrtf;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct IplSpeakerLayout
+{
+    public IplSpeakerLayoutType Type;
+    public int NumSpeakers;
+    public Vector3* Speakers;
+}
+
+/// <summary>A coordinate system in the canonical one: +x right, +y up, −z ahead (the same axes as OpenXR).</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct IplCoordinateSpace3
+{
+    public Vector3 Right;
+    public Vector3 Up;
+    public Vector3 Ahead;
+    public Vector3 Origin;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct IplAmbisonicsDecodeEffectSettings
+{
+    public IplSpeakerLayout SpeakerLayout;
+    public nint Hrtf;
+    public int MaxOrder;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct IplAmbisonicsDecodeEffectParams
+{
+    public int Order;
+    public nint Hrtf;
+
+    /// <summary>The listener's orientation in the frame of the sound field.</summary>
+    public IplCoordinateSpace3 Orientation;
+    public IplBool Binaural;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct IplAmbisonicsEncodeEffectSettings
+{
+    public int MaxOrder;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct IplAmbisonicsEncodeEffectParams
+{
+    public Vector3 Direction;
+    public int Order;
 }
 
 [StructLayout(LayoutKind.Sequential)]

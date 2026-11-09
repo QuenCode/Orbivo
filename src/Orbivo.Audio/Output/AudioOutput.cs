@@ -28,6 +28,10 @@ namespace Orbivo.Audio.Output;
 /// soon as possible: a <see cref="SpatialStage"/> with Steam Audio per device rate, created when a device is opened.
 /// Without Steam Audio the sound stays plain stereo and the status says why.
 /// </para>
+/// <para>
+/// An Ambisonics field (M10) goes through an <see cref="AmbisonicsStage"/> per device rate, made at the same time. The
+/// ring buffer therefore holds up to <see cref="AmbisonicsLayout.MaxChannels"/> samples per frame.
+/// </para>
 /// The period loop never blocks except on the device event and never allocates (CLAUDE.md rule 2);
 /// <see cref="PeriodAllocatedBytes"/> counts it for the tests. Opening devices and logging happen outside it.
 /// </remarks>
@@ -35,7 +39,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
 {
     public static readonly TimeSpan RetryInterval = TimeSpan.FromSeconds(2);
 
-    /// <summary>Ring buffer size: 2.7 s at 48 kHz.</summary>
+    /// <summary>Ring buffer size: 2.7 s at 48 kHz (8 MB with 16 channel slots).</summary>
     public const int RingFrames = 1 << 17;
 
     private const int FallbackSampleRate = 48_000;
@@ -45,6 +49,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
     private readonly ILogger _logger;
     private readonly Func<IAudioEndpointProvider> _providerFactory;
     private readonly Func<int, IBlockSpatializer>? _spatializerFactory;
+    private readonly Func<int, IAmbisonicsSpatializer>? _ambisonicsFactory;
     private readonly ListenerOrientation? _listener;
     private readonly SpscQueue<Command> _commands = new(64);
     private readonly Lock _commandLock = new();
@@ -74,6 +79,8 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
     private volatile bool _spatialActive;
     private double _spatialPeakLoad;
     private volatile string? _spatialProblem;
+    private volatile bool _fieldBinaural;
+    private volatile string? _ambisonicsProblem;
     private StereoPlacement _requestedPlacement = StereoPlacement.HeadLocked;
 
     // Output thread only.
@@ -86,6 +93,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
     private long _retryAt;
     private long _lastProgress;
     private int _spatialFailedRate;
+    private int _ambisonicsFailedRate;
 
     /// <summary>Plays on the Windows device <paramref name="deviceId"/> (null = Windows default).</summary>
     /// <param name="deviceId">Device, or null for the Windows default.</param>
@@ -93,7 +101,14 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
     /// <param name="logger">Logger.</param>
     /// <param name="listener">Head orientation for sound fixed to the picture; null = always looking at the front.</param>
     public AudioOutput(string? deviceId, float volume, ILogger logger, ListenerOrientation? listener = null)
-        : this(() => new WasapiEndpointProvider(logger), deviceId, volume, logger, rate => SteamStereoSpatializer.Create(rate), listener)
+        : this(
+            () => new WasapiEndpointProvider(logger),
+            deviceId,
+            volume,
+            logger,
+            rate => SteamStereoSpatializer.Create(rate),
+            listener,
+            rate => SteamAmbisonicsSpatializer.Create(rate))
     {
     }
 
@@ -103,21 +118,24 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
     /// <param name="logger">Logger.</param>
     /// <param name="spatializerFactory">Makes the spatializer for a device rate; null = plain stereo only.</param>
     /// <param name="listener">Head orientation, or null.</param>
+    /// <param name="ambisonicsFactory">Makes the Ambisonics renderer for a device rate; null = fallback pair only.</param>
     internal AudioOutput(
         Func<IAudioEndpointProvider> providerFactory,
         string? deviceId,
         float volume,
         ILogger logger,
         Func<int, IBlockSpatializer>? spatializerFactory = null,
-        ListenerOrientation? listener = null)
+        ListenerOrientation? listener = null,
+        Func<int, IAmbisonicsSpatializer>? ambisonicsFactory = null)
     {
         _providerFactory = providerFactory;
         _spatializerFactory = spatializerFactory;
+        _ambisonicsFactory = ambisonicsFactory;
         _listener = listener;
         _logger = logger;
         _selectedDeviceId = deviceId;
         _volume = Math.Clamp(volume, 0f, 1f);
-        Ring = new AudioRingBuffer(2, RingFrames);
+        Ring = new AudioRingBuffer(AmbisonicsLayout.MaxChannels, RingFrames);
         _thread = new Thread(Run) { Name = "Orbivo audio output", IsBackground = true, Priority = ThreadPriority.Highest };
         _thread.Start();
 
@@ -205,7 +223,11 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
             _spatialActive,
             ReadRequestedPlacement(),
             Volatile.Read(ref _spatialPeakLoad),
-            _spatialProblem),
+            _spatialProblem)
+        {
+            FieldBinaural = _fieldBinaural,
+            AmbisonicsProblem = _ambisonicsProblem,
+        },
     };
 
     private StereoPlacement ReadRequestedPlacement()
@@ -301,6 +323,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
         _endpoint?.Dispose();
         _provider?.Dispose();
         _renderer?.SetStage(null);
+        _renderer?.SetAmbisonicsStage(null);
     }
 
     /// <summary>One device period: commands, sound, clock, status. No allocations.</summary>
@@ -353,7 +376,9 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
         Interlocked.Exchange(ref _underrunFrames, renderer.UnderrunFrames);
         Volatile.Write(ref _driftPpm, renderer.Tracker.DriftPpm);
         _spatialActive = renderer.SpatialActive;
-        Volatile.Write(ref _spatialPeakLoad, renderer.Stage?.PeakLoad ?? 0);
+        _fieldBinaural = renderer.FieldBinaural;
+        double load = renderer.SourceChannels > 2 ? renderer.AmbisonicsStage?.PeakLoad ?? 0 : renderer.Stage?.PeakLoad ?? 0;
+        Volatile.Write(ref _spatialPeakLoad, load);
     }
 
     private void ApplyCommands(AudioRenderer renderer)
@@ -502,6 +527,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
         }
 
         UpdateStage(_renderer, endpoint.SampleRate);
+        UpdateAmbisonicsStage(_renderer, endpoint.SampleRate);
         _lastProgress = now;
         _sampleRate = endpoint.SampleRate;
         _deviceChannels = endpoint.Channels;
@@ -554,6 +580,51 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
             _spatialProblem = $"Ton fest am Bild nicht verfügbar: Steam Audio lässt sich nicht laden ({exception.Message}). Der Ton läuft als normales Stereo.";
             _logger.LogError(exception, "Steam Audio could not be prepared for {Rate} Hz; stereo plays without spatial rendering", sampleRate);
             renderer.SetStage(null);
+        }
+    }
+
+    /// <summary>
+    /// Gives the renderer an Ambisonics stage for <paramref name="sampleRate"/>, like <see cref="UpdateStage"/>. A failure
+    /// is logged once per rate; Ambisonics then plays through the fallback pair.
+    /// </summary>
+    private void UpdateAmbisonicsStage(AudioRenderer renderer, int sampleRate)
+    {
+        if (_ambisonicsFactory is null)
+        {
+            return;
+        }
+
+        if (renderer.AmbisonicsStage is { } current && current.SampleRate == sampleRate)
+        {
+            renderer.SetAmbisonicsStage(current);
+            return;
+        }
+
+        if (_ambisonicsFailedRate == sampleRate)
+        {
+            renderer.SetAmbisonicsStage(null);
+            return;
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            var stage = new AmbisonicsStage(_ambisonicsFactory(sampleRate), _listener);
+            renderer.SetAmbisonicsStage(stage);
+            _ambisonicsProblem = null;
+            _logger.LogInformation(
+                "Ambisonics is ready: Steam Audio binaural decoding up to order {Order} at {Rate} Hz, blocks of {Block} frames, prepared in {Milliseconds} ms",
+                AmbisonicsLayout.GetDegree(stage.MaxChannels - 1),
+                sampleRate,
+                stage.LatencyFrames,
+                stopwatch.ElapsedMilliseconds);
+        }
+        catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException or SteamAudioException or ArgumentException)
+        {
+            _ambisonicsFailedRate = sampleRate;
+            _ambisonicsProblem = $"Ambisonics nicht binaural: Steam Audio lässt sich nicht laden ({exception.Message}). Notbehelf: zwei Richtmikrofone links und rechts, ohne Kopfbewegung.";
+            _logger.LogError(exception, "Steam Audio Ambisonics could not be prepared for {Rate} Hz; Ambisonics plays through a cardioid pair", sampleRate);
+            renderer.SetAmbisonicsStage(null);
         }
     }
 
