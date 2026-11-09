@@ -1,4 +1,5 @@
 using System.Globalization;
+using Orbivo.Core.Audio;
 using Orbivo.Core.Formats;
 
 namespace Orbivo.Core.Logging;
@@ -64,14 +65,26 @@ public static class SessionEventText
             changes.Add("Stereo-Breite: " + (after.StereoWidthDegrees is { } w ? string.Create(GermanCsv.Numbers, $"{w:0.#}°") : "Standard"));
         }
 
+        if (before.AudioMode != after.AudioMode)
+        {
+            changes.Add("Tonformat: " + after.AudioMode switch
+            {
+                AudioModeChoice.Channels => "Kanäle",
+                AudioModeChoice.AmbiX => "Ambisonics AmbiX",
+                AudioModeChoice.FuMa => "Ambisonics FuMa",
+                _ => "automatisch",
+            });
+        }
+
         return changes.Count == 0 ? "Keine Änderung" : string.Join("; ", changes);
     }
 
     /// <summary>True if only the sound settings changed (logged as "Ton" instead of "Format").</summary>
     public static bool OnlySoundChanged(FormatOverrides before, FormatOverrides after)
     {
-        return before with { AudioFixedToPicture = null, StereoWidthDegrees = null } == after with { AudioFixedToPicture = null, StereoWidthDegrees = null }
-            && before != after;
+        FormatOverrides beforeWithoutSound = before with { AudioFixedToPicture = null, StereoWidthDegrees = null, AudioMode = null };
+        FormatOverrides afterWithoutSound = after with { AudioFixedToPicture = null, StereoWidthDegrees = null, AudioMode = null };
+        return beforeWithoutSound == afterWithoutSound && before != after;
     }
 
     private static string OnOffAuto(bool? value) => value switch

@@ -1,3 +1,5 @@
+using Orbivo.Core.Audio;
+using Orbivo.Core.Formats;
 using Orbivo.Core.Logging;
 using Orbivo.Core.Playback;
 
@@ -21,6 +23,28 @@ public sealed class SessionEventTextTests
     {
         Assert.Equal("1,5 s", SessionEventText.Seconds(TimeSpan.FromSeconds(1.5)));
         Assert.Equal("0,25 s", SessionEventText.Seconds(TimeSpan.FromSeconds(0.25)));
+    }
+
+    [Fact]
+    public void AudioModeChange_IsNamedAndCountsAsSound()
+    {
+        FormatOverrides before = FormatOverrides.None with { AudioFixedToPicture = true };
+        FormatOverrides after = before with { AudioMode = AudioModeChoice.FuMa };
+
+        Assert.Equal("Tonformat: Ambisonics FuMa", SessionEventText.FormatChanges(before, after));
+        Assert.Equal("Tonformat: automatisch", SessionEventText.FormatChanges(after, before));
+        Assert.True(SessionEventText.OnlySoundChanged(before, after));
+    }
+
+    [Fact]
+    public void PictureChange_WithAudioMode_IsNotOnlySound()
+    {
+        FormatOverrides before = FormatOverrides.None;
+        FormatOverrides after = before with { AudioMode = AudioModeChoice.AmbiX, SwapEyes = true };
+
+        Assert.Equal("Augen tauschen: an; Tonformat: Ambisonics AmbiX", SessionEventText.FormatChanges(before, after));
+        Assert.False(SessionEventText.OnlySoundChanged(before, after));
+        Assert.False(SessionEventText.OnlySoundChanged(before, before));
     }
 
     [Theory]
