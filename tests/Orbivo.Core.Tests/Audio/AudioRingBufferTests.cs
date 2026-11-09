@@ -41,6 +41,60 @@ public sealed class AudioRingBufferTests
     }
 
     [Fact]
+    public void Generation_WithFewerChannels_KeepsItsFramesApart_AndWraps()
+    {
+        using var ring = new AudioRingBuffer(16, 4);
+        ring.RequestFlush();
+        ring.AcknowledgeFlush();
+        ring.Start(0, 48_000, 4);
+        Assert.Equal(4, ring.FrameChannels);
+        Assert.Equal(3, ring.Write([0, 1, 2, 3, 10, 11, 12, 13, 20, 21, 22, 23]));
+
+        Span<float> buffer = stackalloc float[8];
+        Assert.Equal(2, ring.Read(buffer, 2));
+        Assert.Equal([0f, 1f, 2f, 3f, 10f, 11f, 12f, 13f], buffer.ToArray());
+
+        // Past the end of the slots: frames 4 and 5 wrap around.
+        Assert.Equal(3, ring.Write([30, 31, 32, 33, 40, 41, 42, 43, 50, 51, 52, 53]));
+        Span<float> rest = stackalloc float[16];
+        Assert.Equal(4, ring.Read(rest, 4));
+        Assert.Equal([20f, 21f, 22f, 23f, 30f, 31f, 32f, 33f, 40f, 41f, 42f, 43f, 50f, 51f, 52f, 53f], rest.ToArray());
+    }
+
+    [Fact]
+    public void EachGeneration_HasItsOwnChannelCount()
+    {
+        using var ring = new AudioRingBuffer(16, 8);
+        ring.RequestFlush();
+        ring.AcknowledgeFlush();
+        ring.Start(0, 48_000, 2);
+        Assert.Equal(1, ring.Write([1, -1]));
+
+        ring.RequestFlush();
+        ring.AcknowledgeFlush();
+        ring.Start(100, 48_000, 9);
+        Assert.Equal(9, ring.FrameChannels);
+        float[] frame = [.. Enumerable.Range(0, 9).Select(i => (float)i)];
+        Assert.Equal(1, ring.Write(frame));
+        Assert.Equal(1, ring.WriteSilence(1));
+
+        var buffer = new float[18];
+        Assert.Equal(100, ring.ReadPosition);
+        Assert.Equal(2, ring.Read(buffer, 2));
+        Assert.Equal(frame, buffer[..9]);
+        Assert.All(buffer[9..], sample => Assert.Equal(0f, sample));
+    }
+
+    [Fact]
+    public void Start_WithMoreChannelsThanTheSlots_Throws()
+    {
+        using var ring = new AudioRingBuffer(2, 8);
+        ring.RequestFlush();
+        ring.AcknowledgeFlush();
+        Assert.Throws<ArgumentOutOfRangeException>(() => ring.Start(0, 48_000, 4));
+    }
+
+    [Fact]
     public void Write_StopsWhenFull_AndWrapsAround()
     {
         using var ring = new AudioRingBuffer(1, 4);

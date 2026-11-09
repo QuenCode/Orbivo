@@ -1,5 +1,6 @@
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
+using Orbivo.Core.Audio;
 using Orbivo.Core.Formats;
 
 namespace Orbivo.Media;
@@ -53,9 +54,16 @@ internal sealed unsafe class MediaDemuxer : IDisposable
     private int _handledSeekId;
     private bool _ended;
 
-    private MediaDemuxer(string path, AVFormatContext* format, int videoStreamIndex, int audioStreamIndex, ILogger logger)
+    private MediaDemuxer(
+        string path,
+        AVFormatContext* format,
+        int videoStreamIndex,
+        int audioStreamIndex,
+        EmbeddedAudioLayout? audioLayout,
+        ILogger logger)
     {
         Path = path;
+        AudioLayout = audioLayout;
         _format = format;
         _logger = logger;
         VideoStreamIndex = videoStreamIndex;
@@ -105,6 +113,12 @@ internal sealed unsafe class MediaDemuxer : IDisposable
     /// <summary>Audio stream that is demuxed, or −1 (no sound track, or sound not wanted).</summary>
     public int AudioStreamIndex { get; }
 
+    /// <summary>
+    /// Channel layout of the audio stream as the container states it (F23), or null without a sound track. Read before
+    /// FFmpeg probes the decoder, which replaces e.g. "ambisonic 1" from an MP4 <c>SA3D</c> box by the AAC layout "4.0".
+    /// </summary>
+    public EmbeddedAudioLayout? AudioLayout { get; }
+
     public PacketQueue VideoQueue { get; }
 
     public PacketQueue? AudioQueue { get; }
@@ -144,6 +158,7 @@ internal sealed unsafe class MediaDemuxer : IDisposable
                     "Datei kann nicht geöffnet werden (kein bekanntes Videoformat?)");
             }
 
+            EmbeddedAudioLayout?[] containerLayouts = ReadContainerAudioLayouts(format);
             FFmpegError.Check(ffmpeg.avformat_find_stream_info(format, null), "avformat_find_stream_info");
 
             int video = ffmpeg.av_find_best_stream(format, AVMediaType.AVMEDIA_TYPE_VIDEO, -1, -1, null, 0);
@@ -163,7 +178,8 @@ internal sealed unsafe class MediaDemuxer : IDisposable
                 format->streams[i]->discard = i == video || i == audio ? AVDiscard.AVDISCARD_DEFAULT : AVDiscard.AVDISCARD_ALL;
             }
 
-            var demuxer = new MediaDemuxer(path, format, video, audio, logger);
+            EmbeddedAudioLayout? audioLayout = audio >= 0 ? CompleteAudioLayout(containerLayouts, format->streams[audio]) : null;
+            var demuxer = new MediaDemuxer(path, format, video, audio, audioLayout, logger);
             format = null;
             return demuxer;
         }
@@ -178,6 +194,46 @@ internal sealed unsafe class MediaDemuxer : IDisposable
                 ffmpeg.avformat_close_input(&format);
             }
         }
+    }
+
+    /// <summary>
+    /// The channel layout every audio stream has right after <c>avformat_open_input</c>: what the container says, before
+    /// the decoder is probed.
+    /// </summary>
+    private static EmbeddedAudioLayout?[] ReadContainerAudioLayouts(AVFormatContext* format)
+    {
+        var layouts = new EmbeddedAudioLayout?[format->nb_streams];
+        for (int i = 0; i < layouts.Length; i++)
+        {
+            AVCodecParameters* parameters = format->streams[i]->codecpar;
+            if (parameters->codec_type != AVMediaType.AVMEDIA_TYPE_AUDIO || parameters->ch_layout.nb_channels <= 0)
+            {
+                continue;
+            }
+
+            AVChannelLayout* layout = &parameters->ch_layout;
+            int order = ffmpeg.av_channel_layout_ambisonic_order(layout);
+            bool named = order < 0
+                && (layout->order == AVChannelOrder.AV_CHANNEL_ORDER_NATIVE || layout->order == AVChannelOrder.AV_CHANNEL_ORDER_CUSTOM);
+            layouts[i] = new EmbeddedAudioLayout(layout->nb_channels, order >= 0 ? order : null, named);
+        }
+
+        return layouts;
+    }
+
+    /// <summary>
+    /// The container layout of the chosen audio stream. Containers that state no channel count before probing
+    /// (MPEG-TS, …) get the probed count without named speakers: the layout comes from the decoder, not the container.
+    /// </summary>
+    private static EmbeddedAudioLayout CompleteAudioLayout(EmbeddedAudioLayout?[] containerLayouts, AVStream* stream)
+    {
+        int index = stream->index;
+        if (index < containerLayouts.Length && containerLayouts[index] is { } layout)
+        {
+            return layout;
+        }
+
+        return new EmbeddedAudioLayout(stream->codecpar->ch_layout.nb_channels, null, LayoutKnown: false);
     }
 
     public void Start()

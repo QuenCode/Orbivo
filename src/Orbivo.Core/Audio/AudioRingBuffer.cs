@@ -16,6 +16,11 @@ namespace Orbivo.Core.Audio;
 /// and waits until the consumer has dropped the old data (<see cref="AcknowledgeFlush"/>). The consumer does that only
 /// once it has faded out, so a seek never cuts the sound off hard.
 /// </para>
+/// <para>
+/// Each frame slot holds up to <see cref="Channels"/> samples. A generation of data has its own channel count
+/// (<see cref="FrameChannels"/>, set by <see cref="Start(long, int, int)"/>): 2 for stereo, 4, 9 or 16 for an
+/// Ambisonics sound field (M10). <see cref="Write"/> and <see cref="Read"/> take and give that many samples per frame.
+/// </para>
 /// Consumer methods never block and never allocate (CLAUDE.md rule 2). Producer methods may wait.
 /// </remarks>
 public sealed class AudioRingBuffer : IDisposable
@@ -33,13 +38,14 @@ public sealed class AudioRingBuffer : IDisposable
     private int _startedGeneration;
     private long _startFrame;
     private int _sampleRate;
+    private int _frameChannels;
     private int _endedGeneration;
 
     // Consumer → producer.
     private int _generation;
     private long _generationHead;
 
-    /// <param name="channels">Samples per frame.</param>
+    /// <param name="channels">Most samples per frame (the slot size).</param>
     /// <param name="minimumCapacityFrames">At least this many frames fit; rounded up to a power of two.</param>
     public AudioRingBuffer(int channels, int minimumCapacityFrames)
     {
@@ -49,9 +55,17 @@ public sealed class AudioRingBuffer : IDisposable
         CapacityFrames = (int)BitOperations.RoundUpToPowerOf2((uint)minimumCapacityFrames);
         _frameMask = CapacityFrames - 1;
         _samples = new float[CapacityFrames * channels];
+        _frameChannels = channels;
     }
 
+    /// <summary>Most samples per frame.</summary>
     public int Channels { get; }
+
+    /// <summary>
+    /// Samples per frame of the current data (from <see cref="Start(long, int, int)"/>). Producer: after the start;
+    /// consumer: valid if <see cref="HasStart"/>.
+    /// </summary>
+    public int FrameChannels => Volatile.Read(ref _frameChannels);
 
     public int CapacityFrames { get; }
 
@@ -98,10 +112,19 @@ public sealed class AudioRingBuffer : IDisposable
     /// </summary>
     /// <param name="startFrame">Media position of the first frame.</param>
     /// <param name="sampleRate">Sample rate of the data; the consumer plays it only on a device stream of the same rate.</param>
-    public void Start(long startFrame, int sampleRate)
+    public void Start(long startFrame, int sampleRate) => Start(startFrame, sampleRate, Channels);
+
+    /// <summary>As <see cref="Start(long, int)"/>, for data with <paramref name="channels"/> samples per frame.</summary>
+    /// <param name="startFrame">Media position of the first frame.</param>
+    /// <param name="sampleRate">Sample rate of the data.</param>
+    /// <param name="channels">Samples per frame, 1 to <see cref="Channels"/>.</param>
+    public void Start(long startFrame, int sampleRate, int channels)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(channels, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(channels, Channels);
         Volatile.Write(ref _startFrame, startFrame);
         Volatile.Write(ref _sampleRate, sampleRate);
+        Volatile.Write(ref _frameChannels, channels);
         Volatile.Write(ref _startedGeneration, _requestedGeneration);
     }
 
@@ -117,11 +140,14 @@ public sealed class AudioRingBuffer : IDisposable
     /// <summary>Producer: media position of the next frame to write. Valid after <see cref="Start"/>.</summary>
     public long WritePosition => Volatile.Read(ref _startFrame) + (_tail - Volatile.Read(ref _generationHead));
 
-    /// <summary>Producer: copies as many whole frames of <paramref name="interleaved"/> as fit; returns the number of frames.</summary>
+    /// <summary>
+    /// Producer: copies as many whole frames of <paramref name="interleaved"/> (<see cref="FrameChannels"/> samples each)
+    /// as fit; returns the number of frames.
+    /// </summary>
     public int Write(ReadOnlySpan<float> interleaved)
     {
-        int frames = Math.Min(interleaved.Length / Channels, FreeFrames);
-        CopyIn(interleaved[..(frames * Channels)]);
+        int frames = Math.Min(interleaved.Length / _frameChannels, FreeFrames);
+        CopyIn(interleaved, frames);
         return frames;
     }
 
@@ -189,17 +215,32 @@ public sealed class AudioRingBuffer : IDisposable
     /// <summary>Consumer: the current generation is complete and fully read.</summary>
     public bool EndOfData => Volatile.Read(ref _endedGeneration) == _generation && AvailableFrames == 0;
 
-    /// <summary>Consumer: copies up to <paramref name="frames"/> frames into <paramref name="destination"/>; returns the number read.</summary>
+    /// <summary>
+    /// Consumer: copies up to <paramref name="frames"/> frames (<see cref="FrameChannels"/> samples each) into
+    /// <paramref name="destination"/>; returns the number read.
+    /// </summary>
     public int Read(Span<float> destination, int frames)
     {
-        frames = Math.Min(Math.Min(frames, AvailableFrames), destination.Length / Channels);
+        int channels = Volatile.Read(ref _frameChannels);
+        frames = Math.Min(Math.Min(frames, AvailableFrames), destination.Length / channels);
         long head = _head;
-        int first = (int)Math.Min(frames, CapacityFrames - (head & _frameMask));
-        int offset = (int)(head & _frameMask) * Channels;
-        _samples.AsSpan(offset, first * Channels).CopyTo(destination);
-        if (first < frames)
+        if (channels == Channels)
         {
-            _samples.AsSpan(0, (frames - first) * Channels).CopyTo(destination[(first * Channels)..]);
+            int first = (int)Math.Min(frames, CapacityFrames - (head & _frameMask));
+            int offset = (int)(head & _frameMask) * Channels;
+            _samples.AsSpan(offset, first * Channels).CopyTo(destination);
+            if (first < frames)
+            {
+                _samples.AsSpan(0, (frames - first) * Channels).CopyTo(destination[(first * Channels)..]);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < frames; i++)
+            {
+                int offset = (int)((head + i) & _frameMask) * Channels;
+                _samples.AsSpan(offset, channels).CopyTo(destination.Slice(i * channels, channels));
+            }
         }
 
         Volatile.Write(ref _head, head + frames);
@@ -221,16 +262,27 @@ public sealed class AudioRingBuffer : IDisposable
         _consumerProgress.Dispose();
     }
 
-    private void CopyIn(ReadOnlySpan<float> interleaved)
+    private void CopyIn(ReadOnlySpan<float> interleaved, int frames)
     {
-        int frames = interleaved.Length / Channels;
+        int channels = _frameChannels;
         long tail = _tail;
-        int first = (int)Math.Min(frames, CapacityFrames - (tail & _frameMask));
-        int offset = (int)(tail & _frameMask) * Channels;
-        interleaved[..(first * Channels)].CopyTo(_samples.AsSpan(offset));
-        if (first < frames)
+        if (channels == Channels)
         {
-            interleaved[(first * Channels)..].CopyTo(_samples);
+            int first = (int)Math.Min(frames, CapacityFrames - (tail & _frameMask));
+            int offset = (int)(tail & _frameMask) * Channels;
+            interleaved[..(first * Channels)].CopyTo(_samples.AsSpan(offset));
+            if (first < frames)
+            {
+                interleaved[(first * Channels)..(frames * Channels)].CopyTo(_samples);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < frames; i++)
+            {
+                int offset = (int)((tail + i) & _frameMask) * Channels;
+                interleaved.Slice(i * channels, channels).CopyTo(_samples.AsSpan(offset, channels));
+            }
         }
 
         Volatile.Write(ref _tail, tail + frames);

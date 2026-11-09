@@ -103,7 +103,7 @@ public sealed class AudioDecoderTests(HardwareDecodeFixture fixture)
             MediaDemuxer demuxer = MediaDemuxer.Open(path, withAudio: true, logger);
             Assert.True(demuxer.AudioStreamIndex >= 0, "the test video has a sound track");
             var ring = new AudioRingBuffer(2, 65_536);
-            AudioDecoder decoder = AudioDecoder.Open(demuxer, ring, outputRate, logger);
+            AudioDecoder decoder = AudioDecoder.Open(demuxer, ring, outputRate, null, logger);
             decoder.Start();
             demuxer.Start();
             return new SoundRun(demuxer, ring, decoder);

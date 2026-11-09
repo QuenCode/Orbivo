@@ -599,32 +599,44 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         if (rate > 0 && rate != audio.OutputSampleRate && _machine.State is not (PlaybackState.Failed or PlaybackState.NoMedia))
         {
             // The device changed its rate (other device, or Windows settings): decode for the new rate from here on.
-            long origin = _decoder is { HasFirstFrame: true } video ? video.FirstPtsTicks : 0;
-            TimeSpan position = TimeSpan.FromTicks(Math.Max(0, _clock.MediaTicks - origin));
-            _logger.LogInformation(
-                "Sound output rate changed from {Old} to {New} Hz; the sound decoder starts again at {Position}.",
-                audio.OutputSampleRate,
-                rate,
-                position);
-            audio.Dispose();
-            _audioDecoder = null;
-            try
-            {
-                AudioDecoder reopened = AudioDecoder.Open(_demuxer, output.Ring, rate, _logger);
-                _audioDecoder = reopened;
-                ApplyStereoPlacement();
-                reopened.Start();
-            }
-            catch (MediaOpenException exception)
-            {
-                _logger.LogError(exception, "The sound decoder cannot start again; the video plays on without sound.");
-            }
-
-            _clock.UseAudio(_audioDecoder is not null);
-            SeekTo(position);
+            _logger.LogInformation("Sound output rate changed from {Old} to {New} Hz.", audio.OutputSampleRate, rate);
+            RestartAudioDecoder(rate);
         }
 
         LogAvSync();
+    }
+
+    /// <summary>
+    /// Opens the sound decoder again at the current position: for a new device rate, or another audio mode (F23).
+    /// Control thread.
+    /// </summary>
+    private void RestartAudioDecoder(int rate)
+    {
+        if (_audioDecoder is not { } audio || _audio is not { } output || _demuxer is null)
+        {
+            return;
+        }
+
+        long origin = _decoder is { HasFirstFrame: true } video ? video.FirstPtsTicks : 0;
+        TimeSpan position = TimeSpan.FromTicks(Math.Max(0, _clock.MediaTicks - origin));
+        _logger.LogInformation("The sound decoder starts again at {Position} ({Rate} Hz).", position, rate);
+        audio.Dispose();
+        _audioDecoder = null;
+        try
+        {
+            AudioDecoder reopened = AudioDecoder.Open(_demuxer, output.Ring, rate, _overrides.AudioMode, _logger);
+            _audioDecoder = reopened;
+            ApplyStereoPlacement();
+            reopened.Start();
+        }
+        catch (MediaOpenException exception)
+        {
+            _logger.LogError(exception, "The sound decoder cannot start again; the video plays on without sound.");
+        }
+
+        UpdateFormatStatus();
+        _clock.UseAudio(_audioDecoder is not null);
+        SeekTo(position);
     }
 
     private void LogAvSync()
@@ -800,7 +812,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             {
                 try
                 {
-                    audio = AudioDecoder.Open(demuxer, _audio!.Ring, _audio.SampleRate, _logger);
+                    audio = AudioDecoder.Open(demuxer, _audio!.Ring, _audio.SampleRate, _overrides.AudioMode, _logger);
                 }
                 catch (MediaOpenException exception)
                 {
@@ -815,6 +827,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             _decoder = video;
             _audioDecoder = audio;
             ApplyStereoPlacement();
+            UpdateFormatStatus();
             return true;
         }
         catch
@@ -989,12 +1002,22 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             return;
         }
 
+        AudioModeChoice? previousAudioMode = _overrides.AudioMode;
         _overrides = overrides;
         ResolveFormat();
         ApplyStereoPlacement();
         if (_decoder is { } decoder && _resolvedFormat is { } resolved)
         {
             decoder.Queue.PictureFormat = resolved.Format;
+        }
+
+        if (overrides.AudioMode != previousAudioMode && _audioDecoder is { } audio && _machine.State is not (PlaybackState.Failed or PlaybackState.NoMedia))
+        {
+            _logger.LogInformation(
+                "Audio mode of {Path} changed to {Mode}.",
+                _filePath,
+                overrides.AudioMode?.ToString() ?? "automatic");
+            RestartAudioDecoder(audio.OutputSampleRate);
         }
 
         try
@@ -1062,6 +1085,11 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         }
 
         IReadOnlyList<string> warnings = sidecar.Warnings.Count == 0 ? resolved.Warnings : [.. sidecar.Warnings, .. resolved.Warnings];
+        if (_audioDecoder?.Plan.Mode?.Warning is { } audioWarning)
+        {
+            warnings = [.. warnings, audioWarning];
+        }
+
         return new VideoFormatStatus(
             resolved.Format,
             resolved.Automatic,

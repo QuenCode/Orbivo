@@ -17,6 +17,18 @@ internal static class TestVideos
     /// <summary>H.264 4320 × 2160: larger than NVDEC decodes H.264 (4096), so it needs the software decoder.</summary>
     public static string H264AboveGpuLimit => Require("equirect360_mono_4320x2160_h264_8bit_30fps_4s.mp4");
 
+    /// <summary>Ambisonics direction test (M10), first order AmbiX as AAC with an <c>SA3D</c> box.</summary>
+    public static string AmbisonicsSa3d => Require("ambisonics_richtungstest_equirect360_mono_4096x2048_hevc_8bit_30fps.mp4");
+
+    /// <summary>The same as AAC without any Ambisonics metadata.</summary>
+    public static string AmbisonicsWithoutMetadata => Require("ambisonics_richtungstest_equirect360_mono_4096x2048_hevc_8bit_30fps_ohne_metadaten.mp4");
+
+    /// <summary>The same in FuMa (W X Y Z, W −3 dB) without metadata; its sidecar says <c>"audioMode": "FuMa"</c>.</summary>
+    public static string AmbisonicsFuMa => Require("ambisonics_richtungstest_equirect360_mono_4096x2048_hevc_8bit_30fps_fuma.mp4");
+
+    /// <summary>Third order AmbiX, 16 channels PCM in Matroska.</summary>
+    public static string AmbisonicsThirdOrder => Require("ambisonics_richtungstest_equirect360_mono_4096x2048_hevc_8bit_30fps_3o_16ch.mkv");
+
     /// <summary>10 minutes, for the A/V long test (<c>make_testmedia.py --long</c>).</summary>
     public static string Mono4KLong => Require("equirect360_mono_4096x2048_hevc_8bit_30fps_600s.mp4");
 

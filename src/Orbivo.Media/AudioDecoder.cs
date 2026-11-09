@@ -7,8 +7,8 @@ namespace Orbivo.Media;
 
 /// <summary>
 /// The audio decode thread of one opened file (docs/ARCHITECTURE.md, "Threads"): decodes the sound track from the
-/// demuxer's audio queue, converts it with swresample to interleaved float32 stereo at the output sample rate and writes
-/// it into the <see cref="AudioRingBuffer"/> with its media position.
+/// demuxer's audio queue, converts it with swresample to interleaved float32 at the output sample rate (stereo, or an
+/// AmbiX sound field for Ambisonics, M10) and writes it into the <see cref="AudioRingBuffer"/> with its media position.
 /// </summary>
 /// <remarks>
 /// Media time is the same as for the video: ticks from the start of the video stream (<see cref="MediaDemuxer.OriginTicks"/>).
@@ -34,12 +34,13 @@ internal sealed unsafe class AudioDecoder : IDisposable
     private readonly Thread _thread;
     private readonly AVRational _streamTimeBase;
     private readonly int _swrChannels;
+    private readonly int _ringChannels;
 
     private AVCodecContext* _codec;
     private SwrContext* _swr;
     private AVFrame* _frame;
     private float[] _converted = new float[8192];
-    private float[] _stereo = new float[8192];
+    private float[] _ringFrames = new float[8192];
 
     private volatile bool _stopRequested;
     private bool _disposed;
@@ -65,7 +66,8 @@ internal sealed unsafe class AudioDecoder : IDisposable
         _logger = logger;
         Plan = plan;
         Info = new AudioTrackInfo(codecName, plan);
-        _swrChannels = plan.Channels == ChannelHandling.MonoOnBoth ? 1 : AudioConversionPlan.StereoChannels;
+        _swrChannels = SwrChannels(plan);
+        _ringChannels = plan.RingChannels;
         _streamTimeBase = demuxer.Format->streams[demuxer.AudioStreamIndex]->time_base;
         _frame = ffmpeg.av_frame_alloc();
         _thread = new Thread(DecodeThread)
@@ -115,7 +117,12 @@ internal sealed unsafe class AudioDecoder : IDisposable
     /// Prepares decoding of the audio stream of <paramref name="demuxer"/> into <paramref name="ring"/> at
     /// <paramref name="outputSampleRate"/>. Throws <see cref="MediaOpenException"/> if the track cannot be decoded.
     /// </summary>
-    public static AudioDecoder Open(MediaDemuxer demuxer, AudioRingBuffer ring, int outputSampleRate, ILogger logger)
+    /// <param name="demuxer">The opened file.</param>
+    /// <param name="ring">Ring buffer of the sound output.</param>
+    /// <param name="outputSampleRate">Rate of the device stream.</param>
+    /// <param name="audioMode">The operator's choice (sidecar <c>audioMode</c>), null = automatic (F23).</param>
+    /// <param name="logger">Logger.</param>
+    public static AudioDecoder Open(MediaDemuxer demuxer, AudioRingBuffer ring, int outputSampleRate, AudioModeChoice? audioMode, ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(demuxer);
         ArgumentNullException.ThrowIfNull(ring);
@@ -144,21 +151,48 @@ internal sealed unsafe class AudioDecoder : IDisposable
             FFmpegError.Check(ffmpeg.avcodec_open2(codec, decoder, null), "avcodec_open2 (audio)");
 
             int channels = Math.Max(1, codec->ch_layout.nb_channels);
-            AudioConversionPlan plan = AudioConversionPlan.Create(channels, codec->sample_rate, outputSampleRate);
+            EmbeddedAudioLayout layout = demuxer.AudioLayout ?? new EmbeddedAudioLayout(channels, null, LayoutKnown: false);
+            if (layout.Channels != channels)
+            {
+                logger.LogWarning(
+                    "The container of {Path} states {ContainerChannels} sound channels, the decoder gives {Channels}; using {Channels}.",
+                    demuxer.Path,
+                    layout.Channels,
+                    channels,
+                    channels);
+                layout = layout with { Channels = channels };
+            }
+
+            ResolvedAudioMode mode = AudioModeResolver.Resolve(layout, audioMode);
+            AudioConversionPlan plan = AudioConversionPlan.Create(channels, codec->sample_rate, outputSampleRate, mode);
+            if (plan.RingChannels > ring.Channels)
+            {
+                throw new MediaOpenException(
+                    $"The sound track of {demuxer.Path} needs {plan.RingChannels} channels, the ring buffer holds {ring.Channels}.",
+                    "Tonformat wird nicht unterstützt (Details im Log)");
+            }
+
             swr = CreateResampler(codec, plan);
 
             logger.LogInformation(
-                "Sound track of {Path}: {Codec}, {Channels} channels, {Rate} Hz, {Format}. Output: {Plan} (float32 stereo, {OutputRate} Hz).",
+                "Sound track of {Path}: {Codec}, {Channels} channels ({Layout}), {Rate} Hz, {Format}. Output: {Plan} (float32, {RingChannels} channels, {OutputRate} Hz).",
                 demuxer.Path,
                 codecName,
                 channels,
+                layout.Describe(),
                 codec->sample_rate,
                 ffmpeg.av_get_sample_fmt_name(codec->sample_fmt),
                 plan.Describe(),
+                plan.RingChannels,
                 outputSampleRate);
+            if (mode.Warning is { } warning)
+            {
+                logger.LogWarning("Sound track of {Path}: {Warning}", demuxer.Path, warning);
+            }
+
             if (plan.IsDownmix)
             {
-                logger.LogWarning("The sound track of {Path} has {Channels} channels; it is mixed down to stereo until spatial sound (M7).", demuxer.Path, channels);
+                logger.LogWarning("The sound track of {Path} has {Channels} channels; they are mixed down to stereo.", demuxer.Path, channels);
             }
 
             var result = new AudioDecoder(demuxer, ring, codec, swr, plan, codecName, logger);
@@ -216,21 +250,40 @@ internal sealed unsafe class AudioDecoder : IDisposable
         _codec = null;
     }
 
+    /// <summary>Channels swresample puts out: one for mono, all of the track for Ambisonics, else two.</summary>
+    private static int SwrChannels(AudioConversionPlan plan) => plan.Channels switch
+    {
+        ChannelHandling.MonoOnBoth => 1,
+        ChannelHandling.Ambisonics => plan.SourceChannels,
+        _ => AudioConversionPlan.StereoChannels,
+    };
+
     private static SwrContext* CreateResampler(AVCodecContext* codec, AudioConversionPlan plan)
     {
         AVChannelLayout input;
-        if (codec->ch_layout.order == AVChannelOrder.AV_CHANNEL_ORDER_UNSPEC || ffmpeg.av_channel_layout_check(&codec->ch_layout) == 0)
+        AVChannelLayout output;
+        if (plan.Channels == ChannelHandling.Ambisonics)
         {
-            ffmpeg.av_channel_layout_default(&input, Math.Max(1, codec->ch_layout.nb_channels));
+            // Every channel as it is, only resampled: the same unnamed layout on both sides, so swresample never mixes.
+            // (It does not accept Ambisonics layouts, and a named one like "4.0" would invite a remix.)
+            input = new AVChannelLayout { order = AVChannelOrder.AV_CHANNEL_ORDER_UNSPEC, nb_channels = plan.SourceChannels };
+            output = input;
         }
         else
         {
-            FFmpegError.Check(ffmpeg.av_channel_layout_copy(&input, &codec->ch_layout), "av_channel_layout_copy");
+            if (codec->ch_layout.order == AVChannelOrder.AV_CHANNEL_ORDER_UNSPEC || ffmpeg.av_channel_layout_check(&codec->ch_layout) == 0)
+            {
+                ffmpeg.av_channel_layout_default(&input, Math.Max(1, codec->ch_layout.nb_channels));
+            }
+            else
+            {
+                FFmpegError.Check(ffmpeg.av_channel_layout_copy(&input, &codec->ch_layout), "av_channel_layout_copy");
+            }
+
+            // Mono stays one channel here and is copied to both sides afterwards: swresample would lower it by 3 dB.
+            ffmpeg.av_channel_layout_default(&output, plan.Channels == ChannelHandling.MonoOnBoth ? 1 : AudioConversionPlan.StereoChannels);
         }
 
-        // Mono stays one channel here and is copied to both sides afterwards: swresample would lower it by 3 dB.
-        AVChannelLayout output;
-        ffmpeg.av_channel_layout_default(&output, plan.Channels == ChannelHandling.MonoOnBoth ? 1 : AudioConversionPlan.StereoChannels);
         SwrContext* swr = null;
         try
         {
@@ -489,7 +542,7 @@ internal sealed unsafe class AudioDecoder : IDisposable
     /// <summary>Writes <paramref name="frames"/> converted frames at <see cref="_nextOutputFrame"/> into the ring buffer.</summary>
     private void WriteConverted(int frames)
     {
-        ReadOnlySpan<float> stereo = ToStereo(frames);
+        ReadOnlySpan<float> samples = ToRingFrames(frames);
         long position = _nextOutputFrame;
         _nextOutputFrame += frames;
 
@@ -501,11 +554,11 @@ internal sealed unsafe class AudioDecoder : IDisposable
         }
 
         position += skip;
-        stereo = stereo[(int)(skip * AudioConversionPlan.StereoChannels)..];
+        samples = samples[(int)(skip * _ringChannels)..];
 
         if (!_ring.IsStarted)
         {
-            _ring.Start(position, OutputSampleRate);
+            _ring.Start(position, OutputSampleRate, _ringChannels);
         }
         else
         {
@@ -521,12 +574,12 @@ internal sealed unsafe class AudioDecoder : IDisposable
             else if (position < writePosition)
             {
                 // Overlap (sound read again after a video reseek): drop what is already there.
-                long overlap = Math.Min(writePosition - position, stereo.Length / AudioConversionPlan.StereoChannels);
-                stereo = stereo[(int)(overlap * AudioConversionPlan.StereoChannels)..];
+                long overlap = Math.Min(writePosition - position, samples.Length / _ringChannels);
+                samples = samples[(int)(overlap * _ringChannels)..];
             }
         }
 
-        WriteBlocking(stereo, 0);
+        WriteBlocking(samples, 0);
     }
 
     /// <summary>
@@ -551,7 +604,7 @@ internal sealed unsafe class AudioDecoder : IDisposable
             else
             {
                 written = _ring.Write(samples);
-                samples = samples[(written * AudioConversionPlan.StereoChannels)..];
+                samples = samples[(written * _ringChannels)..];
             }
 
             if (written == 0)
@@ -563,26 +616,35 @@ internal sealed unsafe class AudioDecoder : IDisposable
         return true;
     }
 
-    private ReadOnlySpan<float> ToStereo(int frames)
+    /// <summary>The converted frames as the ring buffer takes them: stereo, or AmbiX with (order + 1)² channels.</summary>
+    private ReadOnlySpan<float> ToRingFrames(int frames)
     {
-        if (_swrChannels == AudioConversionPlan.StereoChannels)
+        if (_swrChannels == _ringChannels && !Plan.ConvertsFuMa)
         {
-            return _converted.AsSpan(0, frames * AudioConversionPlan.StereoChannels);
+            return _converted.AsSpan(0, frames * _ringChannels);
         }
 
-        if (_stereo.Length < frames * 2)
+        if (_ringFrames.Length < frames * _ringChannels)
         {
-            _stereo = new float[frames * 4];
+            _ringFrames = new float[frames * _ringChannels * 2];
         }
 
-        for (int i = 0; i < frames; i++)
+        if (Plan.Channels == ChannelHandling.Ambisonics)
         {
-            float sample = _converted[i];
-            _stereo[2 * i] = sample;
-            _stereo[(2 * i) + 1] = sample;
+            AmbisonicsFrames.ToAmbiX(_converted, _swrChannels, _ringFrames, _ringChannels, frames, Plan.ConvertsFuMa);
+        }
+        else
+        {
+            // Mono on both sides.
+            for (int i = 0; i < frames; i++)
+            {
+                float sample = _converted[i];
+                _ringFrames[2 * i] = sample;
+                _ringFrames[(2 * i) + 1] = sample;
+            }
         }
 
-        return _stereo.AsSpan(0, frames * 2);
+        return _ringFrames.AsSpan(0, frames * _ringChannels);
     }
 
     private long TicksToFrames(long ticks) => (long)Math.Round(ticks * (double)OutputSampleRate / TimeSpan.TicksPerSecond);
