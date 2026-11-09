@@ -80,6 +80,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
     private double _spatialPeakLoad;
     private volatile string? _spatialProblem;
     private volatile bool _fieldBinaural;
+    private volatile int _ambisonicsChannels;
     private volatile string? _ambisonicsProblem;
     private StereoPlacement _requestedPlacement = StereoPlacement.HeadLocked;
 
@@ -226,6 +227,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
             _spatialProblem)
         {
             FieldBinaural = _fieldBinaural,
+            AmbisonicsChannels = _ambisonicsChannels,
             AmbisonicsProblem = _ambisonicsProblem,
         },
     };
@@ -377,6 +379,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
         Volatile.Write(ref _driftPpm, renderer.Tracker.DriftPpm);
         _spatialActive = renderer.SpatialActive;
         _fieldBinaural = renderer.FieldBinaural;
+        _ambisonicsChannels = renderer.AmbisonicsStage is { } field && field.SampleRate == endpoint.SampleRate ? field.MaxChannels : 0;
         double load = renderer.SourceChannels > 2 ? renderer.AmbisonicsStage?.PeakLoad ?? 0 : renderer.Stage?.PeakLoad ?? 0;
         Volatile.Write(ref _spatialPeakLoad, load);
     }

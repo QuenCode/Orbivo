@@ -29,6 +29,9 @@ public sealed record SpatialAudioStatus(bool Available, bool Active, StereoPlace
     /// <summary>An Ambisonics field plays and is rendered binaurally with Steam Audio (M10).</summary>
     public bool FieldBinaural { get; init; }
 
+    /// <summary>Channels the binaural Ambisonics stage can render at the device rate (16 for order 3), 0 without one.</summary>
+    public int AmbisonicsChannels { get; init; }
+
     /// <summary>German text if Ambisonics cannot be rendered binaurally (it then plays through a fallback pair), or null.</summary>
     public string? AmbisonicsProblem { get; init; }
 }

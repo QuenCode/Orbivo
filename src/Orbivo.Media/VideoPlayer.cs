@@ -635,6 +635,14 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         }
 
         UpdateFormatStatus();
+
+        // After the end the video stays there: Play opens it again from the start anyway. A seek would turn the end
+        // into a pause on the last frame.
+        if (_machine.State == PlaybackState.Ended)
+        {
+            return;
+        }
+
         _clock.UseAudio(_audioDecoder is not null);
         SeekTo(position);
     }
@@ -1061,7 +1069,15 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
 
         _appliedPlacement = placement;
         _audio.SetStereoPlacement(placement);
-        if (placement.FixedToPicture)
+        bool field = _audioDecoder?.Plan.Channels == ChannelHandling.Ambisonics;
+        if (field)
+        {
+            _logger.LogInformation(
+                "Sound of {Path}: Ambisonics field {Placement}.",
+                _filePath,
+                placement.FixedToPicture ? "fixed to the picture" : "turning with the head");
+        }
+        else if (placement.FixedToPicture)
         {
             _logger.LogInformation("Sound of {Path}: fixed to the picture, speakers at +-{Width} degrees.", _filePath, placement.WidthDegrees);
         }

@@ -82,6 +82,34 @@ public sealed class AmbisonicsPlaybackTests(HardwareDecodeFixture fixture) : IDi
         Assert.Null(player.GetStatus().Error);
     }
 
+    [Fact]
+    public void ChoosingTheAudioModeAfterTheEnd_KeepsTheEnd_AndPlayStartsAgainCleanly()
+    {
+        string path = CopyToTemp(TestVideos.AmbisonicsSa3d);
+        VideoPlayer player = Start();
+        Send(new OpenMediaCommand(path, Play: false));
+        WaitFor(status => status.State == PlaybackState.Ready);
+        TimeSpan duration = player.GetStatus().Duration;
+        Send(new SeekCommand(duration - TimeSpan.FromSeconds(1)));
+        Send(new PlayCommand());
+        WaitFor(status => status.State == PlaybackState.Ended);
+
+        FormatOverrides overrides = player.GetStatus().Format!.Overrides with { AudioMode = AudioModeChoice.Channels };
+        Send(new SetVideoFormatCommand(overrides));
+        WaitFor(status => status.Audio?.Conversion.Channels == ChannelHandling.Downmix);
+        Thread.Sleep(300);
+        Assert.Equal(PlaybackState.Ended, player.GetStatus().State);
+
+        long underrunsBefore = player.GetStatus().AudioOutput?.UnderrunFrames ?? 0;
+        Send(new PlayCommand());
+        WaitFor(status => status.State == PlaybackState.Playing && status.Position > TimeSpan.FromSeconds(1));
+        PlayerStatus playing = player.GetStatus();
+        Assert.Equal(ChannelHandling.Downmix, playing.Audio?.Conversion.Channels);
+        Assert.Equal(PlaybackClockSource.Audio, playing.ClockSource);
+        Assert.Equal(underrunsBefore, playing.AudioOutput?.UnderrunFrames ?? 0);
+        Assert.Null(playing.Error);
+    }
+
     private string CopyToTemp(string source)
     {
         Directory.CreateDirectory(_folder);

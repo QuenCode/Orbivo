@@ -1255,7 +1255,9 @@ public sealed class MainViewModel : ObservableObject
         {
             // Without the field itself: plan.Describe() names it already.
             bool fixedToPicture = spatial?.Placement.FixedToPicture ?? false;
-            if (spatial?.FieldBinaural == true)
+
+            // Before Play no field flows yet; a ready stage that can render it says what will be heard, as for stereo.
+            if (spatial?.FieldBinaural == true || (spatial is not null && spatial.AmbisonicsProblem is null && spatial.AmbisonicsChannels >= plan.RingChannels))
             {
                 return (fixedToPicture ? "binaural, Klangfeld fest am Bild" : "binaural, Klangfeld dreht mit dem Kopf", plan.Mode!.Warning);
             }
