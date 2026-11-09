@@ -43,6 +43,7 @@ public sealed class FormatViewModel : ObservableObject
     private readonly FormatChoice _autoProjection = new(null, "Automatisch");
     private readonly FormatChoice _autoLayout = new(null, "Automatisch");
     private readonly FormatChoice _autoCubemap = new(null, "Automatisch");
+    private readonly FormatChoice _autoAudioMode = new(null, "Automatisch");
     private VideoFormatStatus? _status;
     private string? _sidecarPath;
     private FormatOverrides _overrides = FormatOverrides.None;
@@ -53,6 +54,7 @@ public sealed class FormatViewModel : ObservableObject
     private FormatChoice? _customCubemap;
     private FormatChoice? _selectedStereoWidth;
     private FormatChoice? _customStereoWidth;
+    private FormatChoice? _selectedAudioMode;
     private OrientationOffset? _shownOffset;
     private FisheyeParameters? _shownFisheye;
     private string _yawText = "0";
@@ -75,6 +77,13 @@ public sealed class FormatViewModel : ObservableObject
         Layouts = [_autoLayout, .. Enum.GetValues<StereoLayout>().Select(l => new FormatChoice(l, VideoFormatResolver.Describe(l)))];
         CubemapLayouts = [_autoCubemap, .. CubemapLayout.Presets.Select(p => new FormatChoice(p.Layout, DescribeCubemap(p.Layout)))];
         StereoWidths = [.. Enumerable.Range(0, 13).Select(i => StereoWidthChoice(StereoPlacement.MinWidthDegrees + (5.0 * i)))];
+        AudioModes =
+        [
+            _autoAudioMode,
+            new FormatChoice(AudioModeChoice.Channels, "Kanäle (Mono, Stereo, Mehrkanal)"),
+            new FormatChoice(AudioModeChoice.AmbiX, "Ambisonics AmbiX (ACN/SN3D)"),
+            new FormatChoice(AudioModeChoice.FuMa, "Ambisonics FuMa (nur 1. Ordnung)"),
+        ];
         ApplyOffsetCommand = new RelayCommand(ApplyOffset, () => IsAvailable);
         ResetOffsetCommand = new RelayCommand(() => Change(_overrides with { Offset = null }, refreshOffset: true), () => IsAvailable);
         ApplyFisheyeCommand = new RelayCommand(ApplyFisheye, () => IsAvailable);
@@ -92,6 +101,27 @@ public sealed class FormatViewModel : ObservableObject
 
     /// <summary>Widths of the virtual stereo speakers (M7), every 5° from 30° to 90°.</summary>
     public ObservableCollection<FormatChoice> StereoWidths { get; }
+
+    /// <summary>Tonformat (F23, M10): automatic, or how the operator says the channels are meant.</summary>
+    public ObservableCollection<FormatChoice> AudioModes { get; }
+
+    public FormatChoice? SelectedAudioMode
+    {
+        get => _selectedAudioMode;
+        set
+        {
+            if (SetProperty(ref _selectedAudioMode, value) && !_updating && value is not null)
+            {
+                Change(_overrides with { AudioMode = (AudioModeChoice?)value.Value });
+            }
+        }
+    }
+
+    /// <summary>The video has a sound track whose format can be chosen.</summary>
+    public bool CanChooseAudioMode => IsAvailable && _status!.AudioMode is not null;
+
+    /// <summary>The sound plays as an Ambisonics field: no speakers, so no width.</summary>
+    public bool IsAmbisonics => _status?.AudioMode?.Mode.IsAmbisonics == true;
 
     /// <summary>
     /// Ton fest am Bild (M7): the stereo channels come from two speakers fixed in the picture and stay there when the
@@ -113,7 +143,7 @@ public sealed class FormatViewModel : ObservableObject
         }
     }
 
-    public bool CanChooseStereoWidth => IsAvailable && SoundFixedToPicture;
+    public bool CanChooseStereoWidth => IsAvailable && SoundFixedToPicture && !IsAmbisonics;
 
     public FormatChoice? SelectedStereoWidth
     {
@@ -330,6 +360,8 @@ public sealed class FormatViewModel : ObservableObject
             : Layouts.First(c => Equals(c.Value, _overrides.Layout));
         SelectedCubemap = FindCubemap(_overrides.Cubemap);
         SelectedStereoWidth = FindStereoWidth(StereoPlacement.From(_overrides).WidthDegrees);
+        _autoAudioMode.Label = status.AudioMode is { } audio ? $"Automatisch ({audio.DescribeAutomatic()})" : "Automatisch";
+        SelectedAudioMode = AudioModes.First(c => Equals(c.Value, _overrides.AudioMode));
 
         OrientationOffset offset = status.Format.Offset;
         if (_shownOffset != offset)
@@ -492,6 +524,8 @@ public sealed class FormatViewModel : ObservableObject
         OnPropertyChanged(nameof(SwapEyes));
         OnPropertyChanged(nameof(SoundFixedToPicture));
         OnPropertyChanged(nameof(CanChooseStereoWidth));
+        OnPropertyChanged(nameof(CanChooseAudioMode));
+        OnPropertyChanged(nameof(IsAmbisonics));
         ApplyOffsetCommand.NotifyCanExecuteChanged();
         ResetOffsetCommand.NotifyCanExecuteChanged();
         ApplyFisheyeCommand.NotifyCanExecuteChanged();

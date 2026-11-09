@@ -1190,7 +1190,8 @@ public sealed class MainViewModel : ObservableObject
             _soundEntry.Update(
                 problem is null ? text : $"{text}. {problem}",
                 plan.IsDownmix || problem is not null ? StatusLevel.Warning : StatusLevel.Ok);
-            AudioModeText = problem is null ? mode : $"{mode} – {problem}";
+            string modeText = plan.Channels == ChannelHandling.Ambisonics ? $"{plan.Mode!.Describe()}, {mode}" : mode;
+            AudioModeText = problem is null ? modeText : $"{modeText} – {problem}";
         }
 
         AudioOutputStatus? output = status.AudioOutput;
@@ -1248,6 +1249,23 @@ public sealed class MainViewModel : ObservableObject
         if (plan.Channels == ChannelHandling.MonoOnBoth)
         {
             return ("Mono auf beiden Ohren (ohne Richtung)", null);
+        }
+
+        if (plan.Channels == ChannelHandling.Ambisonics)
+        {
+            // Without the field itself: plan.Describe() names it already.
+            bool fixedToPicture = spatial?.Placement.FixedToPicture ?? false;
+            if (spatial?.FieldBinaural == true)
+            {
+                return (fixedToPicture ? "binaural, Klangfeld fest am Bild" : "binaural, Klangfeld dreht mit dem Kopf", plan.Mode!.Warning);
+            }
+
+            if (spatial?.AmbisonicsProblem is { } problem)
+            {
+                return ("Notbehelf links/rechts (dreht mit dem Kopf)", problem);
+            }
+
+            return ("wird vorbereitet …", plan.Mode!.Warning);
         }
 
         if (spatial is null || !spatial.Placement.FixedToPicture)

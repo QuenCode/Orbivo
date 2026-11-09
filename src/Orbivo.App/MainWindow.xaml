@@ -279,28 +279,33 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
           </Grid.RowDefinitions>
           <TextBlock Grid.Row="0" Grid.Column="0" Text="Audio-Modus:" Margin="0,2,16,2" />
           <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AudioModeText}" TextWrapping="Wrap" Margin="0,2,0,2" />
-          <TextBlock Grid.Row="1" Grid.Column="0" Text="Richtung:" VerticalAlignment="Center" Margin="0,2,16,2" />
-          <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,2,0,2">
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Tonformat:" VerticalAlignment="Center" Margin="0,2,16,2" />
+          <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Format.AudioModes}" SelectedItem="{Binding Format.SelectedAudioMode}"
+                    IsEnabled="{Binding Format.CanChooseAudioMode}" Focusable="False" Margin="0,2,0,2" HorizontalAlignment="Left" MinWidth="260"
+                    ToolTip="Wie die Kanäle der Tonspur gemeint sind. Automatisch: Ambisonics laut Metadaten (SA3D); 4, 9 oder 16 Kanäle ohne Angabe gelten als Ambisonics AmbiX. Kanäle: Mono und Stereo wie sie sind, mehr Kanäle auf Stereo gemischt. FuMa: ältere Ambisonics-Aufnahmen (W X Y Z). Wird pro Video im Sidecar gespeichert; der Ton setzt dabei kurz neu an." />
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="Richtung:" VerticalAlignment="Center" Margin="0,2,16,2" />
+          <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,2,0,2">
             <CheckBox Content="Ton fest am Bild" IsChecked="{Binding Format.SoundFixedToPicture}" IsEnabled="{Binding Format.IsAvailable}"
                       Focusable="False" VerticalAlignment="Center"
-                      ToolTip="Ein: Der linke und rechte Kanal kommen von zwei Lautsprechern, die fest im Video stehen. Dreht der Proband den Kopf, wandert der Ton mit dem Bild. Aus: Stereo geht unverändert auf die Kopfhörer und dreht mit dem Kopf. Wird pro Video im Sidecar gespeichert." />
+                      ToolTip="Ein: Der Ton steht fest im Video. Bei Stereo kommen links und rechts von zwei Lautsprechern im Bild, bei Ambisonics bleibt das ganze Klangfeld am Bild. Dreht der Proband den Kopf, wandert der Ton mit dem Bild. Aus: Der Ton dreht mit dem Kopf (Stereo unverändert, Ambisonics immer von vorne gehört). Wird pro Video im Sidecar gespeichert." />
             <TextBlock Text="Breite:" VerticalAlignment="Center" Margin="16,0,6,0" />
             <ComboBox ItemsSource="{Binding Format.StereoWidths}" SelectedItem="{Binding Format.SelectedStereoWidth}"
                       IsEnabled="{Binding Format.CanChooseStereoWidth}" Focusable="False" MinWidth="110" HorizontalAlignment="Left"
-                      ToolTip="Winkel der beiden virtuellen Lautsprecher links und rechts von der Bildmitte. Standard 75°; größer klingt breiter, kleiner enger (eine übliche Stereo-Aufstellung hätte 30°)." />
+                      ToolTip="Nur Stereo: Winkel der beiden virtuellen Lautsprecher links und rechts von der Bildmitte. Standard 75°; größer klingt breiter, kleiner enger (eine übliche Stereo-Aufstellung hätte 30°)." />
           </DockPanel>
-          <TextBlock Grid.Row="2" Grid.Column="0" Text="Tonausgabe:" VerticalAlignment="Center" Margin="0,2,16,2" />
-          <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,2,0,2">
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="Tonausgabe:" VerticalAlignment="Center" Margin="0,2,16,2" />
+          <DockPanel Grid.Row="3" Grid.Column="1" Margin="0,2,0,2">
             <Button DockPanel.Dock="Right" Content="Aktualisieren" Command="{Binding RefreshAudioDevicesCommand}" Margin="6,0,0,0"
                     ToolTip="Geräteliste neu einlesen (z. B. nach dem Einstecken eines Kopfhörers)" />
             <ComboBox ItemsSource="{Binding AudioDevices}" SelectedItem="{Binding SelectedAudioDevice}" Focusable="False"
                       IsEnabled="{Binding SoundSettingsEditable}"
                       ToolTip="Gerät für die Kopfhörer. Windows-Standard folgt dem Standardgerät; ein fest gewähltes Gerät wird nie automatisch gewechselt." />
           </DockPanel>
-          <CheckBox Grid.Row="3" Grid.Column="1" Content="Tonausgabe und Lautstärke sperren" IsChecked="{Binding SoundLocked}"
+          <CheckBox Grid.Row="4" Grid.Column="1" Content="Tonausgabe und Lautstärke sperren" IsChecked="{Binding SoundLocked}"
                     Focusable="False" Margin="0,4,0,2"
                     ToolTip="Schützt Gerät und Lautstärke vor versehentlichem Verstellen. Bleibt nach einem Neustart erhalten. Stumm (M) geht weiter." />
         </Grid>

@@ -44,7 +44,11 @@ public sealed record VideoFormatStatus(
     IReadOnlyList<string> Warnings,
     string SidecarPath,
     bool SidecarExists,
-    string? SidecarError);
+    string? SidecarError)
+{
+    /// <summary>How the sound track is meant (F23, M10) and why, or null without a sound track.</summary>
+    public ResolvedAudioMode? AudioMode { get; init; }
+}
 
 /// <summary>Properties of the sound track being played.</summary>
 /// <param name="Codec">Codec name, e.g. "aac".</param>

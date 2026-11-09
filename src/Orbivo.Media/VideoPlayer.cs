@@ -1100,6 +1100,9 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             warnings,
             sidecar.Path,
             sidecar.Exists,
-            _sidecarError);
+            _sidecarError)
+        {
+            AudioMode = _audioDecoder?.Plan.Mode,
+        };
     }
 }
