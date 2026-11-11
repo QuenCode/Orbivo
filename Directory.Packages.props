@@ -15,7 +15,7 @@
 
   <ItemGroup Label="Logging">
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.14" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup Label="XR and graphics">
