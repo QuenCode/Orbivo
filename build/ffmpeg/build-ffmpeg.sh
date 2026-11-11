@@ -50,21 +50,30 @@ mkdir -p "$DL" "$SRC" "$PREFIX/include" "$PREFIX/lib" "$STAGE" "$OUT"
 
 log() { printf '\n== %s\n' "$*"; }
 
-fetch() { # url sha256 -> unpacks into $SRC
-    local url="$1" sha="$2" file
-    file="$DL/$(basename "$url")"
-    if [[ ! -f "$file" ]]; then
-        curl -fL --retry 3 --retry-delay 5 -o "$file.part" "$url"
-        mv "$file.part" "$file"
-    fi
+fetch() { # sha256 url [mirror ...] -> unpacks into $SRC. The checksum makes every mirror as good as the original.
+    local sha="$1" url file
+    shift
+    file="$DL/$(basename "$1")"
+    for url in "$@"; do
+        [[ -f "$file" ]] && break
+        echo "Downloading $url"
+        if curl -fL --connect-timeout 30 --retry 5 --retry-delay 10 --retry-all-errors -o "$file.part" "$url"; then
+            mv "$file.part" "$file"
+        else
+            rm -f "$file.part"
+            echo "Download failed: $url"
+        fi
+    done
+    [[ -f "$file" ]] || { echo "No source could download $(basename "$1")"; exit 1; }
     echo "$sha  $file" | sha256sum -c -
     tar -xJf "$file" -C "$SRC"
 }
 
 log "Sources"
-fetch "$FFMPEG_URL" "$FFMPEG_SHA256"
-fetch "$DAV1D_URL" "$DAV1D_SHA256"
-fetch "$ZLIB_URL" "$ZLIB_SHA256"
+fetch "$FFMPEG_SHA256" "$FFMPEG_URL" "${FFMPEG_URL/https:\/\/ffmpeg.org/https://www.ffmpeg.org}" \
+    "https://deb.debian.org/debian/pool/main/f/ffmpeg/ffmpeg_${FFMPEG_VERSION}.orig.tar.xz"
+fetch "$DAV1D_SHA256" "$DAV1D_URL"
+fetch "$ZLIB_SHA256" "$ZLIB_URL" "https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz"
 
 log "zlib $ZLIB_VERSION (static)"
 (
