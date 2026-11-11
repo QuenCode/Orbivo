@@ -1,0 +1,36 @@
+# Builds the FFmpeg libraries Orbivo ships (build/ffmpeg/README.md).
+name: FFmpeg for Orbivo
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'build/ffmpeg/**'
+      - '.github/workflows/ffmpeg.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mingw-w64 nasm meson ninja-build pkg-config make curl xz-utils zip
+
+      - name: Build
+        env:
+          WORK: ${{ runner.temp }}/ffmpeg
+        run: bash build/ffmpeg/build-ffmpeg.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orbivo-ffmpeg
+          path: ${{ runner.temp }}/ffmpeg/out/*
+          if-no-files-found: error
+          retention-days: 30
