@@ -42,4 +42,8 @@ jobs:
         run: dotnet build Orbivo.sln -c Debug
 
       - name: Test
+        # Without tiered compilation no method is recompiled during a measurement; on the shared runners that
+        # recompilation occasionally showed up as a few KB in the *_DoesNotAllocate tests (docs/DECISIONS.md).
+        env:
+          DOTNET_TieredCompilation: 0
         run: dotnet test -c Debug --no-build --max-parallel-test-modules 1
