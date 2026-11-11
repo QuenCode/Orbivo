@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Orbivo.App.Localization;
 using Orbivo.Core.Playback;
 
 namespace Orbivo.App.ViewModels;
@@ -18,7 +19,7 @@ public sealed class IdleViewModel : ObservableObject
 {
     private IdleViewChoice _selected;
     private string? _imagePath;
-    private string _imageText = "Kein Bild gewählt";
+    private string _imageText = UiText.IdleNoImage;
     private StatusLevel _imageLevel = StatusLevel.Neutral;
     private string _seeThroughText = string.Empty;
     private IdleView _savedView;
@@ -28,15 +29,15 @@ public sealed class IdleViewModel : ObservableObject
     {
         Choices =
         [
-            new IdleViewChoice(IdleView.Black, "Schwarz"),
-            new IdleViewChoice(IdleView.SeeThrough, "See-through (Kamerabild)"),
-            new IdleViewChoice(IdleView.Image, "Standbild"),
+            new IdleViewChoice(IdleView.Black, UiText.IdleNameBlack),
+            new IdleViewChoice(IdleView.SeeThrough, UiText.IdleNameSeeThrough),
+            new IdleViewChoice(IdleView.Image, UiText.IdleNameImage),
         ];
         _selected = Choices.First(choice => choice.Value == view);
         _imagePath = imagePath;
         _savedView = view;
         _savedImagePath = imagePath;
-        _seeThroughText = noXr ? "Die Vorschau zeigt statt des Kamerabilds eine dunkle Fläche" : "Wird beim Verbinden mit der Brille geprüft";
+        _seeThroughText = noXr ? UiText.SeeThroughPreview : UiText.SeeThroughNotChecked;
     }
 
     /// <summary>Idle view or image changed; the app applies it (render thread, image loading, event log).</summary>
@@ -102,7 +103,7 @@ public sealed class IdleViewModel : ObservableObject
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         _imagePath = path;
         _savedImagePath = path;
-        ImageText = "Wird geladen …";
+        ImageText = UiText.Loading;
         ImageLevel = StatusLevel.Neutral;
         OnPropertyChanged(nameof(ImagePath));
         OnPropertyChanged(nameof(ShowsImageRow));
@@ -145,8 +146,8 @@ public sealed class IdleViewModel : ObservableObject
     {
         SeeThroughText = available switch
         {
-            true => "Kamerabild verfügbar",
-            false => "Die Brille bietet kein Kamerabild an (ALPHA_BLEND fehlt); sie zeigt dann Schwarz",
+            true => UiText.SeeThroughAvailable,
+            false => UiText.SeeThroughMissing,
             null => SeeThroughText,
         };
     }

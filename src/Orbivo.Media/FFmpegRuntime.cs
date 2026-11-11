@@ -1,5 +1,6 @@
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Status;
 
 namespace Orbivo.Media;
@@ -36,7 +37,7 @@ public static class FFmpegRuntime
                 "FFmpeg libraries missing in {Directory}: {Missing}. See native/README.md.",
                 libraryDirectory,
                 string.Join(", ", missing));
-            return new NativeComponentStatus(ComponentName, false, $"Fehlt: {string.Join(", ", missing)}");
+            return new NativeComponentStatus(ComponentName, false, Loc.Format(CoreText.NativeMissing, string.Join(", ", missing)));
         }
 
         try
@@ -58,13 +59,13 @@ public static class FFmpegRuntime
                 return new NativeComponentStatus(
                     ComponentName,
                     false,
-                    $"Falsche Version {version} (avcodec {avcodecMajor}, erwartet {ExpectedAvcodecMajor})");
+                    Loc.Format(CoreText.FFmpegWrongVersion, version, avcodecMajor, ExpectedAvcodecMajor));
             }
 
             if (!license.Contains("LGPL", StringComparison.Ordinal))
             {
                 logger.LogError("FFmpeg {Version} is licensed '{License}'; only LGPL builds are allowed (N5).", version, license);
-                return new NativeComponentStatus(ComponentName, false, $"Kein LGPL-Build: {license}");
+                return new NativeComponentStatus(ComponentName, false, Loc.Format(CoreText.FFmpegNotLgpl, license));
             }
 
             logger.LogInformation(
@@ -79,7 +80,7 @@ public static class FFmpegRuntime
                                        or TypeInitializationException or NotSupportedException)
         {
             logger.LogError(ex, "FFmpeg could not be loaded from {Directory}.", libraryDirectory);
-            return new NativeComponentStatus(ComponentName, false, $"Laden fehlgeschlagen: {ex.Message}");
+            return new NativeComponentStatus(ComponentName, false, Loc.Format(CoreText.NativeLoadFailed, ex.Message));
         }
     }
 }

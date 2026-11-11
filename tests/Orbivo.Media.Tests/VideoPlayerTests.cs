@@ -156,7 +156,7 @@ public sealed class VideoPlayerTests(HardwareDecodeFixture fixture)
             WaitForState(player, PlaybackState.Ready);
             PlayerStatus ready = player.GetStatus();
             Assert.False(ready.Video?.HardwareDecoding);
-            Assert.Equal("Hardware-Decoder hat das Video abgelehnt", ready.Video?.SoftwareReason);
+            Assert.Equal("Hardware-Decoder hat das Video abgelehnt", ready.Video?.SoftwareReason?.ToString());
             Assert.Null(ready.Error);
 
             Send(commands, new PlayCommand());

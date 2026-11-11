@@ -1,13 +1,14 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Playback;
 
 namespace Orbivo.Core.Settings;
 
 /// <summary>
 /// Operator settings that survive a restart (docs/DECISIONS.md, M5 and M8): sound output device, volume and their lock,
-/// idle view, recording, and since M9 the playlist with its switches and the fade duration. Mute and recenter are not
-/// kept on purpose: after a restart the sound is on and the video's own front applies.
+/// idle view, recording, since M9 the playlist with its switches and the fade duration, and since M11 the language.
+/// Mute and recenter are not kept on purpose: after a restart the sound is on and the video's own front applies.
 /// </summary>
 /// <param name="AudioDeviceId">Windows endpoint id of the sound output, null = Windows default.</param>
 /// <param name="Volume">Volume level 0–1 (before the loudness curve).</param>
@@ -25,6 +26,10 @@ namespace Orbivo.Core.Settings;
 /// <param name="AutoAdvance">"Automatisch weiter zum nächsten Video" (F3).</param>
 /// <param name="Loop">"Aktuelles Video wiederholen" (F3).</param>
 /// <param name="FadeSeconds">Fade duration (F5), 0.1–30 s.</param>
+/// <param name="Language">
+/// "en" or "de" (M11). <see cref="Load"/> always fills it: English without a settings file (very first start), German
+/// for a file from before M11, English for an unknown value. Null only in a record made in code (= English).
+/// </param>
 public sealed record AppSettings(
     string? AudioDeviceId = null,
     float Volume = AppSettings.DefaultVolume,
@@ -39,7 +44,8 @@ public sealed record AppSettings(
     int PlaylistSelected = -1,
     bool AutoAdvance = true,
     bool Loop = false,
-    double FadeSeconds = AppSettings.DefaultFadeSeconds)
+    double FadeSeconds = AppSettings.DefaultFadeSeconds,
+    string? Language = null)
 {
     public const float DefaultVolume = 0.8f;
 
@@ -71,16 +77,20 @@ public sealed record AppSettings(
         "Orbivo",
         "settings.json");
 
+    /// <summary>The language of the operator window (English if not set).</summary>
+    [JsonIgnore]
+    public AppLanguage AppLanguage =>AppLanguages.FromCode(Language) ?? AppLanguage.English;
+
     /// <summary>
     /// Reads <paramref name="path"/>. A missing file gives the defaults; an unreadable one too, with the reason in
-    /// <paramref name="problem"/> (to log and show; the file is overwritten at the next save).
+    /// <paramref name="problem"/> (English, for the log; the file is overwritten at the next save).
     /// </summary>
     public static AppSettings Load(string path, out string? problem)
     {
         problem = null;
         if (!File.Exists(path))
         {
-            return new AppSettings();
+            return FirstStartDefaults;
         }
 
         try
@@ -88,8 +98,8 @@ public sealed record AppSettings(
             AppSettings? settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), JsonOptions);
             if (settings is null)
             {
-                problem = "Die Einstellungsdatei ist leer.";
-                return new AppSettings();
+                problem = "The settings file is empty; the defaults apply.";
+                return FirstStartDefaults;
             }
 
             return settings with
@@ -105,14 +115,20 @@ public sealed record AppSettings(
                 FadeSeconds = double.IsFinite(settings.FadeSeconds)
                     ? Math.Clamp(settings.FadeSeconds, MinFadeSeconds, MaxFadeSeconds)
                     : DefaultFadeSeconds,
+                Language = AppLanguages.ToCode(settings.Language is null
+                    ? AppLanguages.BeforeChoice
+                    : AppLanguages.FromCode(settings.Language) ?? AppLanguages.FirstStart),
             };
         }
         catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
         {
-            problem = $"Einstellungen nicht lesbar ({exception.Message}); es gelten die Vorgaben.";
-            return new AppSettings();
+            problem = $"Settings not readable ({exception.Message}); the defaults apply.";
+            return FirstStartDefaults;
         }
     }
+
+    /// <summary>The defaults, in the language of a very first start.</summary>
+    private static AppSettings FirstStartDefaults => new(Language: AppLanguages.ToCode(AppLanguages.FirstStart));
 
     /// <summary>Drops empty paths from a hand-edited file; an empty list is stored as null.</summary>
     private static string[]? CleanPlaylist(IReadOnlyList<string>? paths)

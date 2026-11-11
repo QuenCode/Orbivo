@@ -1,8 +1,8 @@
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Localization;
 
 namespace Orbivo.Core.Formats;
 
@@ -83,18 +83,18 @@ public sealed class SidecarFile
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            warnings.Add($"Sidecar {System.IO.Path.GetFileName(path)} nicht lesbar ({exception.Message}); Format automatisch.");
+            warnings.Add(Loc.Format(CoreText.SidecarNotReadable, System.IO.Path.GetFileName(path), exception.Message));
             return new SidecarFile(path, [], FormatOverrides.None, warnings, broken: false, readOnly: true);
         }
         catch (JsonException exception)
         {
-            warnings.Add($"Sidecar {System.IO.Path.GetFileName(path)} ist kein gültiges JSON ({exception.Message}); wird ignoriert und bei der nächsten Änderung als .bak gesichert.");
+            warnings.Add(Loc.Format(CoreText.SidecarInvalidJson, System.IO.Path.GetFileName(path), exception.Message));
             return new SidecarFile(path, [], FormatOverrides.None, warnings, broken: true, readOnly: false);
         }
 
         if (node is not JsonObject root)
         {
-            warnings.Add($"Sidecar {System.IO.Path.GetFileName(path)} enthält kein JSON-Objekt; wird ignoriert und bei der nächsten Änderung als .bak gesichert.");
+            warnings.Add(Loc.Format(CoreText.SidecarNoObject, System.IO.Path.GetFileName(path)));
             return new SidecarFile(path, [], FormatOverrides.None, warnings, broken: true, readOnly: false);
         }
 
@@ -102,7 +102,7 @@ public sealed class SidecarFile
         if (root["version"] is JsonValue versionValue && versionValue.TryGetValue(out int version) && version > CurrentVersion)
         {
             newer = true;
-            warnings.Add($"Sidecar stammt von einer neueren Orbivo-Version (Version {version}); Änderungen werden nicht gespeichert.");
+            warnings.Add(Loc.Format(CoreText.SidecarNewerVersion, version));
         }
 
         var overrides = new FormatOverrides(
@@ -129,7 +129,7 @@ public sealed class SidecarFile
         ArgumentNullException.ThrowIfNull(overrides);
         if (IsReadOnly)
         {
-            throw new InvalidOperationException("Das Sidecar stammt von einer neueren Orbivo-Version oder ist nicht lesbar und wird nicht überschrieben.");
+            throw new InvalidOperationException(CoreText.SidecarNotOverwritten);
         }
 
         if (IsBroken && File.Exists(Path))
@@ -220,7 +220,7 @@ public sealed class SidecarFile
             return parsed;
         }
 
-        warnings.Add($"Sidecar: „{key}“ = {node.ToJsonString()} unbekannt (erlaubt: {string.Join(", ", Enum.GetNames<T>())}); ignoriert.");
+        warnings.Add(Loc.Format(CoreText.SidecarUnknownValue, key, node.ToJsonString(), string.Join(", ", Enum.GetNames<T>())));
         return null;
     }
 
@@ -237,7 +237,7 @@ public sealed class SidecarFile
             return flag;
         }
 
-        warnings.Add($"Sidecar: „{key}“ = {node.ToJsonString()} ist kein true/false; ignoriert.");
+        warnings.Add(Loc.Format(CoreText.SidecarNotBoolean, key, node.ToJsonString()));
         return null;
     }
 
@@ -254,7 +254,7 @@ public sealed class SidecarFile
                     return preset;
                 }
 
-                warnings.Add($"Sidecar: Cubemap-Layout „{name}“ unbekannt (erlaubt: {string.Join(", ", CubemapLayout.Presets.Select(p => p.Name))} oder ein Objekt); ignoriert.");
+                warnings.Add(Loc.Format(CoreText.SidecarUnknownCubemap, name, string.Join(", ", CubemapLayout.Presets.Select(p => p.Name))));
                 return null;
             case JsonObject layout:
                 int? columns = ReadNumber<int>(layout, "columns");
@@ -262,16 +262,16 @@ public sealed class SidecarFile
                 string? order = layout["faceOrder"] is JsonValue o && o.TryGetValue(out string? orderText) ? orderText : null;
                 string? rotation = layout["faceRotation"] is JsonValue r && r.TryGetValue(out string? rotationText) ? rotationText : "000000";
                 int padding = layout["padding"] is null ? 0 : ReadNumber<int>(layout, "padding") ?? -1;
-                string? error = "columns/rows fehlen";
+                string? error = "columns/rows missing";
                 if (columns is { } c && rows is { } n && CubemapLayout.TryValidate(c, n, order, rotation, padding, out error))
                 {
                     return new CubemapLayout(c, n, order!, rotation!, padding);
                 }
 
-                warnings.Add($"Sidecar: Cubemap-Layout {node.ToJsonString()} ungültig ({error}); ignoriert.");
+                warnings.Add(Loc.Format(CoreText.SidecarInvalidCubemapBecause, node.ToJsonString(), error));
                 return null;
             default:
-                warnings.Add($"Sidecar: Cubemap-Layout {node.ToJsonString()} ungültig; ignoriert.");
+                warnings.Add(Loc.Format(CoreText.SidecarInvalidCubemap, node.ToJsonString()));
                 return null;
         }
     }
@@ -297,11 +297,11 @@ public sealed class SidecarFile
                 return parameters;
             }
 
-            warnings.Add($"Sidecar: Fisheye-Werte ungültig ({error}); ignoriert.");
+            warnings.Add(Loc.Format(CoreText.SidecarInvalidFisheye, error));
             return null;
         }
 
-        warnings.Add($"Sidecar: „fisheye“ = {node.ToJsonString()} ist kein Objekt; ignoriert.");
+        warnings.Add(Loc.Format(CoreText.SidecarFisheyeNoObject, node.ToJsonString()));
         return null;
     }
 
@@ -324,7 +324,7 @@ public sealed class SidecarFile
             }
         }
 
-        warnings.Add(string.Create(CultureInfo.InvariantCulture, $"Sidecar: Ausrichtung {node.ToJsonString()} ungültig (je Achse höchstens ±{OrientationOffset.MaxDegrees}°); ignoriert."));
+        warnings.Add(Loc.Format(CoreText.SidecarInvalidOrientation, node.ToJsonString(), OrientationOffset.MaxDegrees));
         return null;
     }
 
@@ -341,7 +341,7 @@ public sealed class SidecarFile
             return width;
         }
 
-        warnings.Add(string.Create(CultureInfo.InvariantCulture, $"Sidecar: Stereo-Breite {node.ToJsonString()} ungültig (erlaubt {Audio.StereoPlacement.MinWidthDegrees:0}–{Audio.StereoPlacement.MaxWidthDegrees:0}°); ignoriert."));
+        warnings.Add(Loc.Format(CoreText.SidecarInvalidStereoWidth, node.ToJsonString(), Audio.StereoPlacement.MinWidthDegrees, Audio.StereoPlacement.MaxWidthDegrees));
         return null;
     }
 

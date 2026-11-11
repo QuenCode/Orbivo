@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Orbivo – Anleitung</title>
 <!--
-  Operator manual. Shipped next to Orbivo.exe as Anleitung.html (src/Orbivo.App/Orbivo.App.csproj) and opened from the
-  operator window (link "Anleitung" or F1). Self-contained: no external files, so it works offline and from a ZIP.
-  Keep it in sync with the operator window, the recording format (SessionRecorder) and docs/ARCHITECTURE.md.
+  Operator manual in German. Shipped next to Orbivo.exe as Anleitung.html (src/Orbivo.App/Orbivo.App.csproj) and opened from
+  the operator window (link "Anleitung" or F1) when the window is German; docs/Manual.html is the English translation (M11).
+  Self-contained: no external files, so it works offline and from a ZIP.
+  Keep it in sync with Manual.html, the operator window, the recording format (SessionRecorder) and docs/ARCHITECTURE.md.
 -->
 <style>
   :root {
@@ -103,6 +104,7 @@
   svg text { fill: var(--fg); font-family: "Segoe UI", system-ui, sans-serif; }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
   .footer { margin-top: 60px; color: var(--muted); font-size: 14px; }
+  .lang { float: right; margin: 0 0 0 16px; font-size: 14px; }
   @media (max-width: 900px) {
     .layout { display: block; }
     nav.toc { position: static; width: auto; max-height: none; border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; }
@@ -156,6 +158,7 @@
 </nav>
 
 <main>
+<p class="lang"><a href="Manual.html" hreflang="en" lang="en">English version: Manual.html</a></p>
 <h1>Orbivo – Anleitung</h1>
 <p class="lead">Player für 360°- und 180°-Videos auf der Varjo XR-3. Diese Anleitung richtet sich an den Operator am Desktop
 und an alle, die die Aufzeichnungen auswerten.</p>
@@ -201,10 +204,19 @@ steht wie ein Panorama in großer Entfernung.</p>
   signiert ist. Über „Weitere Informationen“ → „Trotzdem ausführen“ startet es.</p>
 </div>
 
+<h3>Sprache</h3>
+<p>Operatorfenster und Anleitung gibt es auf Deutsch und Englisch. Beim allerersten Start ist Orbivo englisch; wer schon mit einer
+früheren Version gearbeitet hat, behält Deutsch. Im Menü <strong>Optionen → Sprache / Language</strong> stellt man die Sprache um. Die neue Sprache gilt nach einem Neustart, den Orbivo gleich anbietet; die Playlist bleibt. Ein laufendes
+Video und eine laufende Aufzeichnung enden mit dem Neustart, also die Sprache vor der Sitzung umstellen.</p>
+<p>Die Aufzeichnungen hängen nicht von der Sprache ab: Spaltennamen, Dateinamen und Ereignistexte sind immer deutsch, mit Dezimalkomma
+(siehe <a href="#daten">Die Aufzeichnungsdaten erklärt</a>).</p>
+
 <h3>Startoptionen</h3>
 <p>Normalerweise startet man Orbivo ohne Zusatz. Für Tests ohne Brille gibt es <code>--no-xr</code>: Dann erscheint statt der Brille
-ein Vorschaufenster, in dem man mit der Maus herumschaut (ziehen = drehen, Mausrad = Zoom, <kbd>Pos1</kbd> = zurücksetzen).</p>
-<pre>Orbivo.exe --no-xr</pre>
+ein Vorschaufenster, in dem man mit der Maus herumschaut (ziehen = drehen, Mausrad = Zoom, <kbd>Pos1</kbd> = zurücksetzen).
+<code>--lang de</code> oder <code>--lang en</code> legt die Sprache nur für diesen Start fest, die gespeicherte Wahl bleibt.</p>
+<pre>Orbivo.exe --no-xr
+Orbivo.exe --lang en</pre>
 
 <!-- ============================================================= -->
 <h2 id="ablauf">3. Ablauf einer Sitzung</h2>
@@ -233,14 +245,17 @@ ein Vorschaufenster, in dem man mit der Maus herumschaut (ziehen = drehen, Mausr
 <div class="table-wrap">
 <table>
   <tr><th>Bereich</th><th>Wozu</th></tr>
-  <tr><td>Playlist (links oben)</td><td>Videos sammeln, ordnen, laden; automatisch weiter, wiederholen.</td></tr>
+  <tr><td>Menüleiste (oben)</td><td><strong>Datei:</strong> Videos hinzufügen, Playlist leeren, Beenden. <strong>Wiedergabe:</strong> automatisch weiter,
+    wiederholen (Loop). <strong>Optionen:</strong> Sprache / Language,
+    Tonausgabe und Lautstärke sperren. <strong>Hilfe:</strong> Anleitung (<kbd>F1</kbd>), Über Orbivo (Version, Lizenzen, Log-Datei).</td></tr>
+  <tr><td>Playlist (links oben)</td><td>Videos sammeln, ordnen, laden.</td></tr>
   <tr><td>Format (links)</td><td>Projektion, Stereo-Layout, Ausrichtung des geladenen Videos. Wird pro Video gespeichert.</td></tr>
   <tr><td>Live-Ansicht (links unten)</td><td>Zeigt, was der Proband sieht. Bei jedem Start aus.</td></tr>
-  <tr><td>Ton (rechts oben)</td><td>Audio-Modus, Tonformat, Ton fest am Bild, Breite, Ausgabegerät, Sperre.</td></tr>
+  <tr><td>Ton (rechts oben)</td><td>Audio-Modus, Tonformat, Ton fest am Bild, Breite, Ausgabegerät; Hinweis, wenn die Ton-Sperre an ist.</td></tr>
   <tr><td>Brille im Leerlauf</td><td>Was die Brille zeigt, solange kein Video läuft: Schwarz, Kamerabild oder Standbild.</td></tr>
   <tr><td>Aufzeichnung</td><td>Kopfbewegung und Ereignisse als CSV-Dateien schreiben.</td></tr>
   <tr><td>Status</td><td>Zustand von Brille, Bildausgabe, Video, Decoder, Ton, A/V-Abweichung, Blickrichtung, Bibliotheken, Log-Datei.</td></tr>
-  <tr><td>Wiedergabe (unten)</td><td>Großer Balken „Brille: …“, Zeitleiste, Transport, Lautstärke, Schwarzbild, Fade, Recenter, Tastenübersicht und der Link zu dieser Anleitung.</td></tr>
+  <tr><td>Wiedergabe (unten)</td><td>Großer Balken „Brille: …“, Zeitleiste, Transport, Lautstärke, Schwarzbild, Fade, Recenter, Tastenübersicht.</td></tr>
 </table>
 </div>
 <p>Die Titelleiste nennt die Version von Orbivo und ob es mit Brille oder als Vorschau (<code>--no-xr</code>) läuft.</p>
@@ -256,8 +271,11 @@ ein Vorschaufenster, in dem man mit der Maus herumschaut (ziehen = drehen, Mausr
   <li><strong>Entfernen</strong> (<kbd>Entf</kbd>): Das gerade gezeigte Video lässt sich erst nach Stop entfernen, damit es nicht
     versehentlich verschwindet.</li>
   <li><strong>▲ ▼</strong> ändern die Reihenfolge.</li>
-  <li><strong>Automatisch weiter</strong>: Am Ende eines Videos startet das nächste.</li>
-  <li><strong>Wiederholen (Loop)</strong>: Das aktuelle Video beginnt am Ende von vorn. Hat Vorrang vor „automatisch weiter“.</li>
+  <li><strong>Wiedergabe → Automatisch weiter zum nächsten Video</strong> (Haken): Am Ende eines Videos startet das nächste.</li>
+  <li><strong>Wiedergabe → Aktuelles Video wiederholen (Loop)</strong> (Haken): Das aktuelle Video beginnt am Ende von vorn. Hat Vorrang
+    vor „automatisch weiter“.</li>
+  <li><strong>Datei → Playlist leeren</strong> entfernt nach einer Rückfrage alle Videos. Wie beim Entfernen: nicht, solange das geladene Video
+    gezeigt wird; nach Stop wird es mit geschlossen. Die Dateien selbst bleiben, wo sie sind.</li>
 </ul>
 <p>Die Playlist, das zuletzt geladene Video (es ist nach dem Neustart ausgewählt, aber nicht geladen), „Automatisch weiter“,
 „Wiederholen“ und die Fade-Dauer werden gespeichert. Fehlt beim Start eine Datei (z.&nbsp;B. weil die externe Platte nicht
@@ -362,7 +380,8 @@ kopiert, kopiert das Sidecar mit. „Alles automatisch“ verwirft die Einstellu
   <li><strong>Tonausgabe</strong>: das Gerät der Kopfhörer. „Windows-Standard“ folgt dem Standardgerät; ein fest gewähltes Gerät wird nie
     automatisch gewechselt. Fehlt es, läuft das Video still weiter, Orbivo versucht es alle 2 Sekunden erneut. „Aktualisieren“ liest die
     Liste neu ein, z.&nbsp;B. nach dem Einstecken.</li>
-  <li><strong>Sperren</strong> schützt Gerät und Lautstärke vor versehentlichem Verstellen. Stumm (<kbd>M</kbd>) geht weiter.</li>
+  <li><strong>Optionen → Tonausgabe und Lautstärke sperren</strong> schützt Gerät und Lautstärke vor versehentlichem Verstellen. Im Bereich Ton steht
+    dann „Gesperrt“. Stumm (<kbd>M</kbd>) geht weiter. Die Sperre bleibt nach einem Neustart.</li>
 </ul>
 <p>Ton ist die Uhr der Wiedergabe: Das Bild richtet sich nach dem Ton. Die Abweichung steht im Status unter „A/V“ und sollte innerhalb von
 ±20&nbsp;ms bleiben.</p>
@@ -419,6 +438,10 @@ grau = keine Angabe.</p>
 </ul>
 <p>Darunter stehen Zustand, Dateiname und Zeilenzahl. Kann Orbivo nicht schreiben (Ordner fehlt, Platte voll), endet die Aufzeichnung mit
 einer roten Meldung; die Wiedergabe läuft weiter.</p>
+<div class="note">
+  <p>Die Aufzeichnungen sind in jeder Sprache des Fensters gleich: deutsche Spaltennamen, Dateinamen und Ereignistexte, Dezimalkomma.
+  So laufen Auswerteskripte weiter, egal welche Sprache der Operator eingestellt hat.</p>
+</div>
 
 <!-- ============================================================= -->
 <h2 id="daten">15. Die Aufzeichnungsdaten erklärt</h2>
@@ -696,7 +719,7 @@ print(video[["Videozeit_s", "Blick_Video_Yaw_Grad", "Blick_Video_Pitch_Grad"]].d
 <div class="table-wrap">
 <table>
   <tr><th>Was</th><th>Wo</th></tr>
-  <tr><td>Einstellungen: Tonausgabe, Lautstärke, Sperre, Leerlauf-Ansicht, Aufzeichnung (an/aus, Ordner, Rate, nur bei laufendem Video),
+  <tr><td>Einstellungen: Sprache, Tonausgabe, Lautstärke, Sperre, Leerlauf-Ansicht, Aufzeichnung (an/aus, Ordner, Rate, nur bei laufendem Video),
     Playlist, „Automatisch weiter“, „Wiederholen“, Fade-Dauer</td>
     <td><code>%LOCALAPPDATA%\Orbivo\settings.json</code><br>(in die Adresszeile des Explorers eintippen)</td></tr>
   <tr><td>Format, Ausrichtung und Ton je Video</td><td>Sidecar neben dem Video: <code>&lt;Video&gt;.orbivo.json</code></td></tr>
@@ -706,7 +729,8 @@ print(video[["Videozeit_s", "Blick_Video_Yaw_Grad", "Blick_Video_Pitch_Grad"]].d
 </table>
 </div>
 <p>Nicht gespeichert werden absichtlich: Stumm, Recenter, Live-Ansicht, Proband/Sitzung.
-Um alle Einstellungen zurückzusetzen, Orbivo beenden und <code>settings.json</code> löschen.</p>
+Um alle Einstellungen zurückzusetzen, Orbivo beenden und <code>settings.json</code> löschen; Orbivo startet dann englisch wie beim
+allerersten Start.</p>
 
 <!-- ============================================================= -->
 <h2 id="probleme">17. Probleme und Lösungen</h2>
@@ -718,21 +742,22 @@ Um alle Einstellungen zurückzusetzen, Orbivo beenden und <code>settings.json</c
   <tr><td>Balken sagt „SCHWARZBILD“</td><td><kbd>B</kbd> drücken bzw. <kbd>F</kbd> zum Einblenden.</td></tr>
   <tr><td>Bild verzerrt, doppelt oder Tiefe falsch</td><td>Format prüfen: Projektion, Stereo-Layout, Augen tauschen. Wird pro Video gespeichert.</td></tr>
   <tr><td>Vorne im Video ist nicht vorne</td><td>Proband in die gewünschte Richtung schauen lassen, <kbd>R</kbd>. Für ein Video dauerhaft: Format → Ausrichtung (Yaw).</td></tr>
-  <tr><td>Kein Ton</td><td>Stumm (<kbd>M</kbd>)? Schwarzbild? Lautstärke? „Tonausgabe“ im Status prüfen, Gerät wählen, „Aktualisieren“. Ist die Sperre an, erst entsperren.</td></tr>
+  <tr><td>Kein Ton</td><td>Stumm (<kbd>M</kbd>)? Schwarzbild? Lautstärke? „Tonausgabe“ im Status prüfen, Gerät wählen, „Aktualisieren“. Steht im Bereich Ton „Gesperrt“, erst unter Optionen entsperren.</td></tr>
   <tr><td>Ton kommt nicht aus der Richtung des Bildes</td><td>„Ton fest am Bild“ an? Bei Mono-Ton gibt es keine Richtung. Windows-„Spatial Sound“ für die Kopfhörer ausschalten.</td></tr>
   <tr><td>Ambisonics klingt verdreht, von oben oder dumpf</td><td>„Tonformat“ prüfen: das andere Ambisonics-Format (AmbiX bzw. FuMa) wählen. Sind die 4 Kanäle gar kein Ambisonics, „Kanäle“ wählen.</td></tr>
   <tr><td>Audio-Modus sagt „Notbehelf links/rechts“</td><td>Steam Audio fehlt oder ließ sich nicht starten (Grund dahinter, Status „Bibliotheken“). Der Ton ist hörbar, aber ohne Richtung im Bild. ZIP neu entpacken.</td></tr>
   <tr><td>Video ruckelt</td><td>Status „Decoder“: Software-Dekodierung oder „Puffer läuft leer“ heißt, das Video ist für diesen Rechner zu schwer (z.&nbsp;B. 8K mit 60 fps). Andere Programme schließen, Netzteil anschließen (Laptop).</td></tr>
   <tr><td>Aufzeichnung stoppt mit roter Meldung</td><td>Ordner erreichbar? Platz auf der Platte? Ordner neu wählen und wieder einschalten.</td></tr>
   <tr><td>FFmpeg / Steam Audio / OpenXR rot</td><td>Programmdateien unvollständig: ZIP neu entpacken.</td></tr>
-  <tr><td>Anleitung öffnet sich nicht</td><td><code>Anleitung.html</code> liegt neben <code>Orbivo.exe</code> und lässt sich auch direkt im Browser öffnen.</td></tr>
+  <tr><td>Fenster in der falschen Sprache</td><td>Im Menü Optionen → „Sprache / Language“ die Sprache wählen und Orbivo neu starten lassen.</td></tr>
+  <tr><td>Anleitung öffnet sich nicht</td><td><code>Anleitung.html</code> (deutsch) und <code>Manual.html</code> (englisch) liegen neben <code>Orbivo.exe</code> und lassen sich auch direkt im Browser öffnen.</td></tr>
 </table>
 </div>
 <p>Bei Fehlern bitte das Diagnose-Log mitschicken (Pfad im Status unter „Log-Datei“).</p>
 
 <!-- ============================================================= -->
 <h2 id="version">18. Version und Lizenzen</h2>
-<p>Die Version steht in der Titelleiste des Operatorfensters und in jedem Diagnose-Log. Im Ordner <code>licenses</code> neben der exe liegen
+<p>Die Version steht in der Titelleiste des Operatorfensters, unter Hilfe → Über Orbivo und in jedem Diagnose-Log. Im Ordner <code>licenses</code> neben der exe liegen
 die Lizenzen der mitgelieferten Bibliotheken, eine Übersicht steht in <code>THIRD-PARTY-NOTICES.txt</code>:</p>
 <ul>
   <li><strong>FFmpeg</strong> (LGPL v3 oder später) als austauschbare DLLs, unverändert aus dem Build von BtbN.</li>

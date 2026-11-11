@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Playback;
 
 namespace Orbivo.Core.Logging;
@@ -741,7 +742,7 @@ public sealed class SessionRecorder : IDisposable
             Waiting = false,
             HeadRows = Volatile.Read(ref _headRows),
             EventRows = Volatile.Read(ref _eventRows),
-            Error = $"Aufzeichnung gestoppt: {exception.Message}",
+            Error = Loc.Format(CoreText.RecordingStopped, exception.Message),
         });
     }
 

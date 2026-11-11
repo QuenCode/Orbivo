@@ -36,9 +36,4 @@ public readonly record struct StereoPlacement(bool FixedToPicture, double WidthD
 
     public static double ClampWidth(double degrees) =>
         double.IsFinite(degrees) ? Math.Clamp(degrees, MinWidthDegrees, MaxWidthDegrees) : DefaultWidthDegrees;
-
-    /// <summary>German text for the operator, e.g. "fest am Bild, Lautsprecher bei ±75°".</summary>
-    public string Describe() => FixedToPicture
-        ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"fest am Bild, Lautsprecher bei ±{WidthDegrees:0}°")
-        : "Stereo direkt (dreht mit dem Kopf)";
 }

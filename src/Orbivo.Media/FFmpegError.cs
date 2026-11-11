@@ -1,4 +1,5 @@
 using FFmpeg.AutoGen;
+using Orbivo.Core.Localization;
 
 namespace Orbivo.Media;
 
@@ -45,15 +46,15 @@ public sealed class FFmpegException : Exception
 
 /// <summary>
 /// A video cannot be played. <see cref="Exception.Message"/> is English for the log,
-/// <see cref="OperatorMessage"/> German for the operator UI.
+/// <see cref="OperatorMessage"/> is for the operator UI (in its language) and the event log (in German).
 /// </summary>
 public sealed class MediaOpenException : Exception
 {
-    public MediaOpenException(string message, string operatorMessage, Exception? innerException = null)
+    public MediaOpenException(string message, OperatorText operatorMessage, Exception? innerException = null)
         : base(message, innerException)
     {
         OperatorMessage = operatorMessage;
     }
 
-    public string OperatorMessage { get; }
+    public OperatorText OperatorMessage { get; }
 }

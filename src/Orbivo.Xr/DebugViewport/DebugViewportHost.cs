@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Logging;
 using Orbivo.Core.Playback;
 using Orbivo.Media;
@@ -48,7 +49,7 @@ public readonly record struct DebugViewportStatus(
 /// </summary>
 public sealed class DebugViewportHost : IDisposable
 {
-    public const string WindowTitle = "Orbivo – Vorschau (Ersatz für die Brille)";
+    public static string WindowTitle => CoreText.PreviewWindowTitle;
 
     private const int InitialClientWidth = 1280;
     private const int InitialClientHeight = 720;

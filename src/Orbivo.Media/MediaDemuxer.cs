@@ -2,6 +2,7 @@ using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Formats;
+using Orbivo.Core.Localization;
 
 namespace Orbivo.Media;
 
@@ -41,7 +42,7 @@ internal sealed unsafe class MediaDemuxer : IDisposable
     private AVPacket* _packet;
     private volatile bool _stopRequested;
     private bool _disposed;
-    private string? _errorMessage;
+    private OperatorText? _errorMessage;
 
     // Control thread → demux thread.
     private int _requestedSeekId;
@@ -129,8 +130,8 @@ internal sealed unsafe class MediaDemuxer : IDisposable
     /// <summary>Id of the latest seek asked for (0 = the start after opening).</summary>
     public int RequestedSeekId => Volatile.Read(ref _requestedSeekId);
 
-    /// <summary>German error text if reading failed, else null.</summary>
-    public string? ErrorMessage => Volatile.Read(ref _errorMessage);
+    /// <summary>Error for the operator if reading failed, else null.</summary>
+    public OperatorText? ErrorMessage => Volatile.Read(ref _errorMessage);
 
     /// <summary>
     /// Opens <paramref name="path"/>. Throws <see cref="MediaOpenException"/> if it is not a video file.
@@ -144,7 +145,7 @@ internal sealed unsafe class MediaDemuxer : IDisposable
         ArgumentNullException.ThrowIfNull(logger);
         if (!File.Exists(path))
         {
-            throw new MediaOpenException($"Video file {path} not found.", "Datei nicht gefunden");
+            throw new MediaOpenException($"Video file {path} not found.", new OperatorText(nameof(CoreText.FileNotFound)));
         }
 
         AVFormatContext* format = null;
@@ -155,7 +156,7 @@ internal sealed unsafe class MediaDemuxer : IDisposable
             {
                 throw new MediaOpenException(
                     $"avformat_open_input({path}) failed: {FFmpegError.Describe(result)}.",
-                    "Datei kann nicht geöffnet werden (kein bekanntes Videoformat?)");
+                    new OperatorText(nameof(CoreText.FileCannotOpen)));
             }
 
             EmbeddedAudioLayout?[] containerLayouts = ReadContainerAudioLayouts(format);
@@ -164,7 +165,7 @@ internal sealed unsafe class MediaDemuxer : IDisposable
             int video = ffmpeg.av_find_best_stream(format, AVMediaType.AVMEDIA_TYPE_VIDEO, -1, -1, null, 0);
             if (video < 0)
             {
-                throw new MediaOpenException($"{path} contains no video stream.", "Datei enthält kein Video");
+                throw new MediaOpenException($"{path} contains no video stream.", new OperatorText(nameof(CoreText.FileHasNoVideo)));
             }
 
             int audio = withAudio ? ffmpeg.av_find_best_stream(format, AVMediaType.AVMEDIA_TYPE_AUDIO, -1, video, null, 0) : -1;
@@ -185,7 +186,7 @@ internal sealed unsafe class MediaDemuxer : IDisposable
         }
         catch (FFmpegException exception)
         {
-            throw new MediaOpenException(exception.Message, "Video kann nicht gelesen werden (Details im Log)", exception);
+            throw new MediaOpenException(exception.Message, new OperatorText(nameof(CoreText.VideoCannotRead)), exception);
         }
         finally
         {
@@ -302,7 +303,7 @@ internal sealed unsafe class MediaDemuxer : IDisposable
         catch (Exception exception)
         {
             _logger.LogError(exception, "Reading {Path} failed.", Path);
-            Volatile.Write(ref _errorMessage, "Lesen der Datei fehlgeschlagen (Details im Log)");
+            Volatile.Write(ref _errorMessage, new OperatorText(nameof(CoreText.FileReadFailed)));
         }
     }
 

@@ -4,6 +4,7 @@ using Orbivo.Audio.Spatial;
 using Orbivo.Audio.SteamAudio;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Concurrency;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Playback;
 
 namespace Orbivo.Audio.Output;
@@ -288,7 +289,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
         catch (Exception exception)
         {
             _logger.LogError(exception, "The sound output could not start");
-            _message = "Tonausgabe konnte nicht starten.";
+            _message = CoreText.SoundOutputCannotStart;
             SwitchTo(new NullAudioEndpoint(FallbackSampleRate), AudioEndpointState.Unavailable);
         }
         finally
@@ -313,7 +314,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
             {
                 // The silent stand-in has no device that could fail: a bug. Keep the clock thread alive and say so.
                 _logger.LogError(exception, "The sound output loop failed");
-                _message = "Interner Fehler der Tonausgabe (siehe Log).";
+                _message = CoreText.SoundOutputInternalError;
                 Thread.Sleep(10);
                 continue;
             }
@@ -461,8 +462,8 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
                 _logger.LogWarning(exception, "The sound device {Device} cannot be opened; playing on without sound", selected ?? "(Windows default)");
             }
 
-            string name = selected is null ? "Windows-Standard" : provider.GetDeviceName(selected) ?? "ausgewähltes Gerät";
-            _message = $"Tonausgabe nicht verfügbar ({name}). Wiederholung alle {RetryInterval.TotalSeconds:0} s.";
+            string name = selected is null ? CoreText.SoundDeviceWindowsDefault : provider.GetDeviceName(selected) ?? CoreText.SoundDeviceSelected;
+            _message = Loc.Format(CoreText.SoundOutputUnavailable, name, RetryInterval.TotalSeconds);
             if (_endpoint is null || !_endpoint.IsSilent)
             {
                 SwitchTo(new NullAudioEndpoint(_renderer?.SampleRate ?? FallbackSampleRate), AudioEndpointState.Unavailable);
@@ -483,7 +484,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
     {
         string name = _endpoint?.DeviceName ?? "?";
         _logger.LogWarning(exception, "The sound device {Device} failed; playing on without sound", name);
-        _message = $"Tonausgabe ausgefallen ({name}). Wiederholung alle {RetryInterval.TotalSeconds:0} s.";
+        _message = Loc.Format(CoreText.SoundOutputFailed, name, RetryInterval.TotalSeconds);
         _retryAt = Stopwatch.GetTimestamp() + (long)(RetryInterval.TotalSeconds * Stopwatch.Frequency);
         SwitchTo(new NullAudioEndpoint(_renderer?.SampleRate ?? FallbackSampleRate), AudioEndpointState.Unavailable);
         _deviceName = name;
@@ -580,7 +581,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
         {
             _spatialFailedRate = sampleRate;
             _spatialAvailable = false;
-            _spatialProblem = $"Ton fest am Bild nicht verfügbar: Steam Audio lässt sich nicht laden ({exception.Message}). Der Ton läuft als normales Stereo.";
+            _spatialProblem = Loc.Format(CoreText.SpatialUnavailable, exception.Message);
             _logger.LogError(exception, "Steam Audio could not be prepared for {Rate} Hz; stereo plays without spatial rendering", sampleRate);
             renderer.SetStage(null);
         }
@@ -625,7 +626,7 @@ public sealed class AudioOutput : IAudioOutput, IDisposable
         catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException or SteamAudioException or ArgumentException)
         {
             _ambisonicsFailedRate = sampleRate;
-            _ambisonicsProblem = $"Ambisonics nicht binaural: Steam Audio lässt sich nicht laden ({exception.Message}). Notbehelf: zwei Richtmikrofone links und rechts, ohne Kopfbewegung.";
+            _ambisonicsProblem = Loc.Format(CoreText.AmbisonicsNotBinaural, exception.Message);
             _logger.LogError(exception, "Steam Audio Ambisonics could not be prepared for {Rate} Hz; Ambisonics plays through a cardioid pair", sampleRate);
             renderer.SetAmbisonicsStage(null);
         }

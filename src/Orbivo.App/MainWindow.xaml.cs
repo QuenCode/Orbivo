@@ -4,7 +4,9 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using Microsoft.Win32;
+using Orbivo.App.Localization;
 using Orbivo.App.ViewModels;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Playlists;
 
 namespace Orbivo.App;
@@ -19,6 +21,21 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // Menu File → Clear playlist asks first: a playlist is quickly lost and slowly put together again.
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is MainViewModel viewModel)
+            {
+                viewModel.ConfirmClearPlaylist = count => MessageBox.Show(
+                    this,
+                    Loc.Format(UiText.ClearPlaylistQuestion, count),
+                    "Orbivo",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question,
+                    MessageBoxResult.No) == MessageBoxResult.Yes;
+            }
+        };
+
         // The live view presenter draws into the child window from its own thread: it starts once the window exists
         // and stops before the window goes away.
         LiveViewPanel.WindowCreated += (_, _) => ViewModel.SetLiveViewWindow(LiveViewPanel.WindowHandle);
@@ -32,8 +49,8 @@ public partial class MainWindow : Window
         string extensions = string.Join(";", Playlist.VideoExtensions.Select(extension => "*" + extension));
         var dialog = new OpenFileDialog
         {
-            Title = "Videos zur Playlist hinzufügen",
-            Filter = $"Videos ({extensions})|{extensions}|Alle Dateien (*.*)|*.*",
+            Title = UiText.DialogAddVideos,
+            Filter = Loc.Format(UiText.DialogVideoFilter, extensions),
             Multiselect = true,
         };
         if (dialog.ShowDialog(this) == true)
@@ -43,12 +60,17 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnExitClick(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
     private void OnChooseIdleImageClick(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Standbild für den Leerlauf wählen (Equirect 360°)",
-            Filter = "Bilder (*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff)|*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff|Alle Dateien (*.*)|*.*",
+            Title = UiText.DialogIdleImage,
+            Filter = Loc.Format(UiText.DialogImageFilter, "*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff"),
         };
         if (dialog.ShowDialog(this) == true)
         {
@@ -60,7 +82,7 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFolderDialog
         {
-            Title = "Ordner für die Aufzeichnungen wählen",
+            Title = UiText.DialogRecordingFolder,
             InitialDirectory = Directory.Exists(ViewModel.Recording.Folder) ? ViewModel.Recording.Folder : string.Empty,
         };
         if (dialog.ShowDialog(this) == true)
@@ -133,7 +155,8 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (Keyboard.FocusedElement is TextBox || Keyboard.Modifiers.HasFlag(ModifierKeys.Control) || Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
+        // Also off while the menu is open: its keys choose menu entries there.
+        if (Keyboard.FocusedElement is TextBox or MenuItem || Keyboard.Modifiers.HasFlag(ModifierKeys.Control) || Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
         {
             return;
         }

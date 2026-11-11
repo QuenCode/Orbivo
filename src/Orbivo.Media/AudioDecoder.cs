@@ -1,6 +1,7 @@
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
 using Orbivo.Core.Audio;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Status;
 
 namespace Orbivo.Media;
@@ -48,7 +49,7 @@ internal sealed unsafe class AudioDecoder : IDisposable
     // Written by the decode thread, read by the control thread.
     private int _activeSeekId = -1;
     private int _endOfStream;
-    private string? _errorMessage;
+    private OperatorText? _errorMessage;
 
     // Decode thread only.
     private bool _inputFinished;
@@ -88,8 +89,8 @@ internal sealed unsafe class AudioDecoder : IDisposable
     /// <summary>All sound of the track (from the latest seek on) is in the ring buffer.</summary>
     public bool EndOfStream => Volatile.Read(ref _endOfStream) != 0;
 
-    /// <summary>German error text if decoding failed for good (the video plays on without sound), else null.</summary>
-    public string? ErrorMessage => Volatile.Read(ref _errorMessage);
+    /// <summary>Error for the operator if decoding failed for good (the video plays on without sound), else null.</summary>
+    public OperatorText? ErrorMessage => Volatile.Read(ref _errorMessage);
 
     /// <summary>
     /// True once the latest seek (or the start) is handled: the ring buffer holds sound of the new position worth
@@ -142,7 +143,7 @@ internal sealed unsafe class AudioDecoder : IDisposable
             AVCodec* decoder = ffmpeg.avcodec_find_decoder(parameters->codec_id);
             if (decoder is null)
             {
-                throw new MediaOpenException($"No FFmpeg decoder for audio codec {codecName}.", $"Für den Ton-Codec {codecName} gibt es keinen Decoder");
+                throw new MediaOpenException($"No FFmpeg decoder for audio codec {codecName}.", new OperatorText(nameof(CoreText.AudioNoDecoder), codecName));
             }
 
             codec = ffmpeg.avcodec_alloc_context3(decoder);
@@ -169,7 +170,7 @@ internal sealed unsafe class AudioDecoder : IDisposable
             {
                 throw new MediaOpenException(
                     $"The sound track of {demuxer.Path} needs {plan.RingChannels} channels, the ring buffer holds {ring.Channels}.",
-                    "Tonformat wird nicht unterstützt (Details im Log)");
+                    new OperatorText(nameof(CoreText.AudioFormatUnsupported)));
             }
 
             swr = CreateResampler(codec, plan);
@@ -202,7 +203,7 @@ internal sealed unsafe class AudioDecoder : IDisposable
         }
         catch (FFmpegException exception)
         {
-            throw new MediaOpenException(exception.Message, "Ton kann nicht dekodiert werden (Details im Log)", exception);
+            throw new MediaOpenException(exception.Message, new OperatorText(nameof(CoreText.AudioCannotDecode)), exception);
         }
         finally
         {
@@ -331,7 +332,7 @@ internal sealed unsafe class AudioDecoder : IDisposable
         catch (Exception exception)
         {
             _logger.LogError(exception, "Decoding the sound of {Path} failed; the video plays on without sound.", _demuxer.Path);
-            Volatile.Write(ref _errorMessage, "Ton kann nicht dekodiert werden (Details im Log)");
+            Volatile.Write(ref _errorMessage, new OperatorText(nameof(CoreText.AudioCannotDecode)));
         }
     }
 

@@ -67,7 +67,9 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 
 # Must match build/Native.targets (what the app needs) and native/README.md.
 $nativeLibraries = @('avcodec-63.dll', 'avformat-63.dll', 'avutil-61.dll', 'swresample-7.dll', 'swscale-10.dll', 'phonon.dll', 'openxr_loader.dll')
-$requiredInPackage = @('Orbivo.exe', 'Anleitung.html', 'THIRD-PARTY-NOTICES.txt', 'licenses\FFmpeg-LICENSE.txt',
+# Manuals and German texts in both languages (M11); English is built into the exe.
+$requiredInPackage = @('Orbivo.exe', 'Anleitung.html', 'Manual.html', 'de\Orbivo.resources.dll', 'de\Orbivo.Core.resources.dll',
+    'THIRD-PARTY-NOTICES.txt', 'licenses\FFmpeg-LICENSE.txt',
     'licenses\SteamAudio-LICENSE.md', 'licenses\SteamAudio-THIRDPARTY.md', 'licenses\OpenXR-LICENSE.txt') + $nativeLibraries
 # Tools of the FFmpeg build that are not part of the app (native/README.md).
 $forbiddenInPackage = @('ffmpeg.exe', 'ffprobe.exe', 'avfilter-12.dll', 'avdevice-63.dll')
@@ -240,7 +242,7 @@ function New-Package([string] $packageName, [bool] $isRelease) {
         }
     }
 
-    # Starts the packaged exe without a window: native libraries load, manual is there (StartupOptions --check).
+    # Starts the packaged exe without a window: native libraries load, both manuals are there (StartupOptions --check).
     $process = Start-Process -FilePath (Join-Path $stage 'Orbivo.exe') -ArgumentList '--check' -WorkingDirectory $stage -PassThru -Wait
     $logs = Join-Path $stage 'Logs'
     if ($process.ExitCode -ne 0) {
@@ -314,7 +316,7 @@ function Publish-Release([string] $releaseVersion, [string] $tag, [string] $zip)
     $notesFile = Join-Path $releaseDir "Orbivo-$releaseVersion-notes.md"
     $notes = Get-ReleaseNotes $releaseVersion
     $hash = (Get-Content "$zip.sha256" -Raw).Trim()
-    $body = "$notes`n`n---`nZIP entpacken (nicht unter C:\Programme), Orbivo.exe starten. Anleitung: Anleitung.html im Programmordner oder F1 in der App.`n`nSHA256: ``$hash```n"
+    $body = "$notes`n`n---`nZIP entpacken (nicht unter C:\Programme), Orbivo.exe starten. Anleitung: Anleitung.html im Programmordner oder F1 in der App.`n`nUnpack the ZIP (not under C:\Program Files), start Orbivo.exe. Manual: Manual.html in the program folder or F1 in the app.`n`nSHA256: ``$hash```n"
     Write-Text $notesFile $body
 
     Write-Step "Pushing $releaseBranch, $stableBranch and $tag"

@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Orbivo.App.Localization;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Logging;
 using Orbivo.Core.Settings;
 
@@ -25,7 +27,7 @@ public sealed class RecordingViewModel : ObservableObject
     private string _folder;
     private string _label = string.Empty;
     private RecordingRateChoice _selectedRate;
-    private string _statusText = "Aus";
+    private string _statusText = UiText.Off;
     private StatusLevel _statusLevel = StatusLevel.Neutral;
     private string? _filePath;
 
@@ -34,9 +36,9 @@ public sealed class RecordingViewModel : ObservableObject
         ArgumentException.ThrowIfNullOrWhiteSpace(folder);
         Rates =
         [
-            new RecordingRateChoice(0, "Jedes Bild (90 Hz in der Brille)"),
+            new RecordingRateChoice(0, UiText.RateEveryFrame),
             new RecordingRateChoice(45, "45 Hz"),
-            new RecordingRateChoice(30, "30 Hz (Standard)"),
+            new RecordingRateChoice(30, "30 Hz (" + UiText.DefaultTag + ")"),
             new RecordingRateChoice(10, "10 Hz"),
         ];
         _enabled = enabled;
@@ -149,7 +151,7 @@ public sealed class RecordingViewModel : ObservableObject
         }
     }
 
-    public string FileText => _filePath is null ? "Noch keine Datei" : Path.GetFileName(_filePath) + " (+ _ereignisse.csv)";
+    public string FileText => _filePath is null ? UiText.RecordingNoFileYet : Path.GetFileName(_filePath) + " (+ _ereignisse.csv)";
 
     /// <summary>On, folder, rate and mode to keep in the settings.</summary>
     public (bool Enabled, string Folder, int RateHz, bool PerVideo) SavedChoice => (_savedEnabled, _folder, _selectedRate.RateHz, _perVideo);
@@ -176,15 +178,17 @@ public sealed class RecordingViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(status);
         FilePath = status.HeadFilePath;
-        CultureInfo german = CultureInfo.GetCultureInfo("de-DE");
         if (status.Active)
         {
-            string text = string.Create(
-                german,
-                $"{(_perVideo ? $"Video {status.FilePairs} läuft" : "Läuft")} seit {FormatDuration(status.Duration)} · {status.HeadRows:N0} Kopf-Zeilen · {status.EventRows:N0} Ereignisse");
+            string text = Loc.Format(
+                _perVideo ? UiText.RecordingVideoRunning : UiText.RecordingRunning,
+                FormatDuration(status.Duration),
+                status.HeadRows,
+                status.EventRows,
+                status.FilePairs);
             if (status.DroppedRows > 0)
             {
-                StatusText = text + string.Create(german, $" · {status.DroppedRows:N0} Zeilen verloren");
+                StatusText = text + " · " + Loc.Format(UiText.RecordingRowsLost, status.DroppedRows);
                 StatusLevel = StatusLevel.Warning;
             }
             else
@@ -214,24 +218,26 @@ public sealed class RecordingViewModel : ObservableObject
         if (_enabled && status.Waiting)
         {
             StatusText = status.FilePairs == 0
-                ? "Bereit, wartet auf Play. Jedes Video bekommt ein eigenes Dateipaar"
-                : string.Create(
-                    german,
-                    $"Bereit, wartet auf Play · bisher {status.FilePairs} {(status.FilePairs == 1 ? "Dateipaar" : "Dateipaare")}, zuletzt {FormatDuration(status.Duration)}, {status.HeadRows:N0} Kopf-Zeilen");
+                ? UiText.RecordingWaitingFirst
+                : Loc.Format(
+                    status.FilePairs == 1 ? UiText.RecordingWaitingOne : UiText.RecordingWaitingMany,
+                    status.FilePairs,
+                    FormatDuration(status.Duration),
+                    status.HeadRows);
             StatusLevel = StatusLevel.Ok;
             return;
         }
 
         if (_enabled)
         {
-            StatusText = "Startet …";
+            StatusText = UiText.Starting;
             StatusLevel = StatusLevel.Neutral;
             return;
         }
 
-        StatusText = status.HeadFilePath is null ? "Aus" : string.Create(
-            german,
-            $"Aus · letzte Aufzeichnung {FormatDuration(status.Duration)}, {status.HeadRows:N0} Kopf-Zeilen, {status.EventRows:N0} Ereignisse");
+        StatusText = status.HeadFilePath is null
+            ? UiText.Off
+            : Loc.Format(UiText.RecordingOffLast, FormatDuration(status.Duration), status.HeadRows, status.EventRows);
         StatusLevel = StatusLevel.Neutral;
     }
 

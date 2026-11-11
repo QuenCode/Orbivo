@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
 using Orbivo.Core.Formats;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Status;
 using SharpGen.Runtime;
 using Vortice.Direct3D11;
@@ -89,7 +90,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
     private long _lastPtsTicks = long.MinValue;
     private int _endOfStream;
     private int _hardwareFailedBeforeFirstFrame;
-    private string? _errorMessage;
+    private OperatorText? _errorMessage;
     private double _decodedFramesPerSecond;
     private VideoStreamInfo _info;
     private int _activeSeekId;
@@ -162,8 +163,8 @@ internal sealed unsafe class VideoDecoder : IDisposable
     /// <summary>All frames are decoded and published.</summary>
     public bool EndOfStream => Volatile.Read(ref _endOfStream) != 0;
 
-    /// <summary>German error text for the operator if decoding (or reading the file) failed, else null.</summary>
-    public string? ErrorMessage => Volatile.Read(ref _errorMessage) ?? _demuxer.ErrorMessage;
+    /// <summary>Error for the operator if decoding (or reading the file) failed, else null.</summary>
+    public OperatorText? ErrorMessage => Volatile.Read(ref _errorMessage) ?? _demuxer.ErrorMessage;
 
     /// <summary>
     /// The hardware decoder failed before it delivered a frame (set before <see cref="ErrorMessage"/>). The player may
@@ -280,7 +281,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
         int slotCount,
         ILogger logger,
         DecoderPreference preference = DecoderPreference.Auto,
-        string? softwareReason = null,
+        OperatorText? softwareReason = null,
         bool checkHardware = true)
     {
         ArgumentNullException.ThrowIfNull(demuxer);
@@ -308,13 +309,13 @@ internal sealed unsafe class VideoDecoder : IDisposable
             bool chroma420 = pixelFormat is null || (pixelFormat->nb_components >= 3 && pixelFormat->log2_chroma_w == 1 && pixelFormat->log2_chroma_h == 1);
 
             bool software = preference == DecoderPreference.Software;
-            string? reason = software ? softwareReason ?? "Software-Dekodierung eingestellt (--decoder sw)" : null;
+            OperatorText? reason = software ? softwareReason ?? new OperatorText(nameof(CoreText.SoftwareChosen)) : null;
             AVCodec* decoder = software ? null : FindHardwareDecoder(parameters->codec_id);
             if (!software)
             {
                 if (decoder is null)
                 {
-                    reason = $"Für den Codec {codecName} gibt es keinen Hardware-Decoder";
+                    reason = new OperatorText(nameof(CoreText.HardwareNoDecoder), codecName);
                 }
                 else if (checkHardware)
                 {
@@ -325,10 +326,10 @@ internal sealed unsafe class VideoDecoder : IDisposable
                 {
                     if (preference == DecoderPreference.Hardware)
                     {
-                        throw new MediaOpenException($"The GPU cannot decode {codecName} {width}x{height}: {reason}.", reason);
+                        throw new MediaOpenException($"The GPU cannot decode {codecName} {width}x{height}: {reason.ForLog()}.", reason);
                     }
 
-                    logger.LogWarning("{Path}: decoding in software. {Reason}.", path, reason);
+                    logger.LogWarning("{Path}: decoding in software. {Reason}.", path, reason.ForLog());
                     software = true;
                 }
             }
@@ -338,7 +339,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
                 decoder = ffmpeg.avcodec_find_decoder(parameters->codec_id);
                 if (decoder is null)
                 {
-                    throw new MediaOpenException($"No FFmpeg decoder for codec {codecName}.", $"Für den Codec {codecName} gibt es keinen Decoder");
+                    throw new MediaOpenException($"No FFmpeg decoder for codec {codecName}.", new OperatorText(nameof(CoreText.VideoNoDecoder), codecName));
                 }
 
                 if (streamPixelFormat != AVPixelFormat.AV_PIX_FMT_NONE && SoftwareUpload(streamPixelFormat) is null)
@@ -346,7 +347,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
                     string name = pixelFormat is null ? streamPixelFormat.ToString() : Marshal.PtrToStringUTF8((nint)pixelFormat->name) ?? "?";
                     throw new MediaOpenException(
                         $"Software decoding supports 4:2:0 with 8 or 10 bit only, not {name}.",
-                        $"{reason}. Software-Dekodierung kann nur 4:2:0 mit 8 oder 10 Bit (dieses Video: {name})");
+                        new OperatorText(nameof(CoreText.SoftwareOnly420), reason ?? OperatorText.Literal(string.Empty), name));
                 }
             }
 
@@ -427,7 +428,7 @@ internal sealed unsafe class VideoDecoder : IDisposable
         }
         catch (FFmpegException exception)
         {
-            throw new MediaOpenException(exception.Message, "Video kann nicht dekodiert werden (Details im Log)", exception);
+            throw new MediaOpenException(exception.Message, new OperatorText(nameof(CoreText.VideoCannotDecode)), exception);
         }
         catch (Exception) when (FreeOnFailure(ref codec, queue))
         {
@@ -1028,17 +1029,17 @@ internal sealed unsafe class VideoDecoder : IDisposable
         return false;
     }
 
-    private string DescribeDecodeError(Exception exception)
+    private OperatorText DescribeDecodeError(Exception exception)
     {
-        return exception switch
+        return new OperatorText(exception switch
         {
             FFmpegException ffmpegException when _software && ffmpegException.Message.Contains("avcodec", StringComparison.Ordinal) =>
-                "Software-Decoder kann das Video nicht dekodieren (Details im Log)",
+                nameof(CoreText.DecodeSoftwareFailed),
             FFmpegException ffmpegException when ffmpegException.Message.Contains("avcodec", StringComparison.Ordinal) =>
-                "Hardware-Decoder lehnt das Video ab (Profil oder Auflösung zu groß für die GPU?). Details im Log",
-            NotSupportedException => "Bildformat des Decoders wird nicht unterstützt (Details im Log)",
-            _ => "Dekodieren fehlgeschlagen (Details im Log)",
-        };
+                nameof(CoreText.DecodeHardwareRejected),
+            NotSupportedException => nameof(CoreText.DecodePixelFormatUnsupported),
+            _ => nameof(CoreText.DecodeFailed),
+        });
     }
 
     private static YuvMatrix? ToMatrix(AVColorSpace space) => space switch

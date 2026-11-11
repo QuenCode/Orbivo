@@ -1,3 +1,4 @@
+using Orbivo.Core.Localization;
 using Orbivo.Core.Playback;
 using Orbivo.Core.Settings;
 
@@ -64,7 +65,7 @@ public sealed class AppSettingsTests : IDisposable
         File.WriteAllText(FilePath, content);
         AppSettings settings = AppSettings.Load(FilePath, out string? problem);
         Assert.NotNull(problem);
-        Assert.Equal(new AppSettings(), settings);
+        Assert.Equal(new AppSettings(Language: "en"), settings);
     }
 
     [Fact]
@@ -86,7 +87,8 @@ public sealed class AppSettingsTests : IDisposable
             RecordingEnabled: true,
             RecordingFolder: @"D:\Studie",
             HeadSampleRateHz: 10,
-            RecordingPerVideo: true);
+            RecordingPerVideo: true,
+            Language: "de");
         saved.Save(FilePath);
 
         Assert.Contains("\"SeeThrough\"", File.ReadAllText(FilePath), StringComparison.Ordinal);
@@ -150,5 +152,39 @@ public sealed class AppSettingsTests : IDisposable
         settings = AppSettings.Load(FilePath, out _);
         Assert.Null(settings.Playlist);
         Assert.Equal(AppSettings.MinFadeSeconds, settings.FadeSeconds);
+    }
+
+    [Fact]
+    public void VeryFirstStart_IsEnglish()
+    {
+        AppSettings settings = AppSettings.Load(FilePath, out _);
+        Assert.Equal("en", settings.Language);
+        Assert.Equal(AppLanguage.English, settings.AppLanguage);
+    }
+
+    [Fact]
+    public void FileFromBeforeM11_StaysGerman()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+        File.WriteAllText(FilePath, """{ "AudioDeviceId": null, "Volume": 0.5 }""");
+        AppSettings settings = AppSettings.Load(FilePath, out string? problem);
+        Assert.Null(problem);
+        Assert.Equal("de", settings.Language);
+        Assert.Equal(AppLanguage.German, settings.AppLanguage);
+    }
+
+    [Theory]
+    [InlineData("en", "en")]
+    [InlineData("de", "de")]
+    [InlineData("DE-de", "de")]
+    [InlineData("fr", "en")]
+    [InlineData("", "en")]
+    public void SavedLanguage_IsKept_UnknownOnesGiveEnglish(string stored, string expected)
+    {
+        new AppSettings(Language: stored).Save(FilePath);
+        AppSettings settings = AppSettings.Load(FilePath, out string? problem);
+        Assert.Null(problem);
+        Assert.Equal(expected, settings.Language);
+        Assert.DoesNotContain("AppLanguage", File.ReadAllText(FilePath), StringComparison.Ordinal);
     }
 }

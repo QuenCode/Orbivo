@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Orbivo.Core.Localization;
 
 namespace Orbivo.Audio.Output;
 
@@ -26,7 +27,7 @@ internal sealed class NullAudioEndpoint : IAudioEndpoint
 
     public string? DeviceId => null;
 
-    public string DeviceName => "Kein Gerät";
+    public string DeviceName => CoreText.SoundNoDevice;
 
     public int SampleRate { get; }
 

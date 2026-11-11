@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orbivo – Manual</title>
+<!--
+  Operator manual in English (M11), the translation of docs/Anleitung.html. Shipped next to Orbivo.exe as Manual.html
+  (src/Orbivo.App/Orbivo.App.csproj) and opened from the operator window (link "Manual" or F1) when the window is English.
+  Self-contained: no external files, so it works offline and from a ZIP.
+  Keep it in sync with Anleitung.html, the operator window, the recording format (SessionRecorder) and docs/ARCHITECTURE.md.
+-->
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1d2125;
+    --muted: #5b6570;
+    --line: #d9dee3;
+    --soft: #f3f5f7;
+    --accent: #1f6feb;
+    --ok: #2e7d32;
+    --warn: #b26a00;
+    --err: #b3261e;
+    --code: #eef1f4;
+    --yaw: #1f6feb;
+    --pitch: #2e7d32;
+    --roll: #c2410c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16191c;
+      --fg: #e6e9ec;
+      --muted: #a2acb6;
+      --line: #343a40;
+      --soft: #1e2226;
+      --accent: #6aa6ff;
+      --ok: #66bb6a;
+      --warn: #f0a63a;
+      --err: #ef7a72;
+      --code: #24292e;
+      --yaw: #6aa6ff;
+      --pitch: #66bb6a;
+      --roll: #fb923c;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.55 "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  .layout { display: flex; max-width: 1240px; margin: 0 auto; }
+  nav.toc {
+    position: sticky; top: 0; align-self: flex-start;
+    width: 260px; flex: none; max-height: 100vh; overflow-y: auto;
+    padding: 28px 16px 28px 20px; border-right: 1px solid var(--line);
+    font-size: 14px;
+  }
+  nav.toc strong { display: block; margin-bottom: 8px; }
+  nav.toc ol { margin: 0; padding-left: 20px; }
+  nav.toc li { margin: 3px 0; }
+  nav.toc a { color: var(--fg); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); text-decoration: underline; }
+  main { flex: 1; min-width: 0; padding: 28px 40px 80px; max-width: 920px; }
+  h1 { font-size: 30px; margin: 0 0 4px; }
+  h2 { font-size: 23px; margin: 48px 0 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 18px; margin: 28px 0 8px; }
+  h4 { font-size: 16px; margin: 20px 0 6px; }
+  p, li { max-width: 72ch; }
+  a { color: var(--accent); }
+  .lead { color: var(--muted); margin-top: 0; }
+  code, kbd, .mono { font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.92em; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  kbd {
+    display: inline-block; min-width: 1.6em; text-align: center;
+    padding: 0 6px; border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 5px; background: var(--soft);
+  }
+  pre {
+    background: var(--code); padding: 12px 14px; border-radius: 6px;
+    overflow-x: auto; font-size: 13.5px; line-height: 1.45;
+  }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 18px; font-size: 15px; }
+  th, td { border: 1px solid var(--line); padding: 6px 9px; text-align: left; vertical-align: top; }
+  th { background: var(--soft); font-weight: 600; }
+  td code { white-space: nowrap; }
+  .table-wrap { overflow-x: auto; }
+  .note, .warn, .tip {
+    border-left: 4px solid var(--accent); background: var(--soft);
+    padding: 10px 14px; margin: 14px 0; border-radius: 0 6px 6px 0;
+  }
+  .warn { border-left-color: var(--warn); }
+  .tip { border-left-color: var(--ok); }
+  .note > :first-child, .warn > :first-child, .tip > :first-child { margin-top: 0; }
+  .note > :last-child, .warn > :last-child, .tip > :last-child { margin-bottom: 0; }
+  ol.steps > li { margin: 6px 0; }
+  figure { margin: 18px 0; }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  .figs { display: flex; flex-wrap: wrap; gap: 16px; }
+  .figs figure { flex: 1 1 240px; margin: 0; }
+  svg { max-width: 100%; height: auto; display: block; }
+  svg text { fill: var(--fg); font-family: "Segoe UI", system-ui, sans-serif; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
+  .footer { margin-top: 60px; color: var(--muted); font-size: 14px; }
+  .lang { float: right; margin: 0 0 0 16px; font-size: 14px; }
+  @media (max-width: 900px) {
+    .layout { display: block; }
+    nav.toc { position: static; width: auto; max-height: none; border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; }
+    main { padding: 20px 16px 60px; }
+  }
+  @media print {
+    nav.toc { display: none; }
+    main { max-width: none; padding: 0; }
+    h2 { break-before: page; border-top: 0; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc" aria-label="Contents">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#setup">Setting up</a></li>
+    <li><a href="#session">Course of a session</a></li>
+    <li><a href="#window">The operator window</a></li>
+    <li><a href="#playlist">Playlist</a></li>
+    <li><a href="#playback">Playback and keys</a></li>
+    <li><a href="#blackout">Blackout and fade</a></li>
+    <li><a href="#recenter">Recenter</a></li>
+    <li><a href="#format">Format of a video</a></li>
+    <li><a href="#sound">Sound</a></li>
+    <li><a href="#idle">Headset while idle</a></li>
+    <li><a href="#liveview">Live view</a></li>
+    <li><a href="#status">Status</a></li>
+    <li><a href="#recording">Using the recording</a></li>
+    <li><a href="#data">The recorded data explained</a>
+      <ol>
+        <li><a href="#data-files">Files</a></li>
+        <li><a href="#data-head">Head CSV, columns</a></li>
+        <li><a href="#data-axes">Axes and angles</a></li>
+        <li><a href="#data-gaze">Head and view in the video</a></li>
+        <li><a href="#data-pixel">From the angle to the pixel</a></li>
+        <li><a href="#data-quaternion">Quaternion</a></li>
+        <li><a href="#data-time">Time and rate</a></li>
+        <li><a href="#data-events">Event CSV</a></li>
+        <li><a href="#data-analysis">Tips for the analysis</a></li>
+      </ol>
+    </li>
+    <li><a href="#settings">Saved settings</a></li>
+    <li><a href="#problems">Problems and solutions</a></li>
+    <li><a href="#version">Version and licenses</a></li>
+  </ol>
+</nav>
+
+<main>
+<p class="lang"><a href="Anleitung.html" hreflang="de" lang="de">Deutsche Fassung: Anleitung.html</a></p>
+<h1>Orbivo – Manual</h1>
+<p class="lead">Player for 360° and 180° videos on the Varjo XR-3. This manual is for the operator at the desktop and for
+everyone who analyzes the recordings.</p>
+
+<!-- ============================================================= -->
+<h2 id="overview">1. Overview</h2>
+<p>Orbivo plays 360° and 180° videos (also 8K and stereo) in the Varjo XR-3. The player computes spatial sound and plays it
+through normal stereo headphones.</p>
+<ul>
+  <li><strong>Operator:</strong> controls everything at the desktop with mouse and keyboard.</li>
+  <li><strong>Participant:</strong> wears headset and headphones, sees only the video (or the idle view) and controls nothing.
+    A menu never appears in the headset.</li>
+</ul>
+<p>The picture follows only the <em>rotation</em> of the head. If the participant takes a few steps, the picture does not move along:
+the content stands like a panorama far away.</p>
+
+<!-- ============================================================= -->
+<h2 id="setup">2. Setting up</h2>
+<h3>Requirements</h3>
+<ul>
+  <li>Windows 10 or 11 (64-bit), NVIDIA graphics card (tested: RTX 3070, target: RTX 4080 laptop and RTX 5080) with a current driver.</li>
+  <li><strong>Varjo Base</strong> installed and running, the XR-3 connected. Orbivo needs no controllers.</li>
+  <li>Wired stereo headphones without their own surround effects (Windows “Spatial sound” off for this device).</li>
+  <li>Nothing else to install: .NET, FFmpeg, Steam Audio and the OpenXR loader are in the program folder.</li>
+</ul>
+
+<h3>Installation and update</h3>
+<ol class="steps">
+  <li>Unpack the ZIP <code>Orbivo-&lt;version&gt;-win-x64.zip</code> into a folder the user may write to,
+    e.g. <code>C:\Orbivo</code> or <code>D:\Tools\Orbivo</code>.</li>
+  <li>Start <code>Orbivo.exe</code>. For everyday use, put a shortcut on the desktop.</li>
+  <li><strong>Update:</strong> close Orbivo, delete or rename the old folder, unpack the new ZIP in the same place.
+    Settings and recordings stay (they are not in the program folder, see
+    <a href="#settings">Saved settings</a>). Only the diagnostic logs in the folder <code>Logs</code> belong to the program folder;
+    copy them elsewhere first if you want to keep them.</li>
+</ol>
+<div class="warn">
+  <p><strong>Do not unpack under “C:\Program Files”.</strong> Orbivo writes its diagnostic logs into the folder <code>Logs</code> next to
+  the exe. Under “Program Files” it lacks the permission for that without administrator rights.</p>
+</div>
+<div class="note">
+  <p>At the first start Windows SmartScreen may warn (“Windows protected your PC”) because the program is not signed.
+  “More info” → “Run anyway” starts it.</p>
+</div>
+
+<h3>Language</h3>
+<p>The operator window and this manual are available in English and German. At the very first start Orbivo is English; an installation that already ran an earlier version keeps German.
+The menu <strong>Options → Sprache / Language</strong> switches the language.
+The new language takes effect after a restart, which Orbivo offers right away; the playlist stays. A running video and a running
+recording end with the restart, so switch the language before the session.</p>
+<p>The recordings do not depend on the language: column names, file names and event texts are always German, with a decimal comma
+(see <a href="#data">The recorded data explained</a>).</p>
+
+<h3>Start options</h3>
+<p>Normally Orbivo is started without anything added. For tests without the headset there is <code>--no-xr</code>: a preview window
+then stands in for the headset, in which you look around with the mouse (drag = turn, mouse wheel = zoom, <kbd>Home</kbd> = reset).
+<code>--lang en</code> or <code>--lang de</code> sets the language for this start only, without changing the saved choice.</p>
+<pre>Orbivo.exe --no-xr
+Orbivo.exe --lang de</pre>
+
+<!-- ============================================================= -->
+<h2 id="session">3. Course of a session</h2>
+<ol class="steps">
+  <li>Start <strong>Varjo Base</strong>, the headset is connected. Then start <strong>Orbivo</strong>.</li>
+  <li>Check the status (on the right): <em>Headset</em> and <em>Session</em> green, <em>Picture output</em> shows about 90 fps,
+    <em>Sound output</em> shows the headphones.</li>
+  <li>Prepare the <strong>recording</strong> (if wanted): check the folder, enter “Participant/session” (e.g. <code>P07</code>),
+    switch on “Record”. See <a href="#recording">Using the recording</a>.</li>
+  <li>Drag videos into the <strong>playlist</strong> (the playlist of the last session is already there) and <strong>load</strong> the first one
+    (double-click). The headset keeps showing the idle view.</li>
+  <li>The participant puts on headset and headphones and looks in the desired direction. <kbd>R</kbd> (<strong>Recenter</strong>) makes
+    this viewing direction the front of the video.</li>
+  <li>For a soft start, first <kbd>F</kbd> (fade out to black), then <kbd>Space</kbd> (Play), then <kbd>F</kbd> (fade in).</li>
+  <li>During playback, watch the big bar above the timeline: it shows what the participant sees right now.
+    The <strong>live view</strong> shows it as a picture.</li>
+  <li>At the end: <kbd>F</kbd> or <kbd>B</kbd> (black), Stop, switch off the recording. The files are in the chosen folder.</li>
+</ol>
+<div class="tip">
+  <p>Emergency: <kbd>B</kbd> makes the headset black at once, <kbd>M</kbd> mutes the sound at once. Both always work, also when no
+  video runs, and the same key undoes them.</p>
+</div>
+
+<!-- ============================================================= -->
+<h2 id="window">4. The operator window</h2>
+<div class="table-wrap">
+<table>
+  <tr><th>Section</th><th>What for</th></tr>
+  <tr><td>Menu bar (top)</td><td><strong>File:</strong> add videos, clear playlist, exit. <strong>Playback:</strong> continue automatically,
+    repeat (loop). <strong>Options:</strong> Sprache / Language,
+    lock sound output and volume. <strong>Help:</strong> manual (<kbd>F1</kbd>), about Orbivo (version, licenses, log file).</td></tr>
+  <tr><td>Playlist (top left)</td><td>Collect, order and load videos.</td></tr>
+  <tr><td>Format (left)</td><td>Projection, stereo layout, orientation of the loaded video. Saved per video.</td></tr>
+  <tr><td>Live view (bottom left)</td><td>Shows what the participant sees. Off at every start.</td></tr>
+  <tr><td>Sound (top right)</td><td>Audio mode, sound format, sound fixed to the picture, width, output device; a note while the sound lock is on.</td></tr>
+  <tr><td>Headset while idle</td><td>What the headset shows while no video runs: black, camera picture or still image.</td></tr>
+  <tr><td>Recording</td><td>Write head movement and events as CSV files.</td></tr>
+  <tr><td>Status</td><td>State of headset, picture output, video, decoder, sound, A/V deviation, viewing direction, libraries, log file.</td></tr>
+  <tr><td>Playback (bottom)</td><td>Big bar “Headset: …”, timeline, transport, volume, blackout, fade, recenter, key overview.</td></tr>
+</table>
+</div>
+<p>The title bar names the version of Orbivo and whether it runs with the headset or as a preview (<code>--no-xr</code>).</p>
+
+<!-- ============================================================= -->
+<h2 id="playlist">5. Playlist</h2>
+<ul>
+  <li><strong>Add …</strong> opens the file dialog. Files and whole folders can also be dragged from Explorer into the window
+    (folders give the videos directly in them, sorted by name, without subfolders).
+    Recognized are <code>.mp4 .m4v .mov .mkv .webm .avi .ts .mts</code>.</li>
+  <li><strong>Load</strong>, double-click or <kbd>Enter</kbd> loads the selected video. If a video is playing, the new one starts at once;
+    otherwise the headset keeps showing the idle view until Play is pressed. The loaded video is marked with ▶.</li>
+  <li><strong>Remove</strong> (<kbd>Del</kbd>): the video being shown can only be removed after Stop, so it does not disappear
+    by accident.</li>
+  <li><strong>▲ ▼</strong> change the order.</li>
+  <li><strong>Playback → Continue with the next video automatically</strong> (check mark): at the end of a video the next one starts.</li>
+  <li><strong>Playback → Repeat the current video (loop)</strong> (check mark): the current video starts again at its end. Takes precedence
+    over continuing automatically.</li>
+  <li><strong>File → Clear playlist</strong> removes all videos after asking. As with removing: not while the loaded video is shown;
+    after Stop it is closed too. The files themselves stay where they are.</li>
+</ul>
+<p>The playlist, the last loaded video (it is selected after a restart, but not loaded), continuing automatically, repeating and
+the fade duration are saved. If a file is missing at the start (e.g. because the external drive is not connected), Orbivo leaves it
+out and names it in the status under “Playlist”.</p>
+
+<!-- ============================================================= -->
+<h2 id="playback">6. Playback and keys</h2>
+<p>The big bar shows what the participant sees right now, e.g. “Headset: Video playing”, “Headset: Idle: Black (video not started
+yet)” or “Headset: BLACKOUT”. Green means: the participant sees the video picture.</p>
+<ul>
+  <li><strong>Timeline:</strong> click or drag to jump.</li>
+  <li><strong>Go to:</strong> type a time and press <kbd>Enter</kbd>, e.g. <code>83</code>, <code>1:23</code>, <code>1:23.5</code> or
+    <code>0:01:23.5</code>.</li>
+  <li><strong>Stop</strong> goes back to the start; the headset shows the idle view.</li>
+  <li><strong>Volume</strong> acts on Orbivo only, not on the Windows volume.</li>
+</ul>
+<h3>Keyboard shortcuts</h3>
+<p>The shortcuts work in the whole operator window, except while typing in a text field (click into the window first).</p>
+<div class="table-wrap">
+<table>
+  <tr><th>Key</th><th>Function</th></tr>
+  <tr><td><kbd>Space</kbd></td><td>Play / Pause</td></tr>
+  <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>5 seconds back / forward</td></tr>
+  <tr><td><kbd>Shift</kbd>+<kbd>←</kbd> <kbd>→</kbd></td><td>30 seconds back / forward</td></tr>
+  <tr><td><kbd>,</kbd> <kbd>.</kbd></td><td>One frame back / forward</td></tr>
+  <tr><td><kbd>Page Up</kbd> <kbd>Page Down</kbd></td><td>Previous / next video of the playlist</td></tr>
+  <tr><td><kbd>B</kbd></td><td>Blackout on / off (at once)</td></tr>
+  <tr><td><kbd>F</kbd></td><td>Fade out / fade in (smoothly, with the set duration)</td></tr>
+  <tr><td><kbd>M</kbd></td><td>Mute / sound on</td></tr>
+  <tr><td><kbd>R</kbd></td><td>Recenter</td></tr>
+  <tr><td><kbd>Shift</kbd>+<kbd>R</kbd></td><td>Reset recenter</td></tr>
+  <tr><td><kbd>Del</kbd> / <kbd>Enter</kbd></td><td>In the playlist: remove / load</td></tr>
+  <tr><td><kbd>F1</kbd></td><td>Open this manual</td></tr>
+</table>
+</div>
+
+<!-- ============================================================= -->
+<h2 id="blackout">7. Blackout and fade</h2>
+<ul>
+  <li><strong>Blackout</strong> (<kbd>B</kbd>) makes the headset black and the sound mute at once, whether a video runs or not.
+    The video goes on behind it.</li>
+  <li><strong>Fade</strong> (<kbd>F</kbd>) fades picture and sound smoothly to black and back. Duration in the field next to it, 0.1 to 30 seconds.</li>
+  <li>Both also act on the idle view. Blackout always stays black, also over the camera picture.</li>
+  <li>The change from the idle view into the video is a hard cut. For a soft transition, fade out first.</li>
+</ul>
+
+<!-- ============================================================= -->
+<h2 id="recenter">8. Recenter</h2>
+<p><strong>Recenter</strong> (<kbd>R</kbd>) makes the current viewing direction of the participant the front (center) of the video.
+Only the turn about the vertical axis counts; the tilt stays as it is. Picture and sound turn together.</p>
+<ul>
+  <li>Also applies to the following videos and after a short loss of the headset connection.</li>
+  <li>Not saved: after a restart of Orbivo the front of the video applies again.</li>
+  <li><kbd>Shift</kbd>+<kbd>R</kbd> undoes it. The status line “Recenter” shows the current angle.</li>
+  <li>A recenter in Varjo Base is something else: it moves the reference frame of the headset. Orbivo notes it in the event log.</li>
+</ul>
+
+<!-- ============================================================= -->
+<h2 id="format">9. Format of a video</h2>
+<p>Orbivo recognizes the format from the metadata of the file (Spherical Video, <code>sv3d</code>/<code>st3d</code>) or guesses it from the
+picture size. The choice “Automatic (…)” shows what was recognized and where it comes from. If something is wrong, change it here.</p>
+<div class="table-wrap">
+<table>
+  <tr><th>Field</th><th>Meaning</th></tr>
+  <tr><td>Projection</td><td>Equirect 360°, Equirect 180° (VR180), Cubemap, EAC (YouTube), Fisheye.</td></tr>
+  <tr><td>Stereo layout</td><td>Mono, top-bottom (left eye at the top), side-by-side (left eye on the left).</td></tr>
+  <tr><td>Swap eyes</td><td>If the depth looks inside out (near things seem far).</td></tr>
+  <tr><td>Cube layout</td><td>Cubemap/EAC only: arrangement of the six faces.</td></tr>
+  <tr><td>Fisheye</td><td>Field of view, circle center, radius.</td></tr>
+  <tr><td>Orientation</td><td>Yaw, pitch, roll in degrees, apply with <kbd>Enter</kbd>. Positive yaw turns the picture to the left
+    (the former center then lies on the left), positive pitch raises the former center, positive roll tilts counterclockwise.</td></tr>
+</table>
+</div>
+<p>Every change applies at once and is saved in a small file next to the video, the <strong>sidecar</strong>
+(<code>&lt;video&gt;.orbivo.json</code>, e.g. <code>clip.mp4.orbivo.json</code>). It applies again the next time the video is loaded. Whoever
+copies the video copies the sidecar along. “All automatic” discards the settings of this video.</p>
+
+<!-- ============================================================= -->
+<h2 id="sound">10. Sound</h2>
+<ul>
+  <li><strong>Audio mode</strong> (top line, display only): how the sound plays right now, e.g. “Sound fixed to the picture, speakers at ±75°” or
+    “Ambisonics order 1 (AmbiX), binaural, sound field fixed to the picture”. A note after it explains deviations.</li>
+  <li><strong>Sound format</strong>: how the channels of the sound track are meant. Usually it stays on <em>Automatic</em>; in brackets is what
+    Orbivo recognized and where from (metadata or guessed from the number of channels).
+    <ul>
+      <li><em>Automatic</em>: Ambisonics according to the metadata in the video. Without metadata, 4, 9 or 16 channels count as Ambisonics AmbiX
+        (order 1, 2 or 3), everything else as channels.</li>
+      <li><em>Channels</em>: mono and stereo as they are, more channels are mixed down to stereo (e.g. if 4 channels are not Ambisonics).</li>
+      <li><em>Ambisonics AmbiX</em>: the usual Ambisonics format (channels W Y Z X).</li>
+      <li><em>Ambisonics FuMa</em>: older recordings (channels W X Y Z), first order only (4 channels).</li>
+    </ul>
+    If Ambisonics sounds wrong (sound from the wrong side, from above instead of the front, dull), try the other Ambisonics format.
+    On switching, the sound restarts briefly. The choice is saved per video in the sidecar.</li>
+  <li><strong>Ambisonics</strong> contains the whole sound field all around. From it Orbivo computes binaurally what the participant hears with
+    the current head position: sounds come from their direction in the video, also from above and below.</li>
+  <li><strong>Sound fixed to the picture</strong> (on by default): the sound stays fixed in the video. When the participant turns the head, the
+    sound stays with the picture. With stereo, the left and right channels come from two invisible speakers left and right of the center
+    of the picture; with Ambisonics the whole sound field stays with the picture. Off: the sound turns with the head. Stereo then goes to the
+    headphones unchanged (right for recordings that are binaural already), Ambisonics is always heard as if the participant looked to the
+    front. Saved per video in the sidecar.</li>
+  <li><strong>Width</strong> (stereo only): angle of the two speakers to the center of the picture, 30–90°, default 75°.</li>
+  <li>Mono sound has no direction and always stays on both ears.</li>
+  <li><strong>Sound output</strong>: the device of the headphones. “Windows default” follows the default device; a device chosen here is never
+    changed automatically. If it is missing, the video plays on silently and Orbivo tries again every 2 seconds. “Refresh” reads the list
+    again, e.g. after plugging in.</li>
+  <li><strong>Options → Lock sound output and volume</strong> protects device and volume against accidental changes. The Sound section
+    then says “Locked”. Mute (<kbd>M</kbd>) still works. The lock stays after a restart.</li>
+</ul>
+<p>Sound is the clock of the playback: the picture follows the sound. The deviation is in the status under “A/V” and should stay within
+±20&nbsp;ms.</p>
+
+<!-- ============================================================= -->
+<h2 id="idle">11. Headset while idle</h2>
+<p>What the headset shows while no video runs (before Play, after Stop, without a loaded video). Pause and the end of a video keep showing
+the video picture.</p>
+<ul>
+  <li><strong>Black</strong> (default).</li>
+  <li><strong>See-through (camera picture):</strong> the participant sees the room through the cameras of the XR-3. Handy when putting the
+    headset on.</li>
+  <li><strong>Still image:</strong> an equirect 360° image (PNG, JPG). Square counts as top-bottom stereo, 4:1 as side-by-side,
+    otherwise mono.</li>
+</ul>
+<p>The choice is saved and applies from the start of Orbivo.</p>
+
+<!-- ============================================================= -->
+<h2 id="liveview">12. Live view</h2>
+<p>“Show” shows about 30 times per second what the participant sees, from their point of view (both eyes combined, with stereo the left
+half picture), with blackout and fade. It cannot show the camera picture; it then says “See-through”. The live view is off at every
+start; switched off it costs no computing time.</p>
+
+<!-- ============================================================= -->
+<h2 id="status">13. Status</h2>
+<p>The dots show the state: <span class="dot" style="background:var(--ok)"></span>fine,
+<span class="dot" style="background:var(--warn)"></span>note, <span class="dot" style="background:var(--err)"></span>error,
+gray = nothing to report.</p>
+<div class="table-wrap">
+<table>
+  <tr><th>Line</th><th>What it shows</th></tr>
+  <tr><td>Headset, Session</td><td>Connection to Varjo Base and to the headset. After a disconnection: “Headset disconnected since …”. Orbivo reconnects by itself, the video plays on.</td></tr>
+  <tr><td>Picture output</td><td>Frames per second in the headset (should be ≈ 90).</td></tr>
+  <tr><td>Playback, Output, Playlist, Video</td><td>State, blackout/fade, position in the playlist, file and format.</td></tr>
+  <tr><td>Decoder</td><td>Hardware (normal) or software (slower), decoded frames per second, buffer, dropped frames. “The buffer runs empty” means: the computer cannot play the video smoothly.</td></tr>
+  <tr><td>Sound, Sound output, A/V</td><td>Sound of the video, output device, deviation between picture and sound.</td></tr>
+  <tr><td>View (participant)</td><td>Viewing direction in the video, yaw and pitch in degrees (see <a href="#data-axes">Axes and angles</a>).</td></tr>
+  <tr><td>Recenter</td><td>Current recenter angle.</td></tr>
+  <tr><td>FFmpeg, Steam Audio, OpenXR</td><td>Bundled libraries. Red means: a file is missing or wrong, unpack the ZIP again.</td></tr>
+  <tr><td>Log file</td><td>Path of the diagnostic log of this session. Send it along when there are problems.</td></tr>
+</table>
+</div>
+
+<!-- ============================================================= -->
+<h2 id="recording">14. Using the recording</h2>
+<ul>
+  <li><strong>Record</strong>: every switch-on starts a new pair of files (head CSV and event CSV). Stays on after a restart;
+    a new pair then starts with the start of Orbivo.</li>
+  <li><strong>Only while a video runs</strong>: one pair of files per run of a video, the name of the video is in the file name. Play starts it;
+    Stop, the end of the video, unloading, another video or an error end it. Pause stays in the same pair. Nothing is written without a
+    running video. Can only be changed while the recording is off.</li>
+  <li><strong>Folder</strong>: default <code>Documents\Orbivo\Aufzeichnungen</code>, saved.</li>
+  <li><strong>Participant/session</strong>: optional, becomes part of the file name. Not saved.</li>
+  <li><strong>Head rate</strong>: rows per second in the head CSV: every frame (90 Hz), 45, 30 (default) or 10 Hz. Takes effect at once.</li>
+</ul>
+<p>Below are the state, the file name and the number of rows. If Orbivo cannot write (folder missing, disk full), the recording ends with
+a red message; the playback goes on.</p>
+<div class="note">
+  <p>The recordings are the same in every language of the window: German column names, German file names, German event texts, decimal
+  comma. This keeps analysis scripts working whichever language the operator uses. The tables below explain every column.</p>
+</div>
+
+<!-- ============================================================= -->
+<h2 id="data">15. The recorded data explained</h2>
+
+<h3 id="data-files">15.1 Files</h3>
+<p>Every recording consists of two files with the same beginning (<code>kopf</code> = head, <code>ereignisse</code> = events):</p>
+<pre>2026-11-08_141203_P07_kopf.csv          head movement, one row per sample
+2026-11-08_141203_P07_ereignisse.csv    operation and states, one row per event
+
+with “Only while a video runs”:
+2026-11-08_141530_P07_wald_kopf.csv
+2026-11-08_141530_P07_wald_ereignisse.csv</pre>
+<p>Structure: date and time of the start, optionally participant/session, optionally the name of the video (without extension). If the name
+exists already, Orbivo appends <code>_2</code>, <code>_3</code> … A file is never overwritten.</p>
+<p><strong>Format:</strong> separator semicolon, decimal comma, UTF-8 with BOM, first row = column names. A German Excel opens the files
+correctly with a double-click. In other programs, state when importing: separator <code>;</code>, decimal separator
+<code>,</code>, encoding UTF-8. The files are written continuously (at least every second); even after a crash they are complete up to
+then.</p>
+
+<h3 id="data-head">15.2 Head CSV, columns</h3>
+<div class="table-wrap">
+<table>
+  <tr><th>Column</th><th>Meaning</th><th>Example</th></tr>
+  <tr><td><code>Uhrzeit</code></td><td>Clock time: local time of the PC, to the millisecond.</td><td><code>2026-11-08 14:12:03,123</code></td></tr>
+  <tr><td><code>Sekunden</code></td><td>Seconds since the start of this pair of files. Always runs forward evenly, also when the clocks change
+    or Windows sets the clock. <strong>Use this column for analyses.</strong></td><td><code>12,345678</code></td></tr>
+  <tr><td><code>Video</code></td><td>File name of the loaded video (empty = none). The event CSV names the full path.</td><td><code>wald.mp4</code></td></tr>
+  <tr><td><code>Videozeit_s</code></td><td>Video time: the time of the video frame shown at this moment, in seconds from the start of the video.
+    Empty if no video picture was visible (idle).</td><td><code>83,417</code></td></tr>
+  <tr><td><code>Status</code></td><td>State of the playback: Kein Video (no video), Öffnet (opening), Bereit (ready), Läuft (playing),
+    Pause, Ende (end), Fehler (error).</td><td><code>Läuft</code></td></tr>
+  <tr><td><code>Inhalt</code></td><td>Content: what the headset showed, <em>before</em> blackout and fade: Video, Schwarz (black), See-through,
+    Standbild (still image).</td><td><code>Video</code></td></tr>
+  <tr><td><code>Helligkeit</code></td><td>Brightness from blackout and fade: 1 = full picture, 0 = black, in between = a fade is running.</td><td><code>1</code></td></tr>
+  <tr><td><code>Tracking</code></td><td>1 = the headset tracked the head, 0 = not (headset taken off, covered, disconnected). At 0 the
+    head values are not reliable and should be discarded.</td><td><code>1</code></td></tr>
+  <tr><td><code>Kopf_qw … Kopf_qz</code></td><td>Head rotation as a quaternion (w, x, y, z), see <a href="#data-quaternion">Quaternion</a>.</td><td><code>0,991445</code> …</td></tr>
+  <tr><td><code>Kopf_Yaw_Grad</code></td><td>Head turned left/right, in degrees. <strong>Positive = left.</strong> −180 to 180.</td><td><code>35,20</code></td></tr>
+  <tr><td><code>Kopf_Pitch_Grad</code></td><td>Head tilted up/down. <strong>Positive = up.</strong> −90 to 90.</td><td><code>-8,75</code></td></tr>
+  <tr><td><code>Kopf_Roll_Grad</code></td><td>Head tilted to the shoulder. <strong>Positive = left ear down</strong> (counterclockwise, as the participant sees it).</td><td><code>2,10</code></td></tr>
+  <tr><td><code>Blick_Video_Yaw_Grad</code></td><td>Where the participant looks <em>in the video</em> (Blick = view), left/right. 0 = center of the picture (front of the video), positive = left of it.</td><td><code>35,20</code></td></tr>
+  <tr><td><code>Blick_Video_Pitch_Grad</code></td><td>Where the participant looks in the video, up/down. 0 = horizon of the video, positive = above.</td><td><code>-8,75</code></td></tr>
+  <tr><td><code>Recenter_Yaw_Grad</code></td><td>Recenter angle at this moment (0 = no recenter). Positive: the participant looked to the left at the recenter.</td><td><code>0</code></td></tr>
+</table>
+</div>
+<div class="note">
+  <p><strong>What did the participant see?</strong> They saw the video picture if <code>Inhalt = Video</code> and <code>Helligkeit &gt; 0</code>.
+  At <code>Helligkeit = 0</code> it was black, whatever <code>Inhalt</code> says.</p>
+</div>
+
+<h3 id="data-axes">15.3 Axes and angles</h3>
+<p>All angles start from the same basic posture: head upright, looking ahead. Orbivo uses the axes of OpenXR:
+<strong>+X to the right, +Y up, −Z ahead</strong> (right-handed). The directions of rotation follow the right-hand rule about each axis.
+This gives:</p>
+<div class="figs">
+<figure>
+<svg viewBox="0 0 260 230" role="img" aria-label="Yaw seen from above">
+  <defs>
+    <marker id="ah-y" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--yaw)"/></marker>
+    <marker id="ah-m" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+  </defs>
+  <text x="130" y="18" text-anchor="middle" font-size="14" font-weight="600">Yaw – seen from above</text>
+  <line x1="130" y1="135" x2="130" y2="45" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ah-m)"/>
+  <text x="130" y="40" text-anchor="middle" font-size="12">ahead (−Z), yaw 0°</text>
+  <line x1="130" y1="135" x2="60" y2="135" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ah-m)"/>
+  <text x="22" y="132" font-size="12">+90°</text>
+  <text x="18" y="148" font-size="12">left</text>
+  <line x1="130" y1="135" x2="200" y2="135" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ah-m)"/>
+  <text x="206" y="132" font-size="12">−90°</text>
+  <text x="206" y="148" font-size="12">right</text>
+  <text x="130" y="210" text-anchor="middle" font-size="12">behind: ±180°</text>
+  <ellipse cx="130" cy="140" rx="24" ry="28" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.5"/>
+  <path d="M122,113 L130,104 L138,113" fill="none" stroke="var(--fg)" stroke-width="1.5"/>
+  <ellipse cx="105" cy="140" rx="4" ry="9" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.2"/>
+  <ellipse cx="155" cy="140" rx="4" ry="9" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.2"/>
+  <path d="M130,80 A55,55 0 0 0 78,118" fill="none" stroke="var(--yaw)" stroke-width="3" marker-end="url(#ah-y)"/>
+  <text x="74" y="92" font-size="13" fill="var(--yaw)" style="fill:var(--yaw)" font-weight="600">+ Yaw</text>
+</svg>
+<figcaption><strong>Yaw</strong> (about the vertical axis Y): positive = turn to the <strong>left</strong>, negative = to the right.
+Range −180° to +180°; exactly behind, the value jumps from +180 to −180.</figcaption>
+</figure>
+
+<figure>
+<svg viewBox="0 0 260 230" role="img" aria-label="Pitch seen from the right">
+  <defs>
+    <marker id="ah-p" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--pitch)"/></marker>
+    <marker id="ah-m2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+  </defs>
+  <text x="130" y="18" text-anchor="middle" font-size="14" font-weight="600">Pitch – seen from the right</text>
+  <line x1="110" y1="130" x2="225" y2="130" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ah-m2)"/>
+  <text x="228" y="150" text-anchor="end" font-size="12">ahead, 0°</text>
+  <line x1="110" y1="130" x2="110" y2="42" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ah-m2)"/>
+  <text x="116" y="44" font-size="12">up, +90°</text>
+  <text x="110" y="222" text-anchor="middle" font-size="12">down: −90°</text>
+  <circle cx="110" cy="140" r="26" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.5"/>
+  <path d="M135,134 L143,140 L135,146" fill="none" stroke="var(--fg)" stroke-width="1.5"/>
+  <rect x="104" y="166" width="12" height="22" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.2"/>
+  <path d="M200,130 A90,90 0 0 0 174,66" fill="none" stroke="var(--pitch)" stroke-width="3" marker-end="url(#ah-p)"/>
+  <text x="190" y="84" font-size="13" style="fill:var(--pitch)" font-weight="600">+ Pitch</text>
+</svg>
+<figcaption><strong>Pitch</strong> (about the transverse axis X of the head): positive = look <strong>up</strong>, negative = down.
+Range −90° to +90°.</figcaption>
+</figure>
+
+<figure>
+<svg viewBox="0 0 260 230" role="img" aria-label="Roll seen from behind">
+  <defs>
+    <marker id="ah-r" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--roll)"/></marker>
+  </defs>
+  <text x="130" y="18" text-anchor="middle" font-size="14" font-weight="600">Roll – seen from behind</text>
+  <text x="130" y="36" text-anchor="middle" font-size="12">(looking ahead like the participant)</text>
+  <ellipse cx="130" cy="125" rx="34" ry="42" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.5"/>
+  <ellipse cx="94" cy="128" rx="5" ry="11" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.2"/>
+  <ellipse cx="166" cy="128" rx="5" ry="11" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.2"/>
+  <text x="74" y="186" font-size="12">left</text>
+  <text x="168" y="186" font-size="12">right</text>
+  <line x1="130" y1="125" x2="130" y2="60" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <path d="M168,70 A58,58 0 0 0 92,70" fill="none" stroke="var(--roll)" stroke-width="3" marker-end="url(#ah-r)"/>
+  <text x="182" y="66" font-size="13" style="fill:var(--roll)" font-weight="600">+ Roll</text>
+  <text x="130" y="212" text-anchor="middle" font-size="12">head upright: 0°</text>
+</svg>
+<figcaption><strong>Roll</strong> (about the viewing axis): positive = tilt the head to the <strong>left</strong> shoulder
+(counterclockwise, as the participant sees it). Range −180° to +180°.</figcaption>
+</figure>
+</div>
+
+<p><strong>Order:</strong> read the three angles like this: first turn by yaw about the vertical axis of the room, then tilt the head by
+pitch about its own transverse axis, then by roll about its own viewing axis. Yaw and pitch therefore describe the
+<em>viewing direction</em> (like longitude and latitude), roll only the tilt about this direction. If the participant looks almost straight
+up or down, yaw is ambiguous; Orbivo then sets it to 0 and counts the turn in roll.</p>
+
+<p><strong>Reference of <code>Kopf_…</code>:</strong> the room as Varjo Base defines it (“ahead” is the direction that Varjo Base set as ahead
+during setup or at the last recenter in Varjo Base). Recenter and the orientation of the video in Orbivo do not change these columns.</p>
+
+<h3 id="data-gaze">15.4 Head and view in the video</h3>
+<p>For most analyses <code>Blick_Video_…</code> is the right column: it says which spot <em>of the video</em> the participant looks at.
+It takes recenter and the orientation of the video (Format → Orientation) into account. <code>Kopf_…</code>, on the other hand, is the bare
+head posture in the room.</p>
+<p>Without pitch and roll in the orientation of the video (both 0 there):</p>
+<pre>Blick_Video_Yaw   = Kopf_Yaw − Recenter_Yaw − orientation yaw     (brought to −180 … 180)
+Blick_Video_Pitch = Kopf_Pitch</pre>
+<p>Without recenter and without orientation both pairs of columns are equal. The orientation of a video is in the event log (event
+“Format”) and in the sidecar. The view has no roll column: for the question “where does the participant look”, roll does not matter.</p>
+<div class="note">
+  <p><strong>Important:</strong> “view” here means the <em>head direction</em>, i.e. the center of the field of view of the headset. Orbivo does not
+  measure the eye movement within the field of view (no eye tracking). The field of view of the XR-3 is about 115° wide, so the participant
+  can also see things that lie up to a good 50° beside the viewing direction.</p>
+</div>
+
+<h4>Example</h4>
+<pre>Sekunden ;Videozeit_s;Kopf_Yaw_Grad;Kopf_Pitch_Grad;Blick_Video_Yaw_Grad;Blick_Video_Pitch_Grad;Recenter_Yaw_Grad
+12,033333;12,000     ;50,00        ;-10,00         ;30,00               ;-10,00                ;20,00</pre>
+<p>At the recenter the participant looked 20° to the left; that became the center of the picture. Now their head is turned 50° to the left
+and 10° down. In the video they therefore look 30° left of the center of the picture, 10° below the horizon, at the frame at second 12.0
+of the video.</p>
+
+<h3 id="data-pixel">15.5 From the angle to the pixel</h3>
+<p>With equirect videos the view converts directly into a spot in the video picture. <code>W</code> and <code>H</code> are the width and
+height of <em>one eye</em> in pixels (top-bottom: half the height, top picture = left eye; side-by-side: half the width, left picture = left eye;
+mono: the whole picture). Yaw and pitch are <code>Blick_Video_Yaw_Grad</code> and <code>Blick_Video_Pitch_Grad</code>.</p>
+<div class="table-wrap">
+<table>
+  <tr><th>Projection</th><th>x (from the left)</th><th>y (from the top)</th></tr>
+  <tr><td>Equirect 360°</td><td><code>x = W · (0.5 − yaw / 360)</code></td><td><code>y = H · (0.5 − pitch / 180)</code></td></tr>
+  <tr><td>Equirect 180° (VR180)</td><td><code>x = W · (0.5 − yaw / 180)</code>, only for −90 ≤ yaw ≤ 90</td><td><code>y = H · (0.5 − pitch / 180)</code></td></tr>
+</table>
+</div>
+<figure>
+<svg viewBox="0 0 690 250" role="img" aria-label="Equirect picture with angles">
+  <rect x="40" y="30" width="560" height="180" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.5"/>
+  <g stroke="var(--line)" stroke-width="1">
+    <line x1="180" y1="30" x2="180" y2="210"/><line x1="320" y1="30" x2="320" y2="210"/><line x1="460" y1="30" x2="460" y2="210"/>
+    <line x1="40" y1="75" x2="600" y2="75"/><line x1="40" y1="120" x2="600" y2="120"/><line x1="40" y1="165" x2="600" y2="165"/>
+  </g>
+  <line x1="40" y1="120" x2="600" y2="120" stroke="var(--muted)" stroke-width="1.5"/>
+  <line x1="320" y1="30" x2="320" y2="210" stroke="var(--muted)" stroke-width="1.5"/>
+  <text x="320" y="20" text-anchor="middle" font-size="13" font-weight="600">Yaw in the video</text>
+  <g font-size="12" text-anchor="middle">
+    <text x="40" y="228">+180°</text><text x="180" y="228">+90°</text><text x="320" y="228">0°</text><text x="460" y="228">−90°</text><text x="600" y="228">−180°</text>
+    <text x="40" y="244">behind</text><text x="180" y="244">left</text><text x="320" y="244">center (ahead)</text><text x="460" y="244">right</text><text x="600" y="244">behind</text>
+  </g>
+  <g font-size="12" text-anchor="end">
+    <text x="34" y="34">+90°</text><text x="34" y="124">0°</text><text x="34" y="214">−90°</text>
+  </g>
+  <text x="614" y="34" font-size="12">up</text><text x="614" y="124" font-size="12">horizon</text><text x="614" y="214" font-size="12">down</text>
+  <circle cx="273.3" cy="130" r="6" fill="var(--yaw)"/>
+  <text x="282" y="148" font-size="12" style="fill:var(--yaw)">yaw 30°, pitch −10°</text>
+</svg>
+<figcaption>An equirect 360° picture (one eye). The center of the picture is “ahead”. Because yaw is positive to the left, positive values
+lie left of the center. The dot is the example from 15.4.</figcaption>
+</figure>
+<p>Example: an 8K top-bottom video has 8192 × 8192 pixels, one eye therefore 8192 × 4096. For yaw 30°, pitch −10° this gives
+x = 8192 · (0.5 − 30/360) ≈ 3413 and y = 4096 · (0.5 + 10/180) ≈ 2276 (in the top half picture).</p>
+<p>For cubemap, EAC and fisheye there is no such simple formula; there, read yaw and pitch as a direction in space.</p>
+
+<h3 id="data-quaternion">15.6 Quaternion</h3>
+<p>The four columns <code>Kopf_qw, Kopf_qx, Kopf_qy, Kopf_qz</code> describe the same head rotation as yaw/pitch/roll, but without
+ambiguity and without a jump at ±180°. They are meant for exact analyses (e.g. in Python, R or MATLAB).</p>
+<ul>
+  <li>Unit quaternion (length 1), order w, x, y, z; <code>w = 1, x = y = z = 0</code> means: head upright, looking ahead.</li>
+  <li>It rotates directions from the head into the room, in the axes named above (+X right, +Y up, −Z ahead). This is the convention of
+    OpenXR, which Varjo Base delivers.</li>
+  <li><code>q</code> and <code>−q</code> mean the same rotation; a change of sign of all four values is therefore not a jump.</li>
+</ul>
+<p>The viewing direction as a vector (length 1) and from it yaw and pitch:</p>
+<pre>ahead_x = −2·(qx·qz + qw·qy)
+ahead_y = −2·(qy·qz − qw·qx)
+ahead_z = −(1 − 2·(qx² + qy²))
+
+yaw   = atan2(−ahead_x, −ahead_z)
+pitch = asin(ahead_y)</pre>
+
+<h3 id="data-time">15.7 Time and rate</h3>
+<ul>
+  <li><strong>Sekunden</strong> starts at 0 at the start of the pair of files. With “Only while a video runs”, 0 is at the Play command that
+    started the video; the first video frame comes shortly after.</li>
+  <li>In the headset, the time of every head row is the moment the frame was <em>shown</em> in the headset (the predicted display time
+    that Varjo Base delivers for every frame, shortly after rendering). Head posture, video time and brightness of a row therefore match what the
+    participant saw at that moment.</li>
+  <li><strong>Rate:</strong> the headset makes 90 frames per second. At 45, 30 or 10 Hz Orbivo takes every 2nd, 3rd or
+    9th of them. The intervals are therefore multiples of 11.1 ms and vary slightly. For analyses use the column <code>Sekunden</code>,
+    not the row number.</li>
+  <li>If the headset fails or is disconnected, no rows come; there is then a gap in <code>Sekunden</code>. The
+    event log names the disconnection and the reconnection.</li>
+  <li>The time zone is in the first event. When the clocks change, <code>Uhrzeit</code> jumps, <code>Sekunden</code> does not.</li>
+</ul>
+
+<h3 id="data-events">15.8 Event CSV</h3>
+<div class="table-wrap">
+<table>
+  <tr><th>Column</th><th>Meaning</th></tr>
+  <tr><td><code>Uhrzeit</code>, <code>Sekunden</code></td><td>As in the head CSV, on the same time axis. The two files can be joined on <code>Sekunden</code>.</td></tr>
+  <tr><td><code>Ereignis</code></td><td>Kind of event (see below).</td></tr>
+  <tr><td><code>Video</code></td><td>File name of the video at this moment.</td></tr>
+  <tr><td><code>Videozeit_s</code></td><td>Video time at this moment (empty if none).</td></tr>
+  <tr><td><code>Details</code></td><td>Plain text in German, e.g. target of a jump, new state, error message.</td></tr>
+</table>
+</div>
+<div class="table-wrap">
+<table>
+  <tr><th>Event</th><th>When</th></tr>
+  <tr><td>Aufzeichnung (recording)</td><td>Start (with Orbivo version, head rate, participant/session, computer, time zone, full video path if any) and end.</td></tr>
+  <tr><td>Laden, Entladen (load, unload)</td><td>A video is opened or closed.</td></tr>
+  <tr><td>Play, Pause, Stop, Seek</td><td>Commands of the operator (seek with its target).</td></tr>
+  <tr><td>Zustand (state)</td><td>The playback changed its state (Bereit, Läuft, Pause, Ende …). There are a few milliseconds between “Play” and “Zustand: Läuft”.</td></tr>
+  <tr><td>Loop</td><td>Repeat on or off.</td></tr>
+  <tr><td>Schwarzbild, Fade (blackout, fade)</td><td>On/off or fading out and in, with the duration.</td></tr>
+  <tr><td>Recenter</td><td>Recenter done or reset, with the angle.</td></tr>
+  <tr><td>Format, Ton (format, sound)</td><td>The operator changed format/orientation, or sound fixed to the picture, width or sound format.</td></tr>
+  <tr><td>Lautstärke, Stumm, Tonausgabe (volume, mute, sound output)</td><td>Changes of the sound.</td></tr>
+  <tr><td>Leerlauf (idle)</td><td>Idle view chosen (also at the start of the recording).</td></tr>
+  <tr><td>Brille (headset)</td><td>Connection, session, disconnection, reconnection, recenter in Varjo Base.</td></tr>
+  <tr><td>Fehler (error)</td><td>Errors that the operator was shown.</td></tr>
+</table>
+</div>
+
+<h3 id="data-analysis">15.9 Tips for the analysis</h3>
+<ul>
+  <li>Discard rows with <code>Tracking = 0</code>; for analyses of “what did they see in the video” take only rows with <code>Inhalt = Video</code>,
+    <code>Helligkeit &gt; 0</code> and <code>Status = Läuft</code> (or Pause).</li>
+  <li>Yaw jumps from +180 to −180 behind. For means and speeds “unwrap” the angle (e.g. <code>numpy.unwrap</code>)
+    or compute with vectors or quaternions.</li>
+  <li>Angle between the view and a target in the video (target at yaw <code>yT</code>, pitch <code>pT</code>), in an English Excel,
+    with yaw in column P and pitch in column Q:
+    <pre>=DEGREES(ACOS(SIN(RADIANS(Q2))*SIN(RADIANS(pT)) + COS(RADIANS(Q2))*COS(RADIANS(pT))*COS(RADIANS(P2-yT))))</pre>
+    Replace <code>yT</code> and <code>pT</code> by the angles of the target or by cell references. Result in degrees, 0 = looking straight at the target.
+    An English Excel may need the import settings above (separator <code>;</code>, decimal separator <code>,</code>).</li>
+  <li>With Python (pandas):
+    <pre>import pandas as pd
+head = pd.read_csv("2026-11-08_141203_P07_kopf.csv", sep=";", decimal=",", encoding="utf-8-sig")
+video = head[(head.Tracking == 1) &amp; (head.Inhalt == "Video") &amp; (head.Helligkeit &gt; 0)]
+print(video[["Videozeit_s", "Blick_Video_Yaw_Grad", "Blick_Video_Pitch_Grad"]].describe())</pre></li>
+  <li>To compare with the video: <code>Videozeit_s</code> is the time in the video, as a video player shows it too.</li>
+</ul>
+
+<!-- ============================================================= -->
+<h2 id="settings">16. Saved settings</h2>
+<div class="table-wrap">
+<table>
+  <tr><th>What</th><th>Where</th></tr>
+  <tr><td>Settings: language, sound output, volume, lock, idle view, recording (on/off, folder, rate, only while a video runs),
+    playlist, continuing automatically, repeating, fade duration</td>
+    <td><code>%LOCALAPPDATA%\Orbivo\settings.json</code><br>(type it into the address bar of Explorer)</td></tr>
+  <tr><td>Format, orientation and sound per video</td><td>Sidecar next to the video: <code>&lt;video&gt;.orbivo.json</code></td></tr>
+  <tr><td>Recordings</td><td>Chosen folder, default <code>Documents\Orbivo\Aufzeichnungen</code></td></tr>
+  <tr><td>Diagnostic logs (one per start)</td><td>Folder <code>Logs</code> next to <code>Orbivo.exe</code>. Older than 30 days is deleted at the start,
+    the last 30 always stay.</td></tr>
+</table>
+</div>
+<p>Deliberately not saved: mute, recenter, live view, participant/session.
+To reset all settings, close Orbivo and delete <code>settings.json</code>; Orbivo then starts in English as at the very first start.</p>
+
+<!-- ============================================================= -->
+<h2 id="problems">17. Problems and solutions</h2>
+<div class="table-wrap">
+<table>
+  <tr><th>Problem</th><th>What to do</th></tr>
+  <tr><td>Status “Headset”: Varjo Base not running / no headset</td><td>Start Varjo Base, connect the headset. Orbivo connects by itself, no restart needed.</td></tr>
+  <tr><td>The headset shows nothing, the bar says “Idle: Black”</td><td>No video runs: load a video and press Play. Or change the idle view.</td></tr>
+  <tr><td>The bar says “BLACKOUT”</td><td>Press <kbd>B</kbd>, or <kbd>F</kbd> to fade in.</td></tr>
+  <tr><td>Picture distorted, doubled or depth wrong</td><td>Check the format: projection, stereo layout, swap eyes. Saved per video.</td></tr>
+  <tr><td>The front of the video is not ahead</td><td>Let the participant look in the desired direction, <kbd>R</kbd>. Permanently for a video: Format → Orientation (yaw).</td></tr>
+  <tr><td>No sound</td><td>Mute (<kbd>M</kbd>)? Blackout? Volume? Check “Sound output” in the status, choose the device, “Refresh”. If the Sound section says “Locked”, unlock it under Options first.</td></tr>
+  <tr><td>Sound does not come from the direction of the picture</td><td>“Sound fixed to the picture” on? Mono sound has no direction. Switch off Windows “Spatial sound” for the headphones.</td></tr>
+  <tr><td>Ambisonics sounds twisted, from above or dull</td><td>Check “Sound format”: choose the other Ambisonics format (AmbiX or FuMa). If the 4 channels are not Ambisonics at all, choose “Channels”.</td></tr>
+  <tr><td>Audio mode says “Fallback left/right”</td><td>Steam Audio is missing or could not start (the reason follows, status of the libraries). The sound is audible, but without direction in the picture. Unpack the ZIP again.</td></tr>
+  <tr><td>The video stutters</td><td>Status “Decoder”: software decoding or “The buffer runs empty” means the video is too heavy for this computer (e.g. 8K at 60 fps). Close other programs, plug in the power supply (laptop).</td></tr>
+  <tr><td>The recording stops with a red message</td><td>Folder reachable? Space on the disk? Choose the folder again and switch it on again.</td></tr>
+  <tr><td>FFmpeg / Steam Audio / OpenXR red</td><td>Program files incomplete: unpack the ZIP again.</td></tr>
+  <tr><td>The window is in the wrong language</td><td>Choose the language in the menu Options → “Sprache / Language” and let Orbivo restart.</td></tr>
+  <tr><td>The manual does not open</td><td><code>Manual.html</code> (English) and <code>Anleitung.html</code> (German) are next to <code>Orbivo.exe</code> and can also be opened directly in the browser.</td></tr>
+</table>
+</div>
+<p>With errors, please send the diagnostic log along (path in the status under “Log file”).</p>
+
+<!-- ============================================================= -->
+<h2 id="version">18. Version and licenses</h2>
+<p>The version is in the title bar of the operator window, under Help → About Orbivo and in every diagnostic log. The folder <code>licenses</code> next to the exe holds
+the licenses of the bundled libraries; <code>THIRD-PARTY-NOTICES.txt</code> gives an overview:</p>
+<ul>
+  <li><strong>FFmpeg</strong> (LGPL v3 or later) as replaceable DLLs, unchanged from the build by BtbN.</li>
+  <li><strong>Steam Audio</strong> (Apache-2.0), <strong>OpenXR loader</strong> (Apache-2.0).</li>
+  <li><strong>.NET</strong>, <strong>NAudio</strong>, <strong>Silk.NET</strong>, <strong>Vortice.Windows</strong>, <strong>CommunityToolkit.Mvvm</strong> (MIT).</li>
+</ul>
+<p class="footer">Orbivo – manual for operators. Questions and bugs to the project owner.</p>
+</main>
+</div>
+</body>
+</html>

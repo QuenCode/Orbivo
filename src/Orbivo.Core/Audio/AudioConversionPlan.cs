@@ -1,3 +1,6 @@
+using System.Globalization;
+using Orbivo.Core.Localization;
+
 namespace Orbivo.Core.Audio;
 
 /// <summary>How the channels of a sound track reach the ring buffer.</summary>
@@ -85,17 +88,17 @@ public sealed record AudioConversionPlan(int SourceChannels, int SourceSampleRat
     }
 
     /// <summary>
-    /// Short German description for the operator, e.g. "Stereo, 48 kHz", "6 Kanäle → Stereo, 44,1 → 48 kHz" or
-    /// "Ambisonics 1. Ordnung (AmbiX, Metadaten), 48 kHz".
+    /// Short description for the operator in the UI language, e.g. "Stereo, 48 kHz", "6 channels → mixed down to stereo,
+    /// 44.1 → 48 kHz" or "Ambisonics order 1 (AmbiX, metadata), 48 kHz".
     /// </summary>
     public string Describe()
     {
         string channels = Channels switch
         {
             ChannelHandling.Stereo => "Stereo",
-            ChannelHandling.MonoOnBoth => "Mono auf beiden Seiten",
+            ChannelHandling.MonoOnBoth => CoreText.ConversionMonoOnBoth,
             ChannelHandling.Ambisonics => Mode!.Describe(),
-            _ => $"{SourceChannels} Kanäle → Stereo heruntergemischt",
+            _ => Loc.Format(CoreText.ConversionDownmix, SourceChannels),
         };
         string rate = Resamples
             ? $"{FormatKilohertz(SourceSampleRate)} → {FormatKilohertz(OutputSampleRate)} kHz"
@@ -110,5 +113,5 @@ public sealed record AudioConversionPlan(int SourceChannels, int SourceSampleRat
         };
 
     private static string FormatKilohertz(int rate) =>
-        (rate / 1000.0).ToString("0.###", System.Globalization.CultureInfo.GetCultureInfo("de-DE"));
+        (rate / 1000.0).ToString("0.###", CultureInfo.CurrentCulture);
 }

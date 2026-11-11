@@ -5,6 +5,7 @@ using Orbivo.Core.Audio;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Logging;
 using Orbivo.Core.Playback;
 using Orbivo.Core.Status;
@@ -84,7 +85,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     private string? _filePath;
 
     /// <summary>Why the loaded file is decoded in software after its hardware decoder failed; null otherwise.</summary>
-    private string? _softwareFallbackReason;
+    private OperatorText? _softwareFallbackReason;
 
     // Format of the loaded file (F10–F14), control thread only.
     private SidecarFile? _sidecar;
@@ -326,7 +327,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
             {
                 // Keep the player alive: report, show black, wait for the next command.
                 _logger.LogError(exception, "Player control failed.");
-                Fail("Interner Fehler im Player (Details im Log)");
+                Fail(new OperatorText(nameof(CoreText.PlayerInternalError)));
             }
 
             // Wait for the next command, but look at the decoder at least every PollInterval.
@@ -494,7 +495,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         {
             if (!decoder.HasFirstFrame)
             {
-                Fail("Das Video enthält keine Bilder");
+                Fail(new OperatorText(nameof(CoreText.VideoHasNoFrames)));
                 return;
             }
 
@@ -543,10 +544,10 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
     /// The hardware decoder rejected the video before its first frame (the check before opening did not catch it):
     /// open it again with software decoding, for the rest of this file. A seek that was waiting starts again.
     /// </summary>
-    private void FallBackToSoftware(string hardwareError)
+    private void FallBackToSoftware(OperatorText hardwareError)
     {
-        _logger.LogWarning("Hardware decoding of {Path} failed before the first frame ({Error}); opening it again with software decoding.", _filePath, hardwareError);
-        _softwareFallbackReason = "Hardware-Decoder hat das Video abgelehnt";
+        _logger.LogWarning("Hardware decoding of {Path} failed before the first frame ({Error}); opening it again with software decoding.", _filePath, hardwareError.ForLog());
+        _softwareFallbackReason = new OperatorText(nameof(CoreText.HardwareRejectedVideo));
         OpenDecoder();
         if (_machine.Seeking && _decoder is { } decoder)
         {
@@ -592,7 +593,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         {
             // The picture plays on; the clock keeps following the device, which plays silence.
             _audioErrorLogged = true;
-            _logger.LogError("Sound decoding failed, the video plays on without sound: {Error}", error);
+            _logger.LogError("Sound decoding failed, the video plays on without sound: {Error}", error.ForLog());
         }
 
         int rate = output.SampleRate;
@@ -914,16 +915,20 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         }
     }
 
-    private void Fail(string message)
+    /// <summary>
+    /// The video cannot go on: the operator sees <paramref name="message"/> in the UI language, the event log gets it in
+    /// German (recordings do not depend on the UI language), the diagnostic log in English.
+    /// </summary>
+    private void Fail(OperatorText message)
     {
-        _logger.LogWarning("Player failed: {Message}", message);
-        _options.Events?.Record(SessionEventKind.Error, message, _filePath, CurrentPosition());
+        _logger.LogWarning("Player failed: {Message}", message.ForLog());
+        _options.Events?.Record(SessionEventKind.Error, message.ForRecording(), _filePath, CurrentPosition());
         _videoVisible = false;
         _clock.Stop();
         _machine.MediaFailed();
         CloseDecoder();
         _avSync.Reset();
-        PublishStatus(message);
+        PublishStatus(message.ToString());
     }
 
     private void PublishStatus(string? error)
@@ -1037,7 +1042,7 @@ public sealed class VideoPlayer : IVideoFrameSource, IDisposable
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             _logger.LogError(exception, "Cannot save the sidecar {Path}.", _sidecar.Path);
-            _sidecarError = $"Sidecar nicht gespeichert: {exception.Message}";
+            _sidecarError = Loc.Format(CoreText.SidecarNotSaved, exception.Message);
         }
 
         UpdateFormatStatus();

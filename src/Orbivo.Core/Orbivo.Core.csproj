@@ -7,6 +7,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Operator texts in English (CoreText.resx) and German (CoreText.de.resx); the build generates the class CoreText. -->
+    <EmbeddedResource Update="Localization\CoreText.resx">
+      <StronglyTypedFileName>$(IntermediateOutputPath)CoreText.Designer.cs</StronglyTypedFileName>
+      <StronglyTypedLanguage>CSharp</StronglyTypedLanguage>
+      <StronglyTypedNamespace>Orbivo.Core.Localization</StronglyTypedNamespace>
+      <StronglyTypedClassName>CoreText</StronglyTypedClassName>
+      <PublicClass>true</PublicClass>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Orbivo.Core.Tests" />
   </ItemGroup>
 

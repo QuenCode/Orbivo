@@ -1,5 +1,6 @@
 using Orbivo.Core.Audio;
 using Orbivo.Core.Formats;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Playback;
 
 namespace Orbivo.Core.Status;
@@ -12,7 +13,7 @@ namespace Orbivo.Core.Status;
 /// <param name="FrameRate">Nominal frames per second, 0 if unknown.</param>
 /// <param name="Color">Color description used for the conversion.</param>
 /// <param name="HardwareDecoding">True for D3D11VA hardware decoding.</param>
-/// <param name="SoftwareReason">Why the video is decoded in software (German, for the operator); null for hardware.</param>
+/// <param name="SoftwareReason">Why the video is decoded in software, for the operator; null for hardware.</param>
 public sealed record VideoStreamInfo(
     string Codec,
     string Profile,
@@ -21,7 +22,7 @@ public sealed record VideoStreamInfo(
     double FrameRate,
     VideoColorFormat Color,
     bool HardwareDecoding,
-    string? SoftwareReason = null);
+    OperatorText? SoftwareReason = null);
 
 /// <summary>The format the loaded video is shown with, and where it comes from (F10–F14).</summary>
 /// <param name="Format">Format in use.</param>
@@ -30,10 +31,10 @@ public sealed record VideoStreamInfo(
 /// <param name="AutomaticSources">Where each part of <paramref name="Automatic"/> comes from.</param>
 /// <param name="Overrides">The operator's choices, as in the sidecar.</param>
 /// <param name="Metadata">What the file says, e.g. "sv3d Cubemap, st3d TopBottom", or "none".</param>
-/// <param name="Warnings">Hints for the operator (German).</param>
+/// <param name="Warnings">Hints for the operator (UI language).</param>
 /// <param name="SidecarPath">Path of the sidecar file.</param>
 /// <param name="SidecarExists">True if the sidecar file is on disk.</param>
-/// <param name="SidecarError">Why the last change could not be saved (German), or null.</param>
+/// <param name="SidecarError">Why the last change could not be saved (UI language), or null.</param>
 public sealed record VideoFormatStatus(
     VideoFormat Format,
     VideoFormat Automatic,
@@ -77,7 +78,7 @@ public enum PlaybackClockSource
 /// <param name="QueuedFrames">Decoded frames waiting for display.</param>
 /// <param name="QueueCapacity">Number of frame slots.</param>
 /// <param name="DroppedFrames">Frames decoded but never shown, since the video was opened.</param>
-/// <param name="Error">Error text for the operator (German), or null.</param>
+/// <param name="Error">Error text for the operator (UI language), or null.</param>
 public sealed record PlayerStatus(
     PlaybackState State,
     string? FilePath,

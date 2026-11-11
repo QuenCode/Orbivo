@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging.Abstractions;
 using Orbivo.Core.Formats;
+using Orbivo.Core.Localization;
 using Orbivo.Media.Tests.Support;
 using Orbivo.Xr.Graphics;
 using Vortice.Direct3D11;
@@ -83,7 +84,8 @@ public sealed class VideoDecoderTests(HardwareDecodeFixture fixture)
         MediaOpenException exception = Assert.Throws<MediaOpenException>(
             () => DecoderRun.Open(device, Path.Combine(TestVideos.OutputDirectory, "does-not-exist.mp4")));
 
-        Assert.Equal("Datei nicht gefunden", exception.OperatorMessage);
+        Assert.Equal("Datei nicht gefunden", exception.OperatorMessage.ToString());
+        Assert.Equal("File not found", exception.OperatorMessage.ForLog());
     }
 
     [Fact]
@@ -93,7 +95,7 @@ public sealed class VideoDecoderTests(HardwareDecodeFixture fixture)
 
         MediaOpenException exception = Assert.Throws<MediaOpenException>(() => DecoderRun.Open(device, TestVideos.MonoImage));
 
-        Assert.Contains("keinen Hardware-Decoder", exception.OperatorMessage, StringComparison.Ordinal);
+        Assert.Contains("keinen Hardware-Decoder", exception.OperatorMessage.ToString(), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -108,7 +110,7 @@ public sealed class VideoDecoderTests(HardwareDecodeFixture fixture)
         GraphicsDevice device = fixture.RequireHardware();
 
         bool? result = HardwareDecodeSupport.CanDecode(
-            device.Device, codec, profile, bitDepth, chroma420: true, width, height, TestOutputLoggerFactory.Instance.CreateLogger("Check"), out string? reason);
+            device.Device, codec, profile, bitDepth, chroma420: true, width, height, TestOutputLoggerFactory.Instance.CreateLogger("Check"), out OperatorText? reason);
         TestContext.Current.TestOutputHelper?.WriteLine($"{codec} {bitDepth} bit {width}x{height} on {device.AdapterName}: {result} {reason}");
 
         Assert.Equal(expected, result);
@@ -128,7 +130,7 @@ public sealed class VideoDecoderTests(HardwareDecodeFixture fixture)
             $"H.264 4320x2160 in software: {pts.Count} frames in {stopwatch.Elapsed.TotalSeconds:0.00} s = {pts.Count / stopwatch.Elapsed.TotalSeconds:0.0} fps ({Environment.ProcessorCount} logical processors)");
 
         Assert.False(run.Decoder.Info.HardwareDecoding);
-        Assert.Contains("4320 × 2160", run.Decoder.Info.SoftwareReason, StringComparison.Ordinal);
+        Assert.Contains("4320 × 2160", run.Decoder.Info.SoftwareReason?.ToString(), StringComparison.Ordinal);
         Assert.Equal((4320, 2160), (run.Decoder.Queue.Width, run.Decoder.Queue.Height));
         Assert.Equal(TestVideos.DecoderVideoFrameCount, pts.Count);
         Assert.Equal(0, pts[0]);
@@ -182,7 +184,7 @@ public sealed class VideoDecoderTests(HardwareDecodeFixture fixture)
         MediaOpenException exception = Assert.Throws<MediaOpenException>(
             () => DecoderRun.Open(device, TestVideos.H264AboveGpuLimit, preference: DecoderPreference.Hardware));
 
-        Assert.Contains("4320 × 2160", exception.OperatorMessage, StringComparison.Ordinal);
+        Assert.Contains("4320 × 2160", exception.OperatorMessage.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

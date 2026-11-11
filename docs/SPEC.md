@@ -51,7 +51,7 @@ Wiedergabe von 360°/180°-Videos mit räumlichem Ton auf einer Varjo XR-3 für 
 ### Bedienung
 - F60 Tastaturkürzel für alle Kernfunktionen (Leertaste = Play/Pause, B = Blackout, R = Recenter, Pfeiltasten = Seek ±5 s/±30 s)
 - F61 Das UI bleibt bedienbar, unabhängig vom Fokus der Brille
-- F62 Operator-UI auf Deutsch
+- F62 Operator-UI und Anleitung auf Englisch und Deutsch, umschaltbar im Operatorfenster (wirkt nach einem Neustart, den die App anbietet). Beim allerersten Start Englisch. Aufzeichnungen bleiben in jeder Sprache deutsch (M11)
 
 ## Nicht-funktionale Anforderungen
 - N1 Konstante 90 fps in der Brille bei 8K-Stereo-Video auf RTX 4080 Laptop

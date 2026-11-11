@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Status;
 
 namespace Orbivo.Audio;
@@ -30,7 +31,7 @@ public static class SteamAudioRuntime
         if (!File.Exists(path))
         {
             logger.LogError("Steam Audio library missing: {Path}. See native/README.md.", path);
-            return new NativeComponentStatus(ComponentName, false, $"Fehlt: {LibraryFileName}");
+            return new NativeComponentStatus(ComponentName, false, Loc.Format(CoreText.NativeMissing, LibraryFileName));
         }
 
         string? fileVersion = FileVersionInfo.GetVersionInfo(path).FileVersion;
@@ -42,7 +43,7 @@ public static class SteamAudioRuntime
                 path,
                 fileVersion,
                 ExpectedVersion);
-            return new NativeComponentStatus(ComponentName, false, $"Falsche Version {fileVersion} (erwartet {ExpectedVersion})");
+            return new NativeComponentStatus(ComponentName, false, Loc.Format(CoreText.NativeWrongVersion, fileVersion, ExpectedVersion));
         }
 
         logger.LogInformation(
@@ -50,6 +51,6 @@ public static class SteamAudioRuntime
             path,
             fileVersion ?? "unknown",
             ExpectedVersion);
-        return new NativeComponentStatus(ComponentName, true, $"{LibraryFileName} gefunden (erwartet {ExpectedVersion})");
+        return new NativeComponentStatus(ComponentName, true, Loc.Format(CoreText.SteamAudioFound, LibraryFileName, ExpectedVersion));
     }
 }

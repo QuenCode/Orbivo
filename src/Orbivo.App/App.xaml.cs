@@ -1,13 +1,16 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using System.Windows;
+using System.Windows.Markup;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Orbivo.App.Imaging;
 using Orbivo.App.LiveView;
+using Orbivo.App.Localization;
 using Orbivo.App.ViewModels;
 using Orbivo.Audio;
 using Orbivo.Audio.Output;
@@ -15,6 +18,7 @@ using Orbivo.Core.Audio;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Logging;
 using Orbivo.Core.Settings;
 using Orbivo.Core.Status;
@@ -46,11 +50,12 @@ public partial class App : Application
     private LiveViewController? _liveView;
     private LiveViewFrames? _liveViewFrames;
     private StartupOptions? _options;
+    private IReadOnlyList<string> _arguments = [];
     private SessionRecorder? _recorder;
     private string _appVersion = "unbekannt";
 
-    /// <summary>The operator manual next to the exe (docs/Anleitung.html in the repository).</summary>
-    private const string ManualFileName = "Anleitung.html";
+    /// <summary>The operator manual next to the exe, per language (docs/Manual.html and docs/Anleitung.html, M11).</summary>
+    private static string ManualFileName(AppLanguage language) => language == AppLanguage.German ? "Anleitung.html" : "Manual.html";
 
     /// <summary>Device and hand-over of the render thread for the idle image, once the device exists (UI thread).</summary>
     private (GraphicsDevice Device, Action<StillImageTexture> Show)? _imageTarget;
@@ -83,6 +88,11 @@ public partial class App : Application
 
         StartupOptions options = StartupOptions.Parse(e.Args);
         _options = options;
+        _arguments = e.Args;
+
+        // After a change of the language the old instance starts this one and ends; it has to let go of the headset,
+        // the sound device and the settings first.
+        string? waitResult = options.WaitForProcessId is int previousProcessId ? WaitForPreviousInstance(previousProcessId) : null;
 
         string logFilePath = LogPaths.CreateSessionFilePath(LogPaths.DefaultDirectory, DateTime.Now);
         _fileLoggerProvider = new FileLoggerProvider(logFilePath);
@@ -90,6 +100,11 @@ public partial class App : Application
         _logger = _loggerFactory.CreateLogger<App>();
 
         RegisterGlobalExceptionHandlers();
+
+        // Settings first: their language applies to every text from here on, also those of the native checks (M11).
+        AppSettings settings = AppSettings.Load(AppSettings.DefaultPath, out string? settingsProblem);
+        AppLanguage language = options.Language ?? settings.AppLanguage;
+        ApplyLanguage(language);
 
         _appVersion = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unbekannt";
         _logger.LogInformation(
@@ -103,6 +118,21 @@ public partial class App : Application
         {
             _logger.LogWarning("Ignoring unknown command line arguments: {Arguments}", string.Join(" ", options.UnknownArguments));
         }
+
+        if (waitResult is not null)
+        {
+            _logger.LogInformation("Restarted after a change of the language; the previous instance {Result}.", waitResult);
+        }
+
+        if (settingsProblem is not null)
+        {
+            _logger.LogWarning("{Path}: {Problem}", AppSettings.DefaultPath, settingsProblem);
+        }
+
+        _logger.LogInformation(
+            "Operator language: {Language} ({Source}).",
+            AppLanguages.ToCode(language),
+            options.Language is null ? (settings.Language is null ? "default" : "settings") : "--lang");
 
         PruneOldLogs(logFilePath, _logger);
 
@@ -120,12 +150,6 @@ public partial class App : Application
             return;
         }
 
-        AppSettings settings = AppSettings.Load(AppSettings.DefaultPath, out string? settingsProblem);
-        if (settingsProblem is not null)
-        {
-            _logger.LogWarning("{Path}: {Problem}", AppSettings.DefaultPath, settingsProblem);
-        }
-
         // The sound output runs from the start (silence until a video plays), so the decoders know the device rate.
         _audioOutput = new AudioOutput(settings.AudioDeviceId, settings.Volume, _loggerFactory.CreateLogger<AudioOutput>(), _listener);
         ILogger deviceLogger = _loggerFactory.CreateLogger(typeof(AudioDeviceCatalog).FullName!);
@@ -139,6 +163,9 @@ public partial class App : Application
             _appVersion);
         _viewModel.SettingsChanged += (_, _) => SaveSettings();
         _viewModel.ManualRequested += (_, _) => OpenManual();
+        _viewModel.AboutRequested += (_, _) => ShowAbout();
+        // After the combo box has closed and taken the choice, not from inside its binding.
+        _viewModel.LanguageChangeRequested += (_, _) => _ = Dispatcher.InvokeAsync(OfferRestartForLanguage);
         if (options.ImagePath is not null)
         {
             // --image: the idle image for this session; the stored idle view stays as it is.
@@ -255,7 +282,7 @@ public partial class App : Application
         if (!ffmpegAvailable)
         {
             logger.LogError("The video player is not started because FFmpeg is missing or unusable.");
-            viewModel.ShowPlayerUnavailable("Kein Video möglich: FFmpeg fehlt (siehe Statuszeile FFmpeg)");
+            viewModel.ShowPlayerUnavailable(UiText.PlayerNoFFmpeg);
             return;
         }
 
@@ -316,6 +343,7 @@ public partial class App : Application
         }
     }
 
+    /// <summary>For the event log, so in German whatever the UI language is (docs/DECISIONS.md, M11).</summary>
     private static string DescribeIdleView(IdleViewModel idle) => idle.View switch
     {
         Core.Playback.IdleView.SeeThrough => "See-through",
@@ -409,14 +437,14 @@ public partial class App : Application
     {
         string reason = exception switch
         {
-            FileNotFoundException => "Datei nicht gefunden",
-            DirectoryNotFoundException => "Ordner nicht gefunden",
-            UnauthorizedAccessException => "Kein Zugriff auf die Datei",
-            FileFormatException or NotSupportedException => "Kein lesbares Bildformat",
-            ArgumentException => $"Bild zu groß (höchstens {StillImageTexture.MaxDimension} Pixel je Seite)",
-            _ => "Laden fehlgeschlagen",
+            FileNotFoundException => UiText.ImageFileNotFound,
+            DirectoryNotFoundException => UiText.ImageFolderNotFound,
+            UnauthorizedAccessException => UiText.ImageNoAccess,
+            FileFormatException or NotSupportedException => UiText.ImageUnreadable,
+            ArgumentException => Loc.Format(UiText.ImageTooLarge, StillImageTexture.MaxDimension),
+            _ => UiText.ImageLoadFailed,
         };
-        return reason + " (Details im Log)";
+        return Loc.Format(UiText.DetailsInLog, reason);
     }
 
     /// <summary>Deletes session logs older than 30 days, keeping at least the last 30 sessions (decision 2026-11-08).</summary>
@@ -451,15 +479,20 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// <c>--check</c> (M9): the native libraries were checked above; also the manual must be there. Logs the result and
-    /// ends the app without a window, exit code 0 if everything is there, else 1.
+    /// <c>--check</c> (M9): the native libraries were checked above; also the manuals in both languages must be there
+    /// (M11). Logs the result and ends the app without a window, exit code 0 if everything is there, else 1.
     /// </summary>
     private void RunCheckAndExit(IReadOnlyList<NativeComponentStatus> nativeComponents, ILogger logger)
     {
-        bool manualPresent = File.Exists(Path.Combine(AppContext.BaseDirectory, ManualFileName));
-        if (!manualPresent)
+        bool manualPresent = true;
+        foreach (AppLanguage language in Enum.GetValues<AppLanguage>())
         {
-            logger.LogError("Check: the manual {File} is missing next to the exe.", ManualFileName);
+            string manual = ManualFileName(language);
+            if (!File.Exists(Path.Combine(AppContext.BaseDirectory, manual)))
+            {
+                logger.LogError("Check: the manual {File} is missing next to the exe.", manual);
+                manualPresent = false;
+            }
         }
 
         foreach (NativeComponentStatus component in nativeComponents)
@@ -479,15 +512,15 @@ public partial class App : Application
         Shutdown(ok ? 0 : 1);
     }
 
-    /// <summary>Opens Anleitung.html (next to the exe) in the default browser (M9).</summary>
+    /// <summary>Opens the manual of the UI language (next to the exe) in the default browser (M9, M11).</summary>
     private void OpenManual()
     {
-        string path = Path.Combine(AppContext.BaseDirectory, ManualFileName);
+        string path = Path.Combine(AppContext.BaseDirectory, ManualFileName(Loc.Current));
         string? problem = null;
         if (!File.Exists(path))
         {
             _logger?.LogWarning("The manual {Path} is missing.", path);
-            problem = $"Die Anleitung fehlt:\n{path}\n\nBitte das Programmpaket neu entpacken.";
+            problem = Loc.Format(UiText.ManualMissing, path);
         }
         else
         {
@@ -499,13 +532,133 @@ public partial class App : Application
             catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
             {
                 _logger?.LogWarning(exception, "Opening the manual {Path} failed.", path);
-                problem = $"Die Anleitung ließ sich nicht öffnen ({exception.Message}).\n\nSie liegt hier und lässt sich auch direkt im Browser öffnen:\n{path}";
+                problem = Loc.Format(UiText.ManualOpenFailed, exception.Message, path);
             }
         }
 
         if (problem is not null)
         {
-            MessageBox.Show(MainWindow, problem, "Orbivo – Anleitung", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(MainWindow, problem, UiText.ManualCaption, MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>Menu Help → About Orbivo: full version, where the licenses are, and the log file of this session.</summary>
+    private void ShowAbout()
+    {
+        MessageBox.Show(
+            MainWindow,
+            Loc.Format(UiText.AboutText, _appVersion, _fileLoggerProvider?.FilePath),
+            UiText.AboutCaption,
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+    }
+
+    /// <summary>
+    /// Sets the language of all texts before any window or thread exists (M11). WPF formats numbers and dates in
+    /// bindings with the element language, not with the thread culture, so it gets the same.
+    /// </summary>
+    private static void ApplyLanguage(AppLanguage language)
+    {
+        Loc.Apply(language);
+        FrameworkElement.LanguageProperty.OverrideMetadata(
+            typeof(FrameworkElement),
+            new FrameworkPropertyMetadata(XmlLanguage.GetLanguage(AppLanguages.Culture(language).IetfLanguageTag)));
+    }
+
+    /// <summary>
+    /// The operator picked another language (M11). It is saved already; the texts change with a restart, which is
+    /// offered here. The question comes in the new language first, then in the old one.
+    /// </summary>
+    private void OfferRestartForLanguage()
+    {
+        if (_viewModel is null)
+        {
+            return;
+        }
+
+        AppLanguage next = _viewModel.SelectedLanguage.Language;
+        SaveSettings();
+        _logger?.LogInformation("Operator language changed to {Language}; it takes effect after a restart.", AppLanguages.ToCode(next));
+        string question =
+            UiText.ResourceManager.GetString(nameof(UiText.RestartQuestion), AppLanguages.Culture(next)) + "\n\n" + UiText.RestartQuestion;
+        MessageBoxResult answer = MessageBox.Show(MainWindow, question, "Orbivo", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.Yes);
+        if (answer == MessageBoxResult.Yes)
+        {
+            Restart();
+        }
+    }
+
+    /// <summary>
+    /// Starts a new instance with the same arguments and ends this one. The new one waits until this process is gone
+    /// (<see cref="StartupOptions.WaitForProcessOption"/>).
+    /// </summary>
+    private void Restart()
+    {
+        string? executable = Environment.ProcessPath;
+        var start = new ProcessStartInfo(executable ?? "Orbivo.exe")
+        {
+            UseShellExecute = false,
+            WorkingDirectory = Environment.CurrentDirectory,
+        };
+        foreach (string argument in StartupOptions.ArgumentsForRestart(_arguments))
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        start.ArgumentList.Add(StartupOptions.WaitForProcessOption);
+        start.ArgumentList.Add(Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
+        try
+        {
+            if (executable is null)
+            {
+                throw new InvalidOperationException("The path of the running exe is unknown.");
+            }
+
+            Process.Start(start)?.Dispose();
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            _logger?.LogError(exception, "Restarting Orbivo failed.");
+            MessageBox.Show(MainWindow, Loc.Format(UiText.RestartFailed, exception.Message), "Orbivo", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        _logger?.LogInformation("Restarting Orbivo for the new language.");
+        Shutdown();
+    }
+
+    /// <summary>Waits up to 30 s for the instance that restarted this one; says how that went, for the log.</summary>
+    private static string WaitForPreviousInstance(int processId)
+    {
+        Process previous;
+        try
+        {
+            previous = Process.GetProcessById(processId);
+        }
+        catch (ArgumentException)
+        {
+            // Not running any more: nothing to wait for.
+            return "had already ended";
+        }
+
+        using (previous)
+        {
+            try
+            {
+                // The id may already belong to another program; then the old instance is gone.
+                using Process current = Process.GetCurrentProcess();
+                if (!string.Equals(previous.ProcessName, current.ProcessName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return "had already ended (the id belongs to another program now)";
+                }
+
+                return previous.WaitForExit(TimeSpan.FromSeconds(30)) ? "has ended" : "did not end within 30 s; starting anyway";
+            }
+            catch (InvalidOperationException)
+            {
+                // Ended between the lookup and the questions above.
+                return "had already ended";
+            }
         }
     }
 
@@ -538,8 +691,8 @@ public partial class App : Application
     {
         _logger?.LogCritical(e.Exception, "Unhandled exception on the UI thread. Shutting down.");
         MessageBox.Show(
-            $"Unerwarteter Fehler: {e.Exception.Message}\n\nOrbivo wird beendet. Details stehen in der Log-Datei:\n{_fileLoggerProvider?.FilePath}",
-            "Orbivo – Fehler",
+            Loc.Format(UiText.UnexpectedError, e.Exception.Message, _fileLoggerProvider?.FilePath),
+            UiText.ErrorCaption,
             MessageBoxButton.OK,
             MessageBoxImage.Error);
         e.Handled = true;

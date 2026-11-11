@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Status;
 
 namespace Orbivo.Xr.OpenXr;
@@ -30,7 +31,7 @@ public static class OpenXrLoader
         if (!File.Exists(path))
         {
             logger.LogError("OpenXR loader missing: {Path}. See native/README.md.", path);
-            return new NativeComponentStatus(ComponentName, false, $"Fehlt: {LibraryFileName}");
+            return new NativeComponentStatus(ComponentName, false, Loc.Format(CoreText.NativeMissing, LibraryFileName));
         }
 
         string? fileVersion = FileVersionInfo.GetVersionInfo(path).FileVersion;
@@ -44,6 +45,6 @@ public static class OpenXrLoader
             logger.LogInformation("OpenXR loader found: {Path} (file version {FileVersion}).", path, fileVersion ?? "unknown");
         }
 
-        return new NativeComponentStatus(ComponentName, true, $"{LibraryFileName} {fileVersion ?? "(Version unbekannt)"}");
+        return new NativeComponentStatus(ComponentName, true, $"{LibraryFileName} {fileVersion ?? CoreText.NativeVersionUnknown}");
     }
 }

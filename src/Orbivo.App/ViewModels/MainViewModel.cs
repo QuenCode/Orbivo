@@ -7,11 +7,13 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Orbivo.App.LiveView;
+using Orbivo.App.Localization;
 using Orbivo.Audio.Output;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Logging;
 using Orbivo.Core.Playback;
 using Orbivo.Core.Playlists;
@@ -43,6 +45,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly List<Action> _refreshers = [];
     private readonly StatusEntry _gpuEntry;
     private readonly AppSettings _loadedSettings;
+    private LanguageChoice _selectedLanguage;
     private readonly StatusEntry _playbackEntry;
     private readonly StatusEntry _videoEntry;
     private readonly StatusEntry _decoderEntry;
@@ -67,7 +70,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly bool _keepsPlaylist;
     private LiveViewController? _liveView;
     private bool _liveViewEnabled;
-    private string _liveViewStatusText = "Aus";
+    private string _liveViewStatusText = UiText.Off;
     private bool _updatingDevices;
     private string _audioModeText = "–";
     private readonly Stopwatch _sinceSeekSent = new();
@@ -76,7 +79,7 @@ public sealed class MainViewModel : ObservableObject
     private PlaybackState _playbackState = PlaybackState.NoMedia;
     private bool _playerRunning;
     private RecenterStatus _recenter;
-    private readonly StatusEntry _recenterEntry = new("Recenter", "Aus (Vorderseite des Videos)", StatusLevel.Neutral);
+    private readonly StatusEntry _recenterEntry = new("Recenter", UiText.RecenterOff, StatusLevel.Neutral);
     private string _timeText = MediaTime.Format(TimeSpan.Zero) + " / " + MediaTime.Format(TimeSpan.Zero);
     private double _timelineSeconds;
     private double _durationSeconds;
@@ -84,7 +87,7 @@ public sealed class MainViewModel : ObservableObject
     private bool _updatingTimeline;
     private TimeSpan _lastSeekTarget;
     private string _timeInput = string.Empty;
-    private string _fadeSecondsText = "1,0";
+    private string _fadeSecondsText = string.Empty;
     private TimeSpan _fadeDuration = TimeSpan.FromSeconds(1);
     private bool _autoAdvance = true;
     private bool _loop;
@@ -92,7 +95,7 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>Files of the last playlist that were gone at the start; shown until the playlist changes.</summary>
     private string? _restoreProblem;
-    private string _outputText = "Brille: Leerlauf";
+    private string _outputText = Loc.Format(UiText.OutputHeadset, UiText.OutputIdle);
     private StatusLevel _outputLevel = StatusLevel.Neutral;
 
     public MainViewModel(
@@ -114,6 +117,7 @@ public sealed class MainViewModel : ObservableObject
         _listAudioDevices = listAudioDevices;
         Format = new FormatViewModel(Send);
         _loadedSettings = settings;
+        _selectedLanguage = LanguageChoice.All.First(choice => choice.Language == Loc.Current);
         Idle = new IdleViewModel(settings.IdleView, settings.IdleImagePath, options.NoXr);
         Idle.SettingsChanged += (_, _) => SettingsChanged?.Invoke(this, EventArgs.Empty);
         Idle.Changed += (_, _) => ShowOutput(_lastStatus);
@@ -160,39 +164,42 @@ public sealed class MainViewModel : ObservableObject
         RefreshAudioDevicesCommand = new RelayCommand(RefreshAudioDevices, () => !SoundLocked);
 
         OpenManualCommand = new RelayCommand(() => ManualRequested?.Invoke(this, EventArgs.Empty));
+        ShowAboutCommand = new RelayCommand(() => AboutRequested?.Invoke(this, EventArgs.Empty));
+        ClearPlaylistCommand = new RelayCommand(ClearPlaylist, CanClearPlaylist);
+        ChooseLanguageCommand = new RelayCommand<string>(ChooseLanguage);
 
         // "1.0.0+<commit>" → "1.0.0"; the full version is in the log.
         string shortVersion = appVersion.Split('+')[0];
         string name = shortVersion.Length == 0 ? "Orbivo" : "Orbivo " + shortVersion;
-        Title = options.NoXr ? name + " – Operator (ohne Brille)" : name + " – Operator";
+        Title = options.NoXr ? Loc.Format(UiText.TitleNoXr, name) : name + " – Operator";
 
         var entries = new List<StatusEntry>
         {
-            new("Modus", options.NoXr ? "Desktop-Vorschau (--no-xr)" : "Brille (OpenXR)", StatusLevel.Neutral),
+            new(UiText.StatusMode, options.NoXr ? UiText.ModeDesktop : UiText.ModeHeadset, StatusLevel.Neutral),
         };
 
-        _gpuEntry = new StatusEntry("GPU", options.NoXr ? "Wird eingerichtet …" : "Wartet auf die Brille …", StatusLevel.Neutral);
+        _gpuEntry = new StatusEntry("GPU", options.NoXr ? UiText.GpuSettingUp : UiText.WaitingForHeadset, StatusLevel.Neutral);
         _playbackEntry = options.VideoPath is null
             ? new StatusEntry(
-                "Wiedergabe",
-                "Kein Video geladen. Videos über „Hinzufügen …“ oder per Drag & Drop in die Playlist",
+                UiText.StatusPlayback,
+                UiText.PlaybackNothingLoaded,
                 StatusLevel.Neutral)
-            : new StatusEntry("Wiedergabe", "Wartet auf die Grafikkarte …", StatusLevel.Neutral);
+            : new StatusEntry(UiText.StatusPlayback, UiText.WaitingForGpu, StatusLevel.Neutral);
         _videoEntry = new StatusEntry("Video", "–", StatusLevel.Neutral);
         _decoderEntry = new StatusEntry("Decoder", "–", StatusLevel.Neutral);
-        _outputEntry = new StatusEntry("Ausgabe", "Bild (kein Schwarzbild)", StatusLevel.Neutral);
-        _playlistEntry = new StatusEntry("Playlist", "Leer", StatusLevel.Neutral);
-        _soundEntry = new StatusEntry("Ton", "–", StatusLevel.Neutral);
-        _soundOutputEntry = new StatusEntry("Tonausgabe", "Startet …", StatusLevel.Neutral);
+        _outputEntry = new StatusEntry(UiText.StatusOutput, UiText.OutputEntryPicture, StatusLevel.Neutral);
+        _playlistEntry = new StatusEntry("Playlist", UiText.PlaylistStatusEmpty, StatusLevel.Neutral);
+        _soundEntry = new StatusEntry(UiText.StatusSound, "–", StatusLevel.Neutral);
+        _soundOutputEntry = new StatusEntry(UiText.StatusSoundOutput, UiText.Starting, StatusLevel.Neutral);
         _avSyncEntry = new StatusEntry("A/V", "–", StatusLevel.Neutral);
 
         if (options.NoXr)
         {
-            _viewportEntry = new StatusEntry("Vorschaufenster", "Startet …", StatusLevel.Neutral);
-            _viewEntry = new StatusEntry("Blick (Maus)", "–", StatusLevel.Neutral);
+            _viewportEntry = new StatusEntry(UiText.StatusViewport, UiText.Starting, StatusLevel.Neutral);
+            _viewEntry = new StatusEntry(UiText.StatusViewMouse, "–", StatusLevel.Neutral);
             entries.AddRange(
             [
-                new StatusEntry("Brille", "Nicht verwendet (--no-xr)", StatusLevel.Neutral),
+                new StatusEntry(UiText.StatusHeadset, UiText.HeadsetNotUsed, StatusLevel.Neutral),
                 _gpuEntry,
                 _viewportEntry,
                 _playbackEntry,
@@ -209,10 +216,10 @@ public sealed class MainViewModel : ObservableObject
         }
         else
         {
-            _headsetEntry = new StatusEntry("Brille", "Startet …", StatusLevel.Neutral);
+            _headsetEntry = new StatusEntry(UiText.StatusHeadset, UiText.Starting, StatusLevel.Neutral);
             _sessionEntry = new StatusEntry("Session", "–", StatusLevel.Neutral);
-            _xrRenderEntry = new StatusEntry("Bildausgabe", "–", StatusLevel.Neutral);
-            _viewEntry = new StatusEntry("Blick (Proband)", "–", StatusLevel.Neutral);
+            _xrRenderEntry = new StatusEntry(UiText.StatusXrRender, "–", StatusLevel.Neutral);
+            _viewEntry = new StatusEntry(UiText.StatusViewParticipant, "–", StatusLevel.Neutral);
             entries.AddRange(
             [
                 _headsetEntry, _sessionEntry, _xrRenderEntry, _gpuEntry, _playbackEntry, _outputEntry, _playlistEntry,
@@ -224,7 +231,7 @@ public sealed class MainViewModel : ObservableObject
             component.Component,
             component.Detail,
             component.IsAvailable ? StatusLevel.Ok : StatusLevel.Error)));
-        entries.Add(new StatusEntry("Log-Datei", logFilePath, StatusLevel.Neutral));
+        entries.Add(new StatusEntry(UiText.StatusLogFile, logFilePath, StatusLevel.Neutral));
 
         StatusEntries = entries;
         FillAudioDevices(settings.AudioDeviceId);
@@ -240,11 +247,35 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>The operator changed the output device; the app saves the settings.</summary>
     public event EventHandler? SettingsChanged;
 
-    /// <summary>The operator asked for the manual (link or F1); the app opens Anleitung.html.</summary>
+    /// <summary>The operator asked for the manual (menu Help or F1); the app opens the one of the UI language.</summary>
     public event EventHandler? ManualRequested;
 
     /// <summary>Opens the operator manual (F1).</summary>
     public IRelayCommand OpenManualCommand { get; }
+
+    /// <summary>The operator asked for version, licenses and log file (menu Help); the app shows them.</summary>
+    public event EventHandler? AboutRequested;
+
+    /// <summary>Menu Help → About Orbivo.</summary>
+    public IRelayCommand ShowAboutCommand { get; }
+
+    /// <summary>
+    /// Menu File → Clear playlist. Like removing a single entry, not while the loaded video is shown (playing, paused,
+    /// at its end); after Stop it closes that video too.
+    /// </summary>
+    public IRelayCommand ClearPlaylistCommand { get; }
+
+    /// <summary>Asks the operator before the playlist is cleared (the window sets it); without it the playlist is not cleared.</summary>
+    public Func<int, bool>? ConfirmClearPlaylist { get; set; }
+
+    /// <summary>Menu Options → Language; the parameter is the language code ("en", "de").</summary>
+    public IRelayCommand<string> ChooseLanguageCommand { get; }
+
+    /// <summary>For the check marks in the language menu.</summary>
+    public bool EnglishSelected => SelectedLanguage.Language == AppLanguage.English;
+
+    /// <summary>For the check marks in the language menu.</summary>
+    public bool GermanSelected => SelectedLanguage.Language == AppLanguage.German;
 
     /// <summary>
     /// Settings to keep: output device, volume and their lock (not mute), idle view, recording, playlist with its
@@ -266,7 +297,41 @@ public sealed class MainViewModel : ObservableObject
         AutoAdvance = AutoAdvance,
         Loop = Loop,
         FadeSeconds = _fadeDuration.TotalSeconds,
+        Language = _savedLanguage ?? _loadedSettings.Language,
     };
+
+    /// <summary>Set once the operator picks a language; until then the saved one stays (also with <c>--lang</c>).</summary>
+    private string? _savedLanguage;
+
+    /// <summary>
+    /// The language the window runs in (menu Options → Language). Picking another one saves it and asks for a restart
+    /// (<see cref="LanguageChangeRequested"/>); the texts change with the next start (docs/DECISIONS.md, M11).
+    /// </summary>
+    public LanguageChoice SelectedLanguage
+    {
+        get => _selectedLanguage;
+        set
+        {
+            if (value is null || value == _selectedLanguage)
+            {
+                return;
+            }
+
+            _selectedLanguage = value;
+            _savedLanguage = AppLanguages.ToCode(value.Language);
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(EnglishSelected));
+            OnPropertyChanged(nameof(GermanSelected));
+            SettingsChanged?.Invoke(this, EventArgs.Empty);
+            if (value.Language != Loc.Current)
+            {
+                LanguageChangeRequested?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary>The operator picked a language other than the running one; the app offers a restart.</summary>
+    public event EventHandler? LanguageChangeRequested;
 
     /// <summary>The "Brille im Leerlauf" group (F7).</summary>
     public IdleViewModel Idle { get; }
@@ -301,7 +366,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>True while device and volume may be changed (not <see cref="SoundLocked"/>).</summary>
     public bool SoundSettingsEditable => !SoundLocked;
 
-    /// <summary>"Windows-Standard" and the active output devices (F24).</summary>
+    /// <summary>CoreText.SoundDeviceWindowsDefault and the active output devices (F24).</summary>
     public ObservableCollection<AudioDeviceChoice> AudioDevices { get; } = [];
 
     public AudioDeviceChoice? SelectedAudioDevice
@@ -368,7 +433,7 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    public string MuteButtonText => Muted ? "Ton an (M)" : "Stumm (M)";
+    public string MuteButtonText => Muted ? UiText.UnmuteButton : UiText.MuteButton;
 
     public IRelayCommand ToggleMuteCommand { get; }
 
@@ -554,10 +619,10 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>"Schwarzbild" or "Schwarzbild aus", depending on the output.</summary>
-    public string BlackoutButtonText => _lastStatus.Output.TowardsBlack ? "Schwarzbild aus (B)" : "Schwarzbild (B)";
+    public string BlackoutButtonText => _lastStatus.Output.TowardsBlack ? UiText.BlackoutOffButton : UiText.BlackoutButton;
 
     /// <summary>"Ausblenden" or "Einblenden", depending on the output.</summary>
-    public string FadeButtonText => _lastStatus.Output.TowardsBlack ? "Einblenden (F)" : "Ausblenden (F)";
+    public string FadeButtonText => _lastStatus.Output.TowardsBlack ? UiText.FadeInButton : UiText.FadeOutButton;
 
     /// <summary>True if the timeline and time input can be used (a video is open).</summary>
     public bool IsSeekable => CanSeek;
@@ -575,16 +640,16 @@ public sealed class MainViewModel : ObservableObject
 
     public void ShowGraphicsDeviceFailed()
     {
-        _gpuEntry.Update("Grafikkarte konnte nicht eingerichtet werden (Details im Log)", StatusLevel.Error);
-        _viewportEntry?.Update("Nicht gestartet", StatusLevel.Error);
-        _playbackEntry.Update("Kein Video möglich ohne Grafikkarte", StatusLevel.Error);
+        _gpuEntry.Update(UiText.GpuFailed, StatusLevel.Error);
+        _viewportEntry?.Update(UiText.NotStarted, StatusLevel.Error);
+        _playbackEntry.Update(UiText.PlaybackNoGpu, StatusLevel.Error);
     }
 
     public void ShowImageLoaded(string fileName, int width, int height, StereoLayout layout, bool layoutChosenExplicitly)
     {
         string text = string.Create(
             CultureInfo.CurrentCulture,
-            $"{fileName} ({width} × {height}), {DescribeLayout(layout)}{(layoutChosenExplicitly ? string.Empty : " (aus der Größe geschätzt)")}");
+            $"{fileName} ({width} × {height}), {DescribeLayout(layout)}{(layoutChosenExplicitly ? string.Empty : " " + UiText.ImageLayoutGuessed)}");
         int eyeWidth = layout == StereoLayout.SideBySide ? width / 2 : width;
         int eyeHeight = layout == StereoLayout.TopBottom ? height / 2 : height;
         bool expected = layout == StereoLayout.SideBySide ? eyeWidth == eyeHeight : eyeWidth == 2 * eyeHeight;
@@ -594,7 +659,7 @@ public sealed class MainViewModel : ObservableObject
         }
         else
         {
-            Idle.ShowImageFailed(text + ". Ungewöhnliches Seitenverhältnis für Equirect 360°");
+            Idle.ShowImageFailed(text + ". " + UiText.ImageUnusualAspect);
         }
     }
 
@@ -631,7 +696,7 @@ public sealed class MainViewModel : ObservableObject
         }
         else
         {
-            _playlistEntry.Update("Keine Videodateien gefunden (" + string.Join(", ", Playlist.VideoExtensions) + ")", StatusLevel.Warning);
+            _playlistEntry.Update(Loc.Format(UiText.PlaylistNoVideoFiles, string.Join(", ", Playlist.VideoExtensions)), StatusLevel.Warning);
         }
 
         return added.Count;
@@ -719,7 +784,7 @@ public sealed class MainViewModel : ObservableObject
     {
         if (!_commands.TryWrite(command))
         {
-            _playbackEntry.Update("Befehl konnte nicht an den Player übergeben werden", StatusLevel.Error);
+            _playbackEntry.Update(UiText.CommandNotDelivered, StatusLevel.Error);
         }
     }
 
@@ -795,6 +860,39 @@ public sealed class MainViewModel : ObservableObject
             || _playbackState is not (PlaybackState.Opening or PlaybackState.Playing or PlaybackState.Paused or PlaybackState.Ended);
     }
 
+    private bool CanClearPlaylist() =>
+        Playlist.Entries.Count > 0 && (Playlist.Current is not { } current || CanRemove(current));
+
+    private void ClearPlaylist()
+    {
+        if (!CanClearPlaylist() || ConfirmClearPlaylist?.Invoke(Playlist.Entries.Count) != true)
+        {
+            return;
+        }
+
+        bool loaded = Playlist.Current is not null;
+        foreach (PlaylistEntry entry in Playlist.Entries.ToArray())
+        {
+            Playlist.Remove(entry);
+        }
+
+        if (loaded)
+        {
+            // Close the file, so it can be moved or deleted, and empty the status.
+            Send(new CloseMediaCommand());
+        }
+
+        SelectedEntry = null;
+    }
+
+    private void ChooseLanguage(string? code)
+    {
+        if (AppLanguages.FromCode(code) is { } language)
+        {
+            SelectedLanguage = LanguageChoice.All.First(choice => choice.Language == language);
+        }
+    }
+
     private void MoveSelected(int direction)
     {
         if (SelectedEntry is { } entry)
@@ -855,8 +953,8 @@ public sealed class MainViewModel : ObservableObject
         if (missing.Count > 0)
         {
             _restoreProblem = missing.Count == 1
-                ? $"1 Video der letzten Playlist fehlt: {missing[0]}"
-                : $"{missing.Count} Videos der letzten Playlist fehlen: {string.Join(", ", missing)}";
+                ? Loc.Format(UiText.RestoreOneMissing, missing[0])
+                : Loc.Format(UiText.RestoreManyMissing, missing.Count, string.Join(", ", missing));
             ShowPlaylistStatus();
         }
     }
@@ -874,6 +972,7 @@ public sealed class MainViewModel : ObservableObject
         PreviousCommand.NotifyCanExecuteChanged();
         LoadSelectedCommand.NotifyCanExecuteChanged();
         RemoveSelectedCommand.NotifyCanExecuteChanged();
+        ClearPlaylistCommand.NotifyCanExecuteChanged();
         MoveSelectedUpCommand.NotifyCanExecuteChanged();
         MoveSelectedDownCommand.NotifyCanExecuteChanged();
         ShowPlaylistStatus();
@@ -884,13 +983,13 @@ public sealed class MainViewModel : ObservableObject
         int count = Playlist.Entries.Count;
         int current = Playlist.CurrentIndex;
         string text = count == 0
-            ? "Leer"
+            ? UiText.PlaylistStatusEmpty
             : current < 0
-                ? $"{count} Videos, keins geladen"
-                : $"Video {current + 1} von {count}";
+                ? Loc.Format(UiText.PlaylistStatusNoneLoaded, count)
+                : Loc.Format(UiText.PlaylistStatusCurrent, current + 1, count);
         if (count > 0)
         {
-            text += Loop ? ", Wiederholen an" : AutoAdvance ? ", automatisch weiter" : ", hält am Ende";
+            text += ", " + (Loop ? UiText.PlaylistStatusLoop : AutoAdvance ? UiText.PlaylistStatusAutoAdvance : UiText.PlaylistStatusStopsAtEnd);
         }
 
         if (_restoreProblem is not null)
@@ -956,7 +1055,7 @@ public sealed class MainViewModel : ObservableObject
         }
         else
         {
-            _playbackEntry.Update($"Zeit „{TimeInput}“ nicht lesbar. Beispiele: 83, 1:23, 1:23.5, 0:01:23", StatusLevel.Warning);
+            _playbackEntry.Update(Loc.Format(UiText.TimeNotReadable, TimeInput), StatusLevel.Warning);
         }
     }
 
@@ -977,7 +1076,7 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             AudioDevices.Clear();
-            AudioDevices.Add(new AudioDeviceChoice(null, "Windows-Standard"));
+            AudioDevices.Add(new AudioDeviceChoice(null, CoreText.SoundDeviceWindowsDefault));
             foreach (AudioDeviceInfo device in _listAudioDevices())
             {
                 AudioDevices.Add(new AudioDeviceChoice(device.Id, device.Name));
@@ -986,7 +1085,7 @@ public sealed class MainViewModel : ObservableObject
             AudioDeviceChoice? selected = AudioDevices.FirstOrDefault(choice => choice.Id == selectedId);
             if (selected is null)
             {
-                selected = new AudioDeviceChoice(selectedId, "Gespeichertes Gerät (nicht verbunden)");
+                selected = new AudioDeviceChoice(selectedId, UiText.SoundDeviceSavedNotConnected);
                 AudioDevices.Add(selected);
             }
 
@@ -1034,6 +1133,7 @@ public sealed class MainViewModel : ObservableObject
             StepFrameCommand.NotifyCanExecuteChanged();
             GoToTimeCommand.NotifyCanExecuteChanged();
             RemoveSelectedCommand.NotifyCanExecuteChanged();
+            ClearPlaylistCommand.NotifyCanExecuteChanged();
             OnPropertyChanged(nameof(IsSeekable));
             if (status.State == PlaybackState.Ended && before == PlaybackState.Playing)
             {
@@ -1054,16 +1154,16 @@ public sealed class MainViewModel : ObservableObject
         }
 
         string file = status.FilePath is null ? string.Empty : Path.GetFileName(status.FilePath);
-        string seeking = status.Seeking ? ", springt …" : string.Empty;
+        string seeking = status.Seeking ? ", " + UiText.PlaybackSeeking : string.Empty;
         (string stateText, StatusLevel stateLevel) = status.State switch
         {
-            PlaybackState.NoMedia => ("Kein Video", StatusLevel.Neutral),
-            PlaybackState.Opening => ($"{file}: wird geöffnet …", StatusLevel.Neutral),
-            PlaybackState.Ready => ($"{file}: bereit, Brille schwarz bis Play{seeking}", StatusLevel.Ok),
-            PlaybackState.Playing => ($"{file}: läuft{seeking}", StatusLevel.Ok),
-            PlaybackState.Paused => ($"{file}: Pause{seeking}", StatusLevel.Ok),
-            PlaybackState.Ended => ($"{file}: Ende erreicht, letztes Bild steht", StatusLevel.Ok),
-            _ => ($"{file}: {status.Error ?? "Fehler"}", StatusLevel.Error),
+            PlaybackState.NoMedia => (UiText.PlaybackNoMedia, StatusLevel.Neutral),
+            PlaybackState.Opening => (Loc.Format(UiText.PlaybackOpening, file), StatusLevel.Neutral),
+            PlaybackState.Ready => (Loc.Format(UiText.PlaybackReady, file, seeking), StatusLevel.Ok),
+            PlaybackState.Playing => (Loc.Format(UiText.PlaybackPlaying, file, seeking), StatusLevel.Ok),
+            PlaybackState.Paused => (Loc.Format(UiText.PlaybackPaused, file, seeking), StatusLevel.Ok),
+            PlaybackState.Ended => (Loc.Format(UiText.PlaybackEnded, file), StatusLevel.Ok),
+            _ => ($"{file}: {status.Error ?? UiText.PlaybackError}", StatusLevel.Error),
         };
         _playbackEntry.Update(stateText, stateLevel);
         ShowOutput(status);
@@ -1081,23 +1181,23 @@ public sealed class MainViewModel : ObservableObject
         VideoFormatStatus? format = status.Format;
         string formatText = format is null
             ? string.Empty
-            : $", {VideoFormatResolver.Describe(format.Format.Projection)} {DescribeLayout(format.Format.Layout)}{(format.Format.SwapEyes ? ", Augen getauscht" : string.Empty)}";
+            : $", {VideoFormatResolver.Describe(format.Format.Projection)} {DescribeLayout(format.Format.Layout)}{(format.Format.SwapEyes ? ", " + UiText.VideoEyesSwapped : string.Empty)}";
         bool formatWarning = format is not null && (format.Warnings.Count > 0 || format.SidecarError is not null);
         _videoEntry.Update(
-            string.Create(
-                culture,
-                $"{video.Codec} {video.Profile}, {video.Width} × {video.Height}, {video.FrameRate:0.##} fps, {video.Color.BitDepth} Bit, {DescribeColor(video.Color)}{formatText}")
-                + (formatWarning ? ". Formathinweise im Bereich Format" : string.Empty),
+            Loc.Format(UiText.VideoInfo, video.Codec, video.Profile, video.Width, video.Height, video.FrameRate, video.Color.BitDepth, DescribeColor(video.Color), formatText)
+                + (formatWarning ? ". " + UiText.VideoFormatHints : string.Empty),
             formatWarning ? StatusLevel.Warning : StatusLevel.Ok);
 
-        string decoderText = string.Create(
-            culture,
-            $"{(video.HardwareDecoding ? "Hardware (D3D11VA)" : $"Software-Dekodierung ({video.SoftwareReason ?? "ohne Angabe"})")}, {status.DecodedFramesPerSecond:0} fps dekodiert, Puffer {status.QueuedFrames}/{status.QueueCapacity}, verworfen {status.DroppedFrames}");
+        string decoderKind = video.HardwareDecoding
+            ? "Hardware (D3D11VA)"
+            : Loc.Format(UiText.DecoderSoftware, video.SoftwareReason?.ToString() ?? UiText.DecoderNoReason);
+        string decoderText = Loc.Format(
+            UiText.DecoderInfo, decoderKind, status.DecodedFramesPerSecond, status.QueuedFrames, status.QueueCapacity, status.DroppedFrames);
 
         // While playing, the buffer stays nearly full if the decoder keeps up. Running empty means stutter.
         bool starving = status.State == PlaybackState.Playing && status.QueuedFrames <= 1 && status.Position < status.Duration - TimeSpan.FromSeconds(1);
         _decoderEntry.Update(
-            starving ? decoderText + ". Puffer läuft leer, Decoder zu langsam" : decoderText,
+            starving ? decoderText + ". " + UiText.DecoderStarving : decoderText,
             starving || status.DroppedFrames > 0 || !video.HardwareDecoding ? StatusLevel.Warning : StatusLevel.Ok);
     }
 
@@ -1122,36 +1222,33 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>What the participant sees (F40): video, still frame, or black, and blackout or fade on top.</summary>
     private void ShowOutput(PlayerStatus status)
     {
-        CultureInfo culture = CultureInfo.CurrentCulture;
         OutputLevel output = status.Output;
         bool videoVisible = status.State is PlaybackState.Playing or PlaybackState.Paused or PlaybackState.Ended;
         string idle = Idle.View switch
         {
             IdleView.SeeThrough => "See-through",
-            IdleView.Image => "Standbild",
-            _ => "Schwarz",
+            IdleView.Image => UiText.IdleNameImage,
+            _ => UiText.IdleNameBlack,
         };
         string content = status.State switch
         {
-            PlaybackState.Playing => "Video läuft",
-            PlaybackState.Paused => "Videobild steht (Pause)",
-            PlaybackState.Ended => "Letztes Bild (Ende)",
-            PlaybackState.NoMedia => $"Leerlauf: {idle} (kein Video geladen)",
-            _ => $"Leerlauf: {idle} (Video noch nicht gestartet)",
+            PlaybackState.Playing => UiText.OutputVideoPlaying,
+            PlaybackState.Paused => UiText.OutputVideoPaused,
+            PlaybackState.Ended => UiText.OutputLastFrame,
+            PlaybackState.NoMedia => Loc.Format(UiText.OutputIdleNoMedia, idle),
+            _ => Loc.Format(UiText.OutputIdleNotStarted, idle),
         };
 
         string text;
         StatusLevel level;
         if (output.Fading)
         {
-            text = string.Create(
-                culture,
-                $"{(output.TowardsBlack ? "Blendet aus" : "Blendet ein")} ({output.Level * 100:0} %): {content}");
+            text = Loc.Format(output.TowardsBlack ? UiText.OutputFadingOut : UiText.OutputFadingIn, output.Level * 100, content);
             level = StatusLevel.Warning;
         }
         else if (output.Level <= 0f)
         {
-            text = "SCHWARZBILD" + (videoVisible ? $" (dahinter: {content})" : string.Empty);
+            text = videoVisible ? Loc.Format(UiText.OutputBlackoutOver, content) : UiText.OutputBlackout;
             level = StatusLevel.Neutral;
         }
         else
@@ -1160,10 +1257,10 @@ public sealed class MainViewModel : ObservableObject
             level = videoVisible ? StatusLevel.Ok : StatusLevel.Neutral;
         }
 
-        OutputText = "Brille: " + text;
+        OutputText = Loc.Format(UiText.OutputHeadset, text);
         OutputStatusLevel = level;
         _outputEntry.Update(
-            output.Fading ? text : output.Level <= 0f ? "Schwarzbild aktiv" : "Bild (kein Schwarzbild)",
+            output.Fading ? text : output.Level <= 0f ? UiText.OutputEntryBlackout : UiText.OutputEntryPicture,
             output.Fading ? StatusLevel.Warning : output.Level <= 0f ? StatusLevel.Warning : StatusLevel.Ok);
     }
 
@@ -1174,8 +1271,8 @@ public sealed class MainViewModel : ObservableObject
         AudioTrackInfo? track = status.Audio;
         if (track is null)
         {
-            _soundEntry.Update(status.Video is null ? "–" : "Kein Ton im Video (Systemuhr als Takt)", StatusLevel.Neutral);
-            AudioModeText = status.Video is null ? "–" : "Kein Ton";
+            _soundEntry.Update(status.Video is null ? "–" : UiText.SoundNoTrack, StatusLevel.Neutral);
+            AudioModeText = status.Video is null ? "–" : UiText.SoundNone;
         }
         else
         {
@@ -1184,7 +1281,7 @@ public sealed class MainViewModel : ObservableObject
             string text = string.Create(culture, $"{track.Codec}, {plan.Describe()}, {mode}");
             if (plan.IsDownmix)
             {
-                text += ". Mehrkanal wird auf Stereo gemischt";
+                text += ". " + UiText.SoundDownmixed;
             }
 
             _soundEntry.Update(
@@ -1197,14 +1294,14 @@ public sealed class MainViewModel : ObservableObject
         AudioOutputStatus? output = status.AudioOutput;
         if (output is null)
         {
-            _soundOutputEntry.Update("Keine Tonausgabe", StatusLevel.Error);
+            _soundOutputEntry.Update(UiText.SoundOutputNone, StatusLevel.Error);
         }
         else
         {
-            string extras = output.Muted ? ", STUMM" : string.Empty;
+            string extras = output.Muted ? ", " + UiText.SoundMutedTag : string.Empty;
             if (output.Spatial is { Active: true } spatial)
             {
-                extras = string.Create(culture, $", Raumklang-Last {spatial.PeakLoad:0.#%}") + extras;
+                extras = ", " + Loc.Format(UiText.SoundSpatialLoad, spatial.PeakLoad) + extras;
             }
 
             double dropoutMs = output.SampleRate > 0 ? output.UnderrunFrames * 1000.0 / output.SampleRate : 0;
@@ -1212,22 +1309,28 @@ public sealed class MainViewModel : ObservableObject
             {
                 case AudioEndpointState.Active:
                     _soundOutputEntry.Update(
-                        string.Create(
-                            culture,
-                            $"{output.DeviceName}, {output.SampleRate / 1000.0:0.#} kHz, {output.DeviceChannels} Kanäle, Latenz {output.LatencyMilliseconds:0} ms, Drift {output.DriftPpm:+0;-0;0} ppm, Aussetzer {dropoutMs:0} ms{extras}"),
+                        Loc.Format(
+                            UiText.SoundOutputActive,
+                            output.DeviceName,
+                            output.SampleRate / 1000.0,
+                            output.DeviceChannels,
+                            output.LatencyMilliseconds,
+                            output.DriftPpm,
+                            dropoutMs,
+                            extras),
                         output.UnderrunFrames > 0 || output.Muted ? StatusLevel.Warning : StatusLevel.Ok);
                     break;
                 case AudioEndpointState.Unavailable:
-                    _soundOutputEntry.Update(output.Message ?? "Nicht verfügbar", StatusLevel.Error);
+                    _soundOutputEntry.Update(output.Message ?? UiText.NotAvailable, StatusLevel.Error);
                     break;
                 default:
-                    _soundOutputEntry.Update("Startet …", StatusLevel.Neutral);
+                    _soundOutputEntry.Update(UiText.Starting, StatusLevel.Neutral);
                     break;
             }
         }
 
         AvSyncStats sync = status.AvSync;
-        string clock = status.ClockSource == PlaybackClockSource.Audio ? "Takt: Ton" : "Takt: Systemuhr";
+        string clock = status.ClockSource == PlaybackClockSource.Audio ? UiText.ClockAudio : UiText.ClockSystem;
         if (sync.WindowFrames == 0)
         {
             _avSyncEntry.Update(status.Video is null ? "–" : $"– ({clock})", StatusLevel.Neutral);
@@ -1236,9 +1339,15 @@ public sealed class MainViewModel : ObservableObject
         {
             bool inside = sync.WindowMinMs >= -AvSyncMeter.LimitMilliseconds && sync.WindowMaxMs <= AvSyncMeter.LimitMilliseconds;
             _avSyncEntry.Update(
-                string.Create(
-                    culture,
-                    $"{sync.WindowMeanMs:+0.0;-0.0;0.0} ms ({sync.WindowMinMs:+0.0;-0.0;0.0} … {sync.WindowMaxMs:+0.0;-0.0;0.0}), seit Start {sync.TotalOutsideLimit} von {sync.TotalFrames} Bildern außerhalb ±{AvSyncMeter.LimitMilliseconds:0} ms, {clock}"),
+                Loc.Format(
+                    UiText.AvSyncInfo,
+                    sync.WindowMeanMs,
+                    sync.WindowMinMs,
+                    sync.WindowMaxMs,
+                    sync.TotalOutsideLimit,
+                    sync.TotalFrames,
+                    AvSyncMeter.LimitMilliseconds,
+                    clock),
                 inside && sync.TotalOutsideLimit == 0 ? StatusLevel.Ok : StatusLevel.Warning);
         }
     }
@@ -1248,7 +1357,7 @@ public sealed class MainViewModel : ObservableObject
     {
         if (plan.Channels == ChannelHandling.MonoOnBoth)
         {
-            return ("Mono auf beiden Ohren (ohne Richtung)", null);
+            return (UiText.SoundModeMono, null);
         }
 
         if (plan.Channels == ChannelHandling.Ambisonics)
@@ -1259,31 +1368,31 @@ public sealed class MainViewModel : ObservableObject
             // Before Play no field flows yet; a ready stage that can render it says what will be heard, as for stereo.
             if (spatial?.FieldBinaural == true || (spatial is not null && spatial.AmbisonicsProblem is null && spatial.AmbisonicsChannels >= plan.RingChannels))
             {
-                return (fixedToPicture ? "binaural, Klangfeld fest am Bild" : "binaural, Klangfeld dreht mit dem Kopf", plan.Mode!.Warning);
+                return (fixedToPicture ? UiText.SoundModeBinauralFixed : UiText.SoundModeBinauralHead, plan.Mode!.Warning);
             }
 
             if (spatial?.AmbisonicsProblem is { } problem)
             {
-                return ("Notbehelf links/rechts (dreht mit dem Kopf)", problem);
+                return (UiText.SoundModeFallback, problem);
             }
 
-            return ("wird vorbereitet …", plan.Mode!.Warning);
+            return (UiText.SoundModePreparing, plan.Mode!.Warning);
         }
 
         if (spatial is null || !spatial.Placement.FixedToPicture)
         {
-            return ("Stereo direkt (dreht mit dem Kopf)", null);
+            return (UiText.SoundModeStereoDirect, null);
         }
 
-        string placement = string.Create(CultureInfo.CurrentCulture, $"Ton fest am Bild, Lautsprecher bei ±{spatial.Placement.WidthDegrees:0.#}°");
+        string placement = Loc.Format(UiText.SoundModeFixed, spatial.Placement.WidthDegrees);
         if (spatial.Active)
         {
             return (placement, null);
         }
 
         return spatial.Problem is null
-            ? (placement + " (wird vorbereitet …)", null)
-            : ("Stereo direkt (dreht mit dem Kopf)", spatial.Problem);
+            ? (placement + " (" + UiText.SoundModePreparing + ")", null)
+            : (UiText.SoundModeStereoDirect, spatial.Problem);
     }
 
     private static string DescribeLayout(StereoLayout layout) => layout switch
@@ -1308,38 +1417,38 @@ public sealed class MainViewModel : ObservableObject
     {
         CultureInfo culture = CultureInfo.CurrentCulture;
         XrRuntimeInfo? runtime = status.Runtime;
-        string runtimeText = runtime is null ? "OpenXR-Runtime" : $"{runtime.RuntimeName} {runtime.RuntimeVersion}";
+        string runtimeText = runtime is null ? UiText.XrRuntimeGeneric : $"{runtime.RuntimeName} {runtime.RuntimeVersion}";
         string since = XrEventText.Since(status.StateSinceUtc, DateTime.UtcNow);
 
         (string headsetText, StatusLevel headsetLevel) = status.State switch
         {
-            XrConnectionState.Starting => ("Startet …", StatusLevel.Neutral),
-            XrConnectionState.LoaderMissing => ("OpenXR-Loader fehlt (siehe native/README.md)", StatusLevel.Error),
-            XrConnectionState.RuntimeUnavailable when status.WasConnected => ($"Brille getrennt{since}: Varjo Base läuft nicht mehr. Varjo Base starten, Orbivo verbindet sich von selbst neu", StatusLevel.Error),
-            XrConnectionState.RuntimeUnavailable => ("Kein OpenXR-Runtime erreichbar. Läuft Varjo Base? Neuer Versuch alle 2 s", StatusLevel.Error),
-            XrConnectionState.HeadsetUnavailable when status.WasConnected => ($"Brille getrennt{since}. Brille anschließen und einschalten, Orbivo verbindet sich von selbst neu", StatusLevel.Error),
-            XrConnectionState.HeadsetUnavailable => ($"{runtimeText}: keine Brille gefunden. Brille anschließen und einschalten", StatusLevel.Warning),
-            XrConnectionState.Connecting when status.WasConnected => ($"{runtimeText}: verbinde neu{since} …", StatusLevel.Warning),
-            XrConnectionState.Connecting => ($"{runtimeText}: verbinde …", StatusLevel.Neutral),
+            XrConnectionState.Starting => (UiText.Starting, StatusLevel.Neutral),
+            XrConnectionState.LoaderMissing => (UiText.XrLoaderMissing, StatusLevel.Error),
+            XrConnectionState.RuntimeUnavailable when status.WasConnected => (Loc.Format(UiText.XrRuntimeLost, since), StatusLevel.Error),
+            XrConnectionState.RuntimeUnavailable => (UiText.XrNoRuntime, StatusLevel.Error),
+            XrConnectionState.HeadsetUnavailable when status.WasConnected => (Loc.Format(UiText.XrHeadsetLost, since), StatusLevel.Error),
+            XrConnectionState.HeadsetUnavailable => (Loc.Format(UiText.XrNoHeadset, runtimeText), StatusLevel.Warning),
+            XrConnectionState.Connecting when status.WasConnected => (Loc.Format(UiText.XrReconnecting, runtimeText, since), StatusLevel.Warning),
+            XrConnectionState.Connecting => (Loc.Format(UiText.XrConnecting, runtimeText), StatusLevel.Neutral),
             XrConnectionState.Connected when runtime is not null => (
-                string.Create(culture, $"{runtime.SystemName} über {runtimeText}, {runtime.EyeWidth} × {runtime.EyeHeight} je Auge"),
+                Loc.Format(UiText.XrConnectedInfo, runtime.SystemName, runtimeText, runtime.EyeWidth, runtime.EyeHeight),
                 StatusLevel.Ok),
-            XrConnectionState.Connected => ("Verbunden", StatusLevel.Ok),
-            XrConnectionState.Failed => ($"Fehler{since}: {status.Error} (Details im Log). Neuer Versuch läuft", StatusLevel.Error),
-            _ => ("Beendet", StatusLevel.Neutral),
+            XrConnectionState.Connected => (UiText.XrConnected, StatusLevel.Ok),
+            XrConnectionState.Failed => (Loc.Format(UiText.XrFailed, since, status.Error), StatusLevel.Error),
+            _ => (UiText.Stopped, StatusLevel.Neutral),
         };
         _headsetEntry?.Update(headsetText, headsetLevel);
 
         (string sessionText, StatusLevel sessionLevel) = status.SessionState switch
         {
-            XrSessionState.Idle => ("Wartet (IDLE)", StatusLevel.Neutral),
-            XrSessionState.Ready => ("Startet (READY)", StatusLevel.Neutral),
-            XrSessionState.Synchronized => ("Läuft, Brille zeigt das Bild noch nicht (SYNCHRONIZED)", StatusLevel.Warning),
-            XrSessionState.Visible => ("Sichtbar (VISIBLE)", StatusLevel.Ok),
-            XrSessionState.Focused => ("Aktiv (FOCUSED)", StatusLevel.Ok),
-            XrSessionState.Stopping => ("Wird angehalten (STOPPING)", StatusLevel.Warning),
-            XrSessionState.LossPending => ("Verbindung geht verloren (LOSS_PENDING)", StatusLevel.Error),
-            XrSessionState.Exiting => ("Wird beendet (EXITING)", StatusLevel.Warning),
+            XrSessionState.Idle => (UiText.XrSessionIdle, StatusLevel.Neutral),
+            XrSessionState.Ready => (UiText.XrSessionReady, StatusLevel.Neutral),
+            XrSessionState.Synchronized => (UiText.XrSessionSynchronized, StatusLevel.Warning),
+            XrSessionState.Visible => (UiText.XrSessionVisible, StatusLevel.Ok),
+            XrSessionState.Focused => (UiText.XrSessionFocused, StatusLevel.Ok),
+            XrSessionState.Stopping => (UiText.XrSessionStopping, StatusLevel.Warning),
+            XrSessionState.LossPending => (UiText.XrSessionLossPending, StatusLevel.Error),
+            XrSessionState.Exiting => (UiText.XrSessionExiting, StatusLevel.Warning),
             _ => ("–", StatusLevel.Neutral),
         };
         _sessionEntry?.Update(sessionText, sessionLevel);
@@ -1351,14 +1460,14 @@ public sealed class MainViewModel : ObservableObject
         }
         else
         {
-            string text = string.Create(culture, $"{status.FramesPerSecond:0} fps, Brille {status.DisplayRefreshHz:0} Hz");
+            string text = Loc.Format(UiText.XrRenderInfo, status.FramesPerSecond, status.DisplayRefreshHz);
             if (status.RenderLoopAllocates)
             {
-                _xrRenderEntry?.Update(text + ". Render-Schleife allokiert (siehe Log)", StatusLevel.Warning);
+                _xrRenderEntry?.Update(text + ". " + UiText.RenderLoopAllocates, StatusLevel.Warning);
             }
             else if (status.DisplayRefreshHz > 0f && status.FramesPerSecond < status.DisplayRefreshHz * 0.95f)
             {
-                _xrRenderEntry?.Update(text + ". Unter der Bildrate der Brille", StatusLevel.Warning);
+                _xrRenderEntry?.Update(text + ". " + UiText.XrBelowRefresh, StatusLevel.Warning);
             }
             else
             {
@@ -1368,7 +1477,7 @@ public sealed class MainViewModel : ObservableObject
 
         if (runtime is not null && runtime.AdapterName.Length > 0)
         {
-            _gpuEntry.Update(runtime.AdapterName + " (von OpenXR vorgegeben)", StatusLevel.Ok);
+            _gpuEntry.Update(Loc.Format(UiText.GpuFromOpenXr, runtime.AdapterName), StatusLevel.Ok);
         }
 
         if (!rendering)
@@ -1377,7 +1486,7 @@ public sealed class MainViewModel : ObservableObject
         }
         else if (!status.HeadTracked)
         {
-            _viewEntry.Update("Kein Tracking", StatusLevel.Warning);
+            _viewEntry.Update(UiText.NoTracking, StatusLevel.Warning);
         }
         else
         {
@@ -1388,7 +1497,7 @@ public sealed class MainViewModel : ObservableObject
                 StatusLevel.Ok);
         }
 
-        ShowRecenter(status.Recenter, waitingText: "wartet auf Kopf-Tracking");
+        ShowRecenter(status.Recenter, waitingText: UiText.RecenterWaitingTracking);
         Idle.ShowSeeThroughSupport(status.SeeThrough switch
         {
             SeeThroughSupport.Available => true,
@@ -1407,21 +1516,19 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        CultureInfo culture = CultureInfo.CurrentCulture;
         if (recenter.Pending)
         {
-            _recenterEntry.Update($"Angefordert, {waitingText}", StatusLevel.Warning);
+            _recenterEntry.Update(Loc.Format(UiText.RecenterRequested, waitingText), StatusLevel.Warning);
         }
         else if (!recenter.IsActive)
         {
-            _recenterEntry.Update("Aus (Vorderseite des Videos)", StatusLevel.Neutral);
+            _recenterEntry.Update(UiText.RecenterOff, StatusLevel.Neutral);
         }
         else
         {
             float yaw = recenter.YawDegrees;
-            string side = yaw > 0f ? "links" : "rechts";
             _recenterEntry.Update(
-                string.Create(culture, $"Vorne liegt {Math.Abs(yaw):0}° {side} der Vorderseite des Videos (Yaw {yaw:+0;-0;0}°)"),
+                Loc.Format(yaw > 0f ? UiText.RecenterLeft : UiText.RecenterRight, Math.Abs(yaw), yaw),
                 StatusLevel.Ok);
         }
 
@@ -1435,21 +1542,21 @@ public sealed class MainViewModel : ObservableObject
         switch (status.State)
         {
             case DebugViewportState.Starting:
-                _viewportEntry?.Update("Startet …", StatusLevel.Neutral);
+                _viewportEntry?.Update(UiText.Starting, StatusLevel.Neutral);
                 break;
             case DebugViewportState.Running when status.RenderLoopAllocates:
                 _viewportEntry?.Update(
-                    string.Create(culture, $"Läuft, {status.FramesPerSecond:0} fps. Render-Schleife allokiert (siehe Log)"),
+                    Loc.Format(UiText.ViewportRunning, status.FramesPerSecond) + ". " + UiText.RenderLoopAllocates,
                     StatusLevel.Warning);
                 break;
             case DebugViewportState.Running:
-                _viewportEntry?.Update(string.Create(culture, $"Läuft, {status.FramesPerSecond:0} fps"), StatusLevel.Ok);
+                _viewportEntry?.Update(Loc.Format(UiText.ViewportRunning, status.FramesPerSecond), StatusLevel.Ok);
                 break;
             case DebugViewportState.Failed:
-                _viewportEntry?.Update($"Fehler: {status.Error} (Details im Log)", StatusLevel.Error);
+                _viewportEntry?.Update(Loc.Format(UiText.ErrorSeeLog, status.Error), StatusLevel.Error);
                 break;
             default:
-                _viewportEntry?.Update("Beendet", StatusLevel.Neutral);
+                _viewportEntry?.Update(UiText.Stopped, StatusLevel.Neutral);
                 break;
         }
 
@@ -1458,37 +1565,37 @@ public sealed class MainViewModel : ObservableObject
             _viewEntry.Update(
                 string.Create(
                     culture,
-                    $"{DescribeDirection(status.YawDegrees, status.PitchDegrees)}: Yaw {status.YawDegrees:+0;-0;0}°, Pitch {status.PitchDegrees:+0;-0;0}°, Sichtfeld {status.VerticalFovDegrees:0}°"),
+                    $"{DescribeDirection(status.YawDegrees, status.PitchDegrees)}: Yaw {status.YawDegrees:+0;-0;0}°, Pitch {status.PitchDegrees:+0;-0;0}°, {UiText.FieldOfView} {status.VerticalFovDegrees:0}°"),
                 StatusLevel.Neutral);
         }
 
-        ShowRecenter(status.Recenter, waitingText: "wartet auf das Vorschaufenster");
+        ShowRecenter(status.Recenter, waitingText: UiText.RecenterWaitingViewport);
     }
 
     private void ShowLiveViewStatus()
     {
         if (!LiveViewEnabled)
         {
-            LiveViewStatusText = "Aus";
+            LiveViewStatusText = UiText.Off;
             return;
         }
 
         if (_liveView is not { IsAvailable: true } controller)
         {
-            LiveViewStatusText = _noXr ? "Wartet auf die Grafikkarte …" : "Wartet auf die Brille …";
+            LiveViewStatusText = _noXr ? UiText.WaitingForGpu : UiText.WaitingForHeadset;
             return;
         }
 
         LiveViewStatus? status = controller.GetStatus();
         if (status is not { } current || current.State == LiveViewState.Starting)
         {
-            LiveViewStatusText = "Startet …";
+            LiveViewStatusText = UiText.Starting;
             return;
         }
 
         if (current.State == LiveViewState.Failed)
         {
-            LiveViewStatusText = $"Fehler: {current.Error} (Details im Log)";
+            LiveViewStatusText = Loc.Format(UiText.ErrorSeeLog, current.Error);
             return;
         }
 
@@ -1498,12 +1605,12 @@ public sealed class MainViewModel : ObservableObject
         if (age > 1.0)
         {
             LiveViewStatusText = _noXr
-                ? "Kein Bild: Vorschaufenster ist minimiert"
-                : "Kein Bild: Die Brille zeigt gerade nichts (Session nicht sichtbar)";
+                ? UiText.LiveViewMinimized
+                : UiText.LiveViewHeadsetHidden;
             return;
         }
 
-        LiveViewStatusText = string.Create(CultureInfo.CurrentCulture, $"{current.FramesPerSecond:0} Bilder/s");
+        LiveViewStatusText = Loc.Format(UiText.LiveViewRate, current.FramesPerSecond);
     }
 
     /// <summary>Rough direction in words. Yaw positive = left (docs/DECISIONS.md).</summary>
@@ -1511,20 +1618,20 @@ public sealed class MainViewModel : ObservableObject
     {
         if (pitchDegrees > 45f)
         {
-            return "oben";
+            return UiText.DirectionUp;
         }
 
         if (pitchDegrees < -45f)
         {
-            return "unten";
+            return UiText.DirectionDown;
         }
 
         return yawDegrees switch
         {
-            >= -45f and <= 45f => "vorne",
-            > 45f and <= 135f => "links",
-            < -45f and >= -135f => "rechts",
-            _ => "hinten",
+            >= -45f and <= 45f => UiText.DirectionFront,
+            > 45f and <= 135f => UiText.DirectionLeft,
+            < -45f and >= -135f => UiText.DirectionRight,
+            _ => UiText.DirectionBack,
         };
     }
 }

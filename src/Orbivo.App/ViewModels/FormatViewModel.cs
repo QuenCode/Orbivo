@@ -3,10 +3,12 @@ using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Orbivo.App.Localization;
 using Orbivo.Core.Audio;
 using Orbivo.Core.Commands;
 using Orbivo.Core.Formats;
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Localization;
 using Orbivo.Core.Status;
 
 namespace Orbivo.App.ViewModels;
@@ -40,10 +42,10 @@ public sealed class FormatChoice(object? value, string label) : ObservableObject
 public sealed class FormatViewModel : ObservableObject
 {
     private readonly Action<PlayerCommand> _send;
-    private readonly FormatChoice _autoProjection = new(null, "Automatisch");
-    private readonly FormatChoice _autoLayout = new(null, "Automatisch");
-    private readonly FormatChoice _autoCubemap = new(null, "Automatisch");
-    private readonly FormatChoice _autoAudioMode = new(null, "Automatisch");
+    private readonly FormatChoice _autoProjection = new(null, UiText.Automatic);
+    private readonly FormatChoice _autoLayout = new(null, UiText.Automatic);
+    private readonly FormatChoice _autoCubemap = new(null, UiText.Automatic);
+    private readonly FormatChoice _autoAudioMode = new(null, UiText.Automatic);
     private VideoFormatStatus? _status;
     private string? _sidecarPath;
     private FormatOverrides _overrides = FormatOverrides.None;
@@ -80,9 +82,9 @@ public sealed class FormatViewModel : ObservableObject
         AudioModes =
         [
             _autoAudioMode,
-            new FormatChoice(AudioModeChoice.Channels, "Kanäle (Mono, Stereo, Mehrkanal)"),
+            new FormatChoice(AudioModeChoice.Channels, UiText.AudioModeChannels),
             new FormatChoice(AudioModeChoice.AmbiX, "Ambisonics AmbiX (ACN/SN3D)"),
-            new FormatChoice(AudioModeChoice.FuMa, "Ambisonics FuMa (nur 1. Ordnung)"),
+            new FormatChoice(AudioModeChoice.FuMa, UiText.AudioModeFuMa),
         ];
         ApplyOffsetCommand = new RelayCommand(ApplyOffset, () => IsAvailable);
         ResetOffsetCommand = new RelayCommand(() => Change(_overrides with { Offset = null }, refreshOffset: true), () => IsAvailable);
@@ -338,8 +340,8 @@ public sealed class FormatViewModel : ObservableObject
             _updating = false;
         }
 
-        MetadataText = status.Metadata == "none" ? "keine (sv3d/st3d fehlen)" : status.Metadata;
-        string sidecar = status.SidecarExists ? $"gespeichert in {Path.GetFileName(status.SidecarPath)}" : "keins (alles automatisch)";
+        MetadataText = status.Metadata == "none" ? UiText.MetadataNone : status.Metadata;
+        string sidecar = status.SidecarExists ? Loc.Format(UiText.SidecarSavedIn, Path.GetFileName(status.SidecarPath)) : UiText.SidecarNone;
         SidecarText = status.SidecarError is null ? sidecar : status.SidecarError;
         WarningText = string.Join(Environment.NewLine, status.Warnings);
         RaiseAll();
@@ -348,11 +350,11 @@ public sealed class FormatViewModel : ObservableObject
     private void ShowChoices(VideoFormatStatus status)
     {
         VideoFormat automatic = status.Automatic;
-        _autoProjection.Label = $"Automatisch ({VideoFormatResolver.Describe(automatic.Projection)}, {DescribeSource(status.AutomaticSources.Projection)})";
+        _autoProjection.Label = Loc.Format(UiText.AutomaticWithSource, VideoFormatResolver.Describe(automatic.Projection), DescribeSource(status.AutomaticSources.Projection));
         _autoLayout.Label = status.Sources.Layout == FormatSource.CommandLine
-            ? $"Kommandozeile ({VideoFormatResolver.Describe(automatic.Layout)})"
-            : $"Automatisch ({VideoFormatResolver.Describe(automatic.Layout)}, {DescribeSource(status.AutomaticSources.Layout)})";
-        _autoCubemap.Label = $"Automatisch ({DescribeCubemap(automatic.Cubemap)})";
+            ? Loc.Format(UiText.CommandLineWith, VideoFormatResolver.Describe(automatic.Layout))
+            : Loc.Format(UiText.AutomaticWithSource, VideoFormatResolver.Describe(automatic.Layout), DescribeSource(status.AutomaticSources.Layout));
+        _autoCubemap.Label = Loc.Format(UiText.AutomaticWith, DescribeCubemap(automatic.Cubemap));
 
         SelectedProjection = Projections.First(c => Equals(c.Value, _overrides.Projection));
         SelectedLayout = status.Sources.Layout == FormatSource.CommandLine
@@ -360,7 +362,7 @@ public sealed class FormatViewModel : ObservableObject
             : Layouts.First(c => Equals(c.Value, _overrides.Layout));
         SelectedCubemap = FindCubemap(_overrides.Cubemap);
         SelectedStereoWidth = FindStereoWidth(StereoPlacement.From(_overrides).WidthDegrees);
-        _autoAudioMode.Label = status.AudioMode is { } audio ? $"Automatisch ({audio.DescribeAutomatic()})" : "Automatisch";
+        _autoAudioMode.Label = status.AudioMode is { } audio ? Loc.Format(UiText.AutomaticWith, audio.DescribeAutomatic()) : UiText.Automatic;
         SelectedAudioMode = AudioModes.First(c => Equals(c.Value, _overrides.AudioMode));
 
         OrientationOffset offset = status.Format.Offset;
@@ -397,7 +399,7 @@ public sealed class FormatViewModel : ObservableObject
             CubemapLayouts.Remove(_customCubemap);
         }
 
-        _customCubemap = new FormatChoice(layout, $"Aus dem Sidecar: {layout}");
+        _customCubemap = new FormatChoice(layout, Loc.Format(UiText.FromSidecar, layout));
         CubemapLayouts.Add(_customCubemap);
         return _customCubemap;
     }
@@ -424,17 +426,17 @@ public sealed class FormatViewModel : ObservableObject
     private static FormatChoice StereoWidthChoice(double width)
     {
         string label = string.Create(CultureInfo.CurrentCulture, $"±{width:0.#}°");
-        return new FormatChoice(width, width == StereoPlacement.DefaultWidthDegrees ? label + " (Standard)" : label);
+        return new FormatChoice(width, width == StereoPlacement.DefaultWidthDegrees ? label + " (" + UiText.DefaultTag + ")" : label);
     }
 
     private static string DescribeSource(FormatSource source)
     {
         return source switch
         {
-            FormatSource.Metadata => "Metadaten",
-            FormatSource.Guess => "aus der Größe geschätzt",
-            FormatSource.CommandLine => "Kommandozeile",
-            _ => "Standard",
+            FormatSource.Metadata => UiText.SourceMetadata,
+            FormatSource.Guess => UiText.SourceGuess,
+            FormatSource.CommandLine => UiText.SourceCommandLine,
+            _ => UiText.SourceDefault,
         };
     }
 
@@ -448,7 +450,7 @@ public sealed class FormatViewModel : ObservableObject
             "eac" => "EAC (YouTube)",
             _ => layout.ToString(),
         };
-        return layout.PaddingPixels > 0 && layout.PresetName is not null ? $"{name}, Rand {layout.PaddingPixels} px" : name;
+        return layout.PaddingPixels > 0 && layout.PresetName is not null ? Loc.Format(UiText.CubemapPadding, name, layout.PaddingPixels) : name;
     }
 
     private void ApplyOffset()
@@ -457,7 +459,7 @@ public sealed class FormatViewModel : ObservableObject
             || !TryParse(PitchText, -OrientationOffset.MaxDegrees, OrientationOffset.MaxDegrees, out double pitch)
             || !TryParse(RollText, -OrientationOffset.MaxDegrees, OrientationOffset.MaxDegrees, out double roll))
         {
-            InputError = $"Ausrichtung: Zahlen von −{OrientationOffset.MaxDegrees:0} bis {OrientationOffset.MaxDegrees:0} Grad eingeben.";
+            InputError = Loc.Format(UiText.OrientationInputError, OrientationOffset.MaxDegrees);
             return;
         }
 
@@ -476,9 +478,8 @@ public sealed class FormatViewModel : ObservableObject
             || !TryParse(CenterYText, 0, 1, out double centerY)
             || !TryParse(RadiusText, FisheyeParameters.MinRadius, FisheyeParameters.MaxRadius, out double radius))
         {
-            InputError = string.Create(
-                CultureInfo.CurrentCulture,
-                $"Fisheye: Sichtfeld {FisheyeParameters.MinFovDegrees:0}–{FisheyeParameters.MaxFovDegrees:0}°, Mitte 0–1, Radius {FisheyeParameters.MinRadius}–{FisheyeParameters.MaxRadius}.");
+            InputError = Loc.Format(
+                UiText.FisheyeInputError, FisheyeParameters.MinFovDegrees, FisheyeParameters.MaxFovDegrees, FisheyeParameters.MinRadius, FisheyeParameters.MaxRadius);
             return;
         }
 

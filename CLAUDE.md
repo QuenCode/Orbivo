@@ -37,7 +37,7 @@ Neue NuGet-Pakete oder native DLLs **nur nach Rückfrage**. Versionen in `Direct
 
 ## Code-Konventionen
 - `Nullable` aktiviert, `TreatWarningsAsErrors` an, `unsafe` nur in `Orbivo.Xr`, `.Media`, `.Audio`
-- Code, Bezeichner und Kommentare auf Englisch; **Operator-UI auf Deutsch**
+- Code, Bezeichner und Kommentare auf Englisch; **Operator-UI auf Englisch und Deutsch** (`UiText.resx`/`UiText.de.resx` in `Orbivo.App`, `CoreText.resx`/`CoreText.de.resx` in `Orbivo.Core`). Jeder neue oder geänderte Text in **beiden** Sprachen; der Test `LocalizationTests` prüft gleiche Schlüssel und Platzhalter. Aufzeichnungen (CSV-Spalten, Ereignistexte, Dateinamen) bleiben immer deutsch, das Diagnose-Log englisch
 - Native Ressourcen (COM, FFmpeg, Steam Audio) immer mit `IDisposable` und klarer Ownership
 - Logging: `Microsoft.Extensions.Logging`, Datei-Log pro Sitzung im Ordner `Logs` neben der exe (älter als 30 Tage wird beim Start gelöscht, die letzten 30 Sitzungen bleiben immer)
 - Keine stillen Catch-Blöcke. Fehler loggen und als Status an die UI melden.
@@ -46,7 +46,7 @@ Neue NuGet-Pakete oder native DLLs **nur nach Rückfrage**. Versionen in `Direct
 ```
 dotnet build Orbivo.sln -c Debug
 dotnet test
-dotnet run --project src/Orbivo.App -- --no-xr      # Desktop-Debug-Viewport ohne Brille
+dotnet run --project src/Orbivo.App -- --no-xr      # Desktop-Debug-Viewport ohne Brille (--lang en|de wählt die Sprache nur für diesen Start)
 dotnet run --project src/Orbivo.App -- --no-xr --image tools/testmedia/out/equirect360_mono_4096x2048.png
 dotnet run --project src/Orbivo.App -- --image tools/testmedia/out/equirect360_mono_4096x2048.png   # Testbild in der Brille (Varjo Base muss laufen)
 dotnet run --project src/Orbivo.App -- --no-xr --video tools/testmedia/out/equirect360_tb_8192x8192_hevc_8bit_30fps.mp4   # Video in der Vorschau als erster Playlist-Eintrag, Play im Operatorfenster
@@ -72,5 +72,5 @@ Du siehst die Brille nicht und hörst den Ton nicht. Deshalb:
 - Ein Meilenstein nach dem anderen, kleine Commits mit aussagekräftigen Messages
 - Vor größeren Strukturänderungen kurz Plan vorschlagen und auf OK warten
 - Offene Punkte oder Annahmen in `docs/DECISIONS.md` festhalten (Datum, Entscheidung, Begründung)
-- Ändert sich etwas, das Operatoren oder Auswertende merken (Bedienung, Aufzeichnungsformat, Sidecar), dann `docs/Anleitung.html` mitpflegen und die Änderung in `CHANGELOG.md` unter „Unveröffentlicht“ eintragen
+- Ändert sich etwas, das Operatoren oder Auswertende merken (Bedienung, Aufzeichnungsformat, Sidecar), dann `docs/Anleitung.html` **und** `docs/Manual.html` (englisch) mitpflegen und die Änderung in `CHANGELOG.md` unter „Unveröffentlicht“ eintragen
 - Releases nur über `release.ps1` und nur auf ausdrücklichen Wunsch; `-Publish` pusht und veröffentlicht

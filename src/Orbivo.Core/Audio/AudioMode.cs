@@ -1,4 +1,5 @@
 using System.Globalization;
+using Orbivo.Core.Localization;
 
 namespace Orbivo.Core.Audio;
 
@@ -48,10 +49,10 @@ public readonly record struct AudioMode(AudioModeChoice Kind, int Order)
             ? throw new ArgumentException("Ambisonics needs AmbiX or FuMa.", nameof(convention))
             : new AudioMode(convention, order);
 
-    /// <summary>German text, e.g. "Ambisonics 1. Ordnung (AmbiX)" or "Kanäle".</summary>
+    /// <summary>Text in the UI language, e.g. "Ambisonics order 1 (AmbiX)" or "Channels".</summary>
     public string Describe() => IsAmbisonics
-        ? string.Create(CultureInfo.InvariantCulture, $"Ambisonics {Order}. Ordnung ({Kind})")
-        : "Kanäle";
+        ? Loc.Format(CoreText.AudioModeAmbisonics, Order, Kind)
+        : CoreText.AudioModeChannels;
 }
 
 /// <summary>
@@ -74,7 +75,7 @@ public sealed record EmbeddedAudioLayout(int Channels, int? AmbisonicsOrder, boo
 /// <param name="Source">Where it comes from.</param>
 /// <param name="Automatic">Mode without the operator's choice.</param>
 /// <param name="AutomaticSource">Where the automatic mode comes from.</param>
-/// <param name="Warning">German hint for the operator (a choice that does not fit the track), or null.</param>
+/// <param name="Warning">Hint for the operator in the UI language (a choice that does not fit the track), or null.</param>
 public sealed record ResolvedAudioMode(
     AudioMode Mode,
     AudioModeSource Source,
@@ -82,22 +83,22 @@ public sealed record ResolvedAudioMode(
     AudioModeSource AutomaticSource,
     string? Warning)
 {
-    /// <summary>German text with the source, e.g. "Ambisonics 1. Ordnung (AmbiX, Metadaten)".</summary>
+    /// <summary>Text with the source in the UI language, e.g. "Ambisonics order 1 (AmbiX, metadata)".</summary>
     public string Describe() => DescribeMode(Mode, Source);
 
-    /// <summary>German text of the automatic mode, e.g. "Ambisonics 1. Ordnung (AmbiX, aus Kanalzahl geschätzt)".</summary>
+    /// <summary>Text of the automatic mode, e.g. "Ambisonics order 1 (AmbiX, guessed from the channel count)".</summary>
     public string DescribeAutomatic() => DescribeMode(Automatic, AutomaticSource);
 
     public static string DescribeSource(AudioModeSource source) => source switch
     {
-        AudioModeSource.Sidecar => "Sidecar",
-        AudioModeSource.Metadata => "Metadaten",
-        _ => "aus Kanalzahl geschätzt",
+        AudioModeSource.Sidecar => CoreText.AudioModeSourceSidecar,
+        AudioModeSource.Metadata => CoreText.AudioModeSourceMetadata,
+        _ => CoreText.AudioModeSourceChannelCount,
     };
 
     private static string DescribeMode(AudioMode mode, AudioModeSource source) => mode.IsAmbisonics
-        ? string.Create(CultureInfo.InvariantCulture, $"Ambisonics {mode.Order}. Ordnung ({mode.Kind}, {DescribeSource(source)})")
-        : source == AudioModeSource.Sidecar ? "Kanäle (Sidecar)" : "Kanäle";
+        ? Loc.Format(CoreText.AudioModeAmbisonicsWithSource, mode.Order, mode.Kind, DescribeSource(source))
+        : source == AudioModeSource.Sidecar ? CoreText.AudioModeChannelsSidecar : CoreText.AudioModeChannels;
 }
 
 /// <summary>
@@ -126,10 +127,8 @@ public static class AudioModeResolver
             return new ResolvedAudioMode(AudioMode.Ambisonics(chosen, order), AudioModeSource.Sidecar, automatic, automaticSource, null);
         }
 
-        string allowed = chosen == AudioModeChoice.FuMa ? "4 Kanäle (1. Ordnung)" : "4, 9 oder 16 Kanäle";
-        string warning = string.Create(
-            CultureInfo.InvariantCulture,
-            $"Tonformat {chosen} aus dem Sidecar passt nicht zur Tonspur ({layout.Channels} Kanäle, erwartet {allowed}); automatisch.");
+        string allowed = chosen == AudioModeChoice.FuMa ? CoreText.AudioModeAllowedFuMa : CoreText.AudioModeAllowedAmbiX;
+        string warning = Loc.Format(CoreText.AudioModeSidecarMismatch, chosen, layout.Channels, allowed);
         return new ResolvedAudioMode(automatic, automaticSource, automatic, automaticSource, warning);
     }
 
@@ -141,7 +140,7 @@ public static class AudioModeResolver
     {
         int extra = mode.IsAmbisonics ? layout.Channels - mode.AmbisonicsChannels : 0;
         return extra > 0
-            ? string.Create(CultureInfo.InvariantCulture, $"Die Tonspur hat {extra} zusätzliche Kanäle neben dem Ambisonics-Klangfeld (z. B. kopffestes Stereo); sie werden nicht wiedergegeben.")
+            ? Loc.Format(CoreText.AudioModeExtraChannels, extra)
             : null;
     }
 

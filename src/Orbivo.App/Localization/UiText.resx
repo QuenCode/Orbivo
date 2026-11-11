@@ -1,0 +1,947 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="PlaylistAdd" xml:space="preserve">
+    <value>Add …</value>
+  </data>
+  <data name="PlaylistAddTip" xml:space="preserve">
+    <value>Choose videos. Files and folders can also be dragged here from Explorer.</value>
+  </data>
+  <data name="PlaylistLoad" xml:space="preserve">
+    <value>Load</value>
+  </data>
+  <data name="PlaylistLoadTip" xml:space="preserve">
+    <value>Load the selected video (double-click). If a video is playing, it starts at once; otherwise the headset stays black until Play.</value>
+  </data>
+  <data name="PlaylistRemove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="PlaylistRemoveTip" xml:space="preserve">
+    <value>Remove from the playlist (Del). The loaded video only after Stop; then the file is free.</value>
+  </data>
+  <data name="PlaylistUpTip" xml:space="preserve">
+    <value>Move up</value>
+  </data>
+  <data name="PlaylistDownTip" xml:space="preserve">
+    <value>Move down</value>
+  </data>
+  <data name="PlaylistEmpty" xml:space="preserve">
+    <value>No videos yet. “Add …” or drag files and folders here from Explorer.</value>
+  </data>
+  <data name="FormatProjection" xml:space="preserve">
+    <value>Projection:</value>
+  </data>
+  <data name="FormatProjectionTip" xml:space="preserve">
+    <value>Automatic: from the metadata of the file (sv3d), otherwise Equirect 360°.</value>
+  </data>
+  <data name="FormatLayout" xml:space="preserve">
+    <value>Stereo layout:</value>
+  </data>
+  <data name="FormatLayoutTip" xml:space="preserve">
+    <value>Automatic: from the metadata (st3d), otherwise guessed from the picture size. Left eye at the top or on the left.</value>
+  </data>
+  <data name="FormatEyes" xml:space="preserve">
+    <value>Eyes:</value>
+  </data>
+  <data name="FormatSwapEyes" xml:space="preserve">
+    <value>Swap eyes</value>
+  </data>
+  <data name="FormatSwapEyesTip" xml:space="preserve">
+    <value>Swap the left and right half pictures if the depth looks inside out.</value>
+  </data>
+  <data name="FormatCubemap" xml:space="preserve">
+    <value>Cube layout:</value>
+  </data>
+  <data name="FormatCubemapTip" xml:space="preserve">
+    <value>Arrangement of the six cube faces per eye. Automatic: 3 × 2, for EAC the YouTube layout.</value>
+  </data>
+  <data name="FormatFov" xml:space="preserve">
+    <value>Field of view °</value>
+  </data>
+  <data name="FormatFovTip" xml:space="preserve">
+    <value>Field of view of the circle in degrees (60–360). Apply with Enter.</value>
+  </data>
+  <data name="FormatCenterX" xml:space="preserve">
+    <value>Center X</value>
+  </data>
+  <data name="FormatCenterXTip" xml:space="preserve">
+    <value>Circle center, 0 = left, 1 = right edge of the half picture.</value>
+  </data>
+  <data name="FormatCenterYTip" xml:space="preserve">
+    <value>Circle center, 0 = top, 1 = bottom edge of the half picture.</value>
+  </data>
+  <data name="FormatRadiusTip" xml:space="preserve">
+    <value>Circle radius as a share of the height of the half picture (0.5 = touches top and bottom).</value>
+  </data>
+  <data name="FormatFisheyeDefault" xml:space="preserve">
+    <value>Default</value>
+  </data>
+  <data name="FormatFisheyeDefaultTip" xml:space="preserve">
+    <value>180°, centered, full height</value>
+  </data>
+  <data name="FormatOrientation" xml:space="preserve">
+    <value>Orientation:</value>
+  </data>
+  <data name="FormatYawTip" xml:space="preserve">
+    <value>Turn about the vertical axis. Positive: the picture turns to the left, the former center then lies on the left. Apply with Enter.</value>
+  </data>
+  <data name="FormatPitchTip" xml:space="preserve">
+    <value>Tilt. Positive: the former center moves up.</value>
+  </data>
+  <data name="FormatRollTip" xml:space="preserve">
+    <value>Roll about the viewing axis. Positive: counterclockwise, as the viewer sees it.</value>
+  </data>
+  <data name="FormatOrientationResetTip" xml:space="preserve">
+    <value>Reset the orientation</value>
+  </data>
+  <data name="FormatMetadata" xml:space="preserve">
+    <value>Metadata:</value>
+  </data>
+  <data name="FormatResetAll" xml:space="preserve">
+    <value>All automatic</value>
+  </data>
+  <data name="FormatResetAllTip" xml:space="preserve">
+    <value>Discard all format and sound settings of this video; the sidecar is deleted (entries of others stay).</value>
+  </data>
+  <data name="LiveViewHeader" xml:space="preserve">
+    <value>Live view (what the participant sees)</value>
+  </data>
+  <data name="LiveViewShow" xml:space="preserve">
+    <value>Show</value>
+  </data>
+  <data name="LiveViewShowTip" xml:space="preserve">
+    <value>Shows the picture of the headset from the participant’s point of view (both eyes combined, left half picture). Off at every start; switched off it costs no computing time.</value>
+  </data>
+  <data name="Off" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="SoundHeader" xml:space="preserve">
+    <value>Sound</value>
+  </data>
+  <data name="SoundAudioMode" xml:space="preserve">
+    <value>Audio mode:</value>
+  </data>
+  <data name="SoundFormat" xml:space="preserve">
+    <value>Sound format:</value>
+  </data>
+  <data name="SoundFormatTip" xml:space="preserve">
+    <value>How the channels of the sound track are meant. Automatic: Ambisonics according to the metadata (SA3D); 4, 9 or 16 channels without information count as Ambisonics AmbiX. Channels: mono and stereo as they are, more channels mixed down to stereo. FuMa: older Ambisonics recordings (W X Y Z). Saved per video in the sidecar; the sound restarts briefly.</value>
+  </data>
+  <data name="SoundDirection" xml:space="preserve">
+    <value>Direction:</value>
+  </data>
+  <data name="SoundFixed" xml:space="preserve">
+    <value>Sound fixed to the picture</value>
+  </data>
+  <data name="SoundFixedTip" xml:space="preserve">
+    <value>On: the sound stays fixed in the video. With stereo, left and right come from two speakers in the picture; with Ambisonics the whole sound field stays with the picture. When the participant turns the head, the sound moves with the picture. Off: the sound turns with the head (stereo unchanged, Ambisonics always heard from the front). Saved per video in the sidecar.</value>
+  </data>
+  <data name="SoundWidth" xml:space="preserve">
+    <value>Width:</value>
+  </data>
+  <data name="SoundWidthTip" xml:space="preserve">
+    <value>Stereo only: angle of the two virtual speakers left and right of the center of the picture. Default 75°; larger sounds wider, smaller narrower (a usual stereo setup would have 30°).</value>
+  </data>
+  <data name="SoundOutput" xml:space="preserve">
+    <value>Sound output:</value>
+  </data>
+  <data name="SoundRefresh" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="SoundRefreshTip" xml:space="preserve">
+    <value>Read the device list again (e.g. after plugging in headphones)</value>
+  </data>
+  <data name="SoundDeviceTip" xml:space="preserve">
+    <value>Device for the headphones. Windows default follows the default device; a device chosen here is never changed automatically.</value>
+  </data>
+  <data name="SoundLockTip" xml:space="preserve">
+    <value>Protects device and volume against accidental changes. Kept after a restart. Mute (M) still works.</value>
+  </data>
+  <data name="IdleHeader" xml:space="preserve">
+    <value>Headset while idle (before Play, after Stop, without video)</value>
+  </data>
+  <data name="IdleDisplay" xml:space="preserve">
+    <value>Display:</value>
+  </data>
+  <data name="IdleChooseImage" xml:space="preserve">
+    <value>Choose image …</value>
+  </data>
+  <data name="IdleChooseImageTip" xml:space="preserve">
+    <value>Equirect 360° image (PNG, JPG). Square = top-bottom, 4:1 = side-by-side, otherwise mono</value>
+  </data>
+  <data name="IdleChoiceTip" xml:space="preserve">
+    <value>What the participant sees while no video runs. Pause and end keep showing the video picture. Blackout (B) and fade work here too; blackout always stays black. Saved.</value>
+  </data>
+  <data name="IdleImage" xml:space="preserve">
+    <value>Still image:</value>
+  </data>
+  <data name="RecordingHeader" xml:space="preserve">
+    <value>Recording (head CSV and event log)</value>
+  </data>
+  <data name="RecordingEnable" xml:space="preserve">
+    <value>Record</value>
+  </data>
+  <data name="RecordingEnableTip" xml:space="preserve">
+    <value>Writes head movement (head CSV) and operator events (event CSV), separator semicolon, decimal comma, clock of this PC. Column names and events are German in every language. Each switch-on starts a new pair of files. Stays on after a restart.</value>
+  </data>
+  <data name="RecordingPerVideo" xml:space="preserve">
+    <value>Only while a video runs</value>
+  </data>
+  <data name="RecordingPerVideoTip" xml:space="preserve">
+    <value>One pair of files per video: Play starts it (file name with the name of the video); Stop, the end of the video, unloading or another video end it. Pause stays in the same file. Nothing is written without a running video. Can only be changed while the recording is off; saved.</value>
+  </data>
+  <data name="RecordingFolder" xml:space="preserve">
+    <value>Folder:</value>
+  </data>
+  <data name="RecordingChooseFolder" xml:space="preserve">
+    <value>Choose folder …</value>
+  </data>
+  <data name="RecordingChooseFolderTip" xml:space="preserve">
+    <value>Can only be changed while no recording runs</value>
+  </data>
+  <data name="RecordingLabel" xml:space="preserve">
+    <value>Participant/session:</value>
+  </data>
+  <data name="RecordingLabelTip" xml:space="preserve">
+    <value>Optional, becomes part of the file names (e.g. 2026-11-08_141203_P07_kopf.csv). Not saved.</value>
+  </data>
+  <data name="RecordingRate" xml:space="preserve">
+    <value>Head rate:</value>
+  </data>
+  <data name="RecordingRateTip" xml:space="preserve">
+    <value>Rows per second in the head CSV. Takes effect at once, also during a recording.</value>
+  </data>
+  <data name="PlaybackHeader" xml:space="preserve">
+    <value>Playback</value>
+  </data>
+  <data name="TimelineTip" xml:space="preserve">
+    <value>Click or drag to jump</value>
+  </data>
+  <data name="Volume" xml:space="preserve">
+    <value>Volume</value>
+  </data>
+  <data name="VolumeTip" xml:space="preserve">
+    <value>Volume of the headphones (Orbivo only, not the Windows volume). Locked while “Lock sound output and volume” is on.</value>
+  </data>
+  <data name="MuteTip" xml:space="preserve">
+    <value>Sound off and on again, smoothly without clicks (key M)</value>
+  </data>
+  <data name="PreviousButton" xml:space="preserve">
+    <value>⏮ Back</value>
+  </data>
+  <data name="PreviousTip" xml:space="preserve">
+    <value>Previous video (Page Up)</value>
+  </data>
+  <data name="SpaceBarTip" xml:space="preserve">
+    <value>Space bar</value>
+  </data>
+  <data name="StopTip" xml:space="preserve">
+    <value>Back to the start, headset black</value>
+  </data>
+  <data name="NextButton" xml:space="preserve">
+    <value>⏭ Next</value>
+  </data>
+  <data name="NextTip" xml:space="preserve">
+    <value>Next video (Page Down)</value>
+  </data>
+  <data name="GoTo" xml:space="preserve">
+    <value>Go to</value>
+  </data>
+  <data name="GoToTip" xml:space="preserve">
+    <value>Type a time and press Enter, e.g. 83, 1:23, 1:23.5 or 0:01:23.5</value>
+  </data>
+  <data name="GoToButton" xml:space="preserve">
+    <value>Jump</value>
+  </data>
+  <data name="BlackoutTip" xml:space="preserve">
+    <value>Headset black at once, or the picture again, independent of the playback</value>
+  </data>
+  <data name="FadeTip" xml:space="preserve">
+    <value>Fade smoothly to black or back to the picture</value>
+  </data>
+  <data name="FadeDuration" xml:space="preserve">
+    <value>Duration</value>
+  </data>
+  <data name="FadeDurationTip" xml:space="preserve">
+    <value>Fade duration in seconds (0.1 to 30)</value>
+  </data>
+  <data name="RecenterTip" xml:space="preserve">
+    <value>The current viewing direction of the participant becomes the front of the video, for picture and sound (key R). Also applies to the next videos</value>
+  </data>
+  <data name="ResetRecenter" xml:space="preserve">
+    <value>Reset recenter</value>
+  </data>
+  <data name="ResetRecenterTip" xml:space="preserve">
+    <value>The front of the video applies again (Shift+R)</value>
+  </data>
+  <data name="ManualTip" xml:space="preserve">
+    <value>Open the operator manual and the explanation of the recorded data in the browser (F1)</value>
+  </data>
+  <data name="KeysHint" xml:space="preserve">
+    <value>Keys: Space Play/Pause · ←/→ ±5 s · Shift+←/→ ±30 s · , / . single frame · Page Up/Page Down previous/next video · B blackout · F fade · M mute · R recenter · Shift+R reset recenter</value>
+  </data>
+  <data name="RecenterOff" xml:space="preserve">
+    <value>Off (front of the video)</value>
+  </data>
+  <data name="Starting" xml:space="preserve">
+    <value>Starting …</value>
+  </data>
+  <data name="Stopped" xml:space="preserve">
+    <value>Stopped</value>
+  </data>
+  <data name="PlaylistStatusEmpty" xml:space="preserve">
+    <value>Empty</value>
+  </data>
+  <data name="StatusPlayback" xml:space="preserve">
+    <value>Playback</value>
+  </data>
+  <data name="WaitingForGpu" xml:space="preserve">
+    <value>Waiting for the graphics card …</value>
+  </data>
+  <data name="WaitingForHeadset" xml:space="preserve">
+    <value>Waiting for the headset …</value>
+  </data>
+  <data name="StatusHeadset" xml:space="preserve">
+    <value>Headset</value>
+  </data>
+  <data name="SoundModeStereoDirect" xml:space="preserve">
+    <value>Stereo direct (turns with the head)</value>
+  </data>
+  <data name="OutputEntryPicture" xml:space="preserve">
+    <value>Picture (no blackout)</value>
+  </data>
+  <data name="OutputHeadset" xml:space="preserve">
+    <value>Headset: {0}</value>
+    <comment>Line under the transport buttons: what the participant sees.</comment>
+  </data>
+  <data name="OutputIdle" xml:space="preserve">
+    <value>Idle</value>
+  </data>
+  <data name="TitleNoXr" xml:space="preserve">
+    <value>{0} – Operator (without headset)</value>
+    <comment>{0} = Orbivo and its version</comment>
+  </data>
+  <data name="StatusMode" xml:space="preserve">
+    <value>Mode</value>
+  </data>
+  <data name="ModeDesktop" xml:space="preserve">
+    <value>Desktop preview (--no-xr)</value>
+  </data>
+  <data name="ModeHeadset" xml:space="preserve">
+    <value>Headset (OpenXR)</value>
+  </data>
+  <data name="GpuSettingUp" xml:space="preserve">
+    <value>Setting up …</value>
+  </data>
+  <data name="PlaybackNothingLoaded" xml:space="preserve">
+    <value>No video loaded. Add videos to the playlist with “Add …” or by drag and drop</value>
+  </data>
+  <data name="StatusOutput" xml:space="preserve">
+    <value>Output</value>
+  </data>
+  <data name="StatusSound" xml:space="preserve">
+    <value>Sound</value>
+  </data>
+  <data name="StatusSoundOutput" xml:space="preserve">
+    <value>Sound output</value>
+  </data>
+  <data name="StatusViewport" xml:space="preserve">
+    <value>Preview window</value>
+  </data>
+  <data name="StatusViewMouse" xml:space="preserve">
+    <value>View (mouse)</value>
+  </data>
+  <data name="HeadsetNotUsed" xml:space="preserve">
+    <value>Not used (--no-xr)</value>
+  </data>
+  <data name="StatusXrRender" xml:space="preserve">
+    <value>Picture output</value>
+  </data>
+  <data name="StatusViewParticipant" xml:space="preserve">
+    <value>View (participant)</value>
+  </data>
+  <data name="StatusLogFile" xml:space="preserve">
+    <value>Log file</value>
+  </data>
+  <data name="UnmuteButton" xml:space="preserve">
+    <value>Sound on (M)</value>
+  </data>
+  <data name="MuteButton" xml:space="preserve">
+    <value>Mute (M)</value>
+  </data>
+  <data name="BlackoutOffButton" xml:space="preserve">
+    <value>Blackout off (B)</value>
+  </data>
+  <data name="BlackoutButton" xml:space="preserve">
+    <value>Blackout (B)</value>
+  </data>
+  <data name="FadeInButton" xml:space="preserve">
+    <value>Fade in (F)</value>
+  </data>
+  <data name="FadeOutButton" xml:space="preserve">
+    <value>Fade out (F)</value>
+  </data>
+  <data name="GpuFailed" xml:space="preserve">
+    <value>The graphics card could not be set up (details in the log)</value>
+  </data>
+  <data name="NotStarted" xml:space="preserve">
+    <value>Not started</value>
+  </data>
+  <data name="PlaybackNoGpu" xml:space="preserve">
+    <value>No video possible without a graphics card</value>
+  </data>
+  <data name="ImageLayoutGuessed" xml:space="preserve">
+    <value>(guessed from the size)</value>
+  </data>
+  <data name="ImageUnusualAspect" xml:space="preserve">
+    <value>Unusual aspect ratio for equirect 360°</value>
+  </data>
+  <data name="PlaylistNoVideoFiles" xml:space="preserve">
+    <value>No video files found ({0})</value>
+    <comment>{0} = the known file extensions</comment>
+  </data>
+  <data name="CommandNotDelivered" xml:space="preserve">
+    <value>The command could not be passed to the player</value>
+  </data>
+  <data name="RestoreOneMissing" xml:space="preserve">
+    <value>1 video of the last playlist is missing: {0}</value>
+  </data>
+  <data name="RestoreManyMissing" xml:space="preserve">
+    <value>{0} videos of the last playlist are missing: {1}</value>
+  </data>
+  <data name="PlaylistStatusNoneLoaded" xml:space="preserve">
+    <value>{0} videos, none loaded</value>
+  </data>
+  <data name="PlaylistStatusCurrent" xml:space="preserve">
+    <value>Video {0} of {1}</value>
+  </data>
+  <data name="PlaylistStatusLoop" xml:space="preserve">
+    <value>repeat on</value>
+  </data>
+  <data name="PlaylistStatusAutoAdvance" xml:space="preserve">
+    <value>continues automatically</value>
+  </data>
+  <data name="PlaylistStatusStopsAtEnd" xml:space="preserve">
+    <value>stops at the end</value>
+  </data>
+  <data name="TimeNotReadable" xml:space="preserve">
+    <value>Time “{0}” cannot be read. Examples: 83, 1:23, 1:23.5, 0:01:23</value>
+  </data>
+  <data name="SoundDeviceSavedNotConnected" xml:space="preserve">
+    <value>Saved device (not connected)</value>
+  </data>
+  <data name="PlaybackSeeking" xml:space="preserve">
+    <value>seeking …</value>
+  </data>
+  <data name="PlaybackNoMedia" xml:space="preserve">
+    <value>No video</value>
+  </data>
+  <data name="PlaybackOpening" xml:space="preserve">
+    <value>{0}: opening …</value>
+    <comment>{0} = file name</comment>
+  </data>
+  <data name="PlaybackReady" xml:space="preserve">
+    <value>{0}: ready, headset black until Play{1}</value>
+    <comment>{0} = file name, {1} = empty or ", seeking …"</comment>
+  </data>
+  <data name="PlaybackPlaying" xml:space="preserve">
+    <value>{0}: playing{1}</value>
+  </data>
+  <data name="PlaybackPaused" xml:space="preserve">
+    <value>{0}: paused{1}</value>
+  </data>
+  <data name="PlaybackEnded" xml:space="preserve">
+    <value>{0}: end reached, the last frame stays</value>
+  </data>
+  <data name="PlaybackError" xml:space="preserve">
+    <value>Error</value>
+  </data>
+  <data name="VideoEyesSwapped" xml:space="preserve">
+    <value>eyes swapped</value>
+  </data>
+  <data name="VideoInfo" xml:space="preserve">
+    <value>{0} {1}, {2} × {3}, {4:0.##} fps, {5}-bit, {6}{7}</value>
+    <comment>codec, profile, width, height, frame rate, bit depth, color, format</comment>
+  </data>
+  <data name="VideoFormatHints" xml:space="preserve">
+    <value>See the notes in the Format section</value>
+  </data>
+  <data name="DecoderSoftware" xml:space="preserve">
+    <value>Software decoding ({0})</value>
+  </data>
+  <data name="DecoderNoReason" xml:space="preserve">
+    <value>no reason given</value>
+  </data>
+  <data name="DecoderInfo" xml:space="preserve">
+    <value>{0}, {1:0} fps decoded, buffer {2}/{3}, dropped {4}</value>
+  </data>
+  <data name="DecoderStarving" xml:space="preserve">
+    <value>The buffer runs empty, the decoder is too slow</value>
+  </data>
+  <data name="IdleNameImage" xml:space="preserve">
+    <value>Still image</value>
+  </data>
+  <data name="IdleNameBlack" xml:space="preserve">
+    <value>Black</value>
+  </data>
+  <data name="OutputVideoPlaying" xml:space="preserve">
+    <value>Video playing</value>
+  </data>
+  <data name="OutputVideoPaused" xml:space="preserve">
+    <value>Video frame stays (paused)</value>
+  </data>
+  <data name="OutputLastFrame" xml:space="preserve">
+    <value>Last frame (end)</value>
+  </data>
+  <data name="OutputIdleNoMedia" xml:space="preserve">
+    <value>Idle: {0} (no video loaded)</value>
+  </data>
+  <data name="OutputIdleNotStarted" xml:space="preserve">
+    <value>Idle: {0} (video not started yet)</value>
+  </data>
+  <data name="OutputFadingOut" xml:space="preserve">
+    <value>Fading out ({0:0} %): {1}</value>
+  </data>
+  <data name="OutputFadingIn" xml:space="preserve">
+    <value>Fading in ({0:0} %): {1}</value>
+  </data>
+  <data name="OutputBlackoutOver" xml:space="preserve">
+    <value>BLACKOUT (behind it: {0})</value>
+  </data>
+  <data name="OutputBlackout" xml:space="preserve">
+    <value>BLACKOUT</value>
+  </data>
+  <data name="OutputEntryBlackout" xml:space="preserve">
+    <value>Blackout active</value>
+  </data>
+  <data name="SoundNoTrack" xml:space="preserve">
+    <value>No sound in the video (the system clock keeps time)</value>
+  </data>
+  <data name="SoundNone" xml:space="preserve">
+    <value>No sound</value>
+  </data>
+  <data name="SoundDownmixed" xml:space="preserve">
+    <value>Multichannel is mixed down to stereo</value>
+  </data>
+  <data name="SoundOutputNone" xml:space="preserve">
+    <value>No sound output</value>
+  </data>
+  <data name="SoundMutedTag" xml:space="preserve">
+    <value>MUTED</value>
+  </data>
+  <data name="SoundSpatialLoad" xml:space="preserve">
+    <value>spatial audio load {0:0.#%}</value>
+  </data>
+  <data name="SoundOutputActive" xml:space="preserve">
+    <value>{0}, {1:0.#} kHz, {2} channels, latency {3:0} ms, drift {4:+0;-0;0} ppm, dropouts {5:0} ms{6}</value>
+  </data>
+  <data name="NotAvailable" xml:space="preserve">
+    <value>Not available</value>
+  </data>
+  <data name="ClockAudio" xml:space="preserve">
+    <value>clock: sound</value>
+  </data>
+  <data name="ClockSystem" xml:space="preserve">
+    <value>clock: system clock</value>
+  </data>
+  <data name="AvSyncInfo" xml:space="preserve">
+    <value>{0:+0.0;-0.0;0.0} ms ({1:+0.0;-0.0;0.0} … {2:+0.0;-0.0;0.0}), since the start {3} of {4} frames outside ±{5:0} ms, {6}</value>
+  </data>
+  <data name="SoundModeMono" xml:space="preserve">
+    <value>Mono on both ears (no direction)</value>
+  </data>
+  <data name="SoundModeBinauralFixed" xml:space="preserve">
+    <value>binaural, sound field fixed to the picture</value>
+  </data>
+  <data name="SoundModeBinauralHead" xml:space="preserve">
+    <value>binaural, sound field turns with the head</value>
+  </data>
+  <data name="SoundModeFallback" xml:space="preserve">
+    <value>Fallback left/right (turns with the head)</value>
+  </data>
+  <data name="SoundModePreparing" xml:space="preserve">
+    <value>being prepared …</value>
+  </data>
+  <data name="SoundModeFixed" xml:space="preserve">
+    <value>Sound fixed to the picture, speakers at ±{0:0.#}°</value>
+  </data>
+  <data name="XrRuntimeGeneric" xml:space="preserve">
+    <value>OpenXR runtime</value>
+  </data>
+  <data name="XrLoaderMissing" xml:space="preserve">
+    <value>OpenXR loader missing (see native/README.md)</value>
+  </data>
+  <data name="XrRuntimeLost" xml:space="preserve">
+    <value>Headset disconnected{0}: Varjo Base is no longer running. Start Varjo Base, Orbivo reconnects by itself</value>
+    <comment>{0} = empty or " since 14:03:12"</comment>
+  </data>
+  <data name="XrNoRuntime" xml:space="preserve">
+    <value>No OpenXR runtime reachable. Is Varjo Base running? Retrying every 2 s</value>
+  </data>
+  <data name="XrHeadsetLost" xml:space="preserve">
+    <value>Headset disconnected{0}. Connect the headset and switch it on, Orbivo reconnects by itself</value>
+  </data>
+  <data name="XrNoHeadset" xml:space="preserve">
+    <value>{0}: no headset found. Connect the headset and switch it on</value>
+  </data>
+  <data name="XrReconnecting" xml:space="preserve">
+    <value>{0}: reconnecting{1} …</value>
+  </data>
+  <data name="XrConnecting" xml:space="preserve">
+    <value>{0}: connecting …</value>
+  </data>
+  <data name="XrConnectedInfo" xml:space="preserve">
+    <value>{0} via {1}, {2} × {3} per eye</value>
+  </data>
+  <data name="XrConnected" xml:space="preserve">
+    <value>Connected</value>
+  </data>
+  <data name="XrFailed" xml:space="preserve">
+    <value>Error{0}: {1} (details in the log). Retrying</value>
+  </data>
+  <data name="XrSessionIdle" xml:space="preserve">
+    <value>Waiting (IDLE)</value>
+  </data>
+  <data name="XrSessionReady" xml:space="preserve">
+    <value>Starting (READY)</value>
+  </data>
+  <data name="XrSessionSynchronized" xml:space="preserve">
+    <value>Running, the headset does not show the picture yet (SYNCHRONIZED)</value>
+  </data>
+  <data name="XrSessionVisible" xml:space="preserve">
+    <value>Visible (VISIBLE)</value>
+  </data>
+  <data name="XrSessionFocused" xml:space="preserve">
+    <value>Active (FOCUSED)</value>
+  </data>
+  <data name="XrSessionStopping" xml:space="preserve">
+    <value>Stopping (STOPPING)</value>
+  </data>
+  <data name="XrSessionLossPending" xml:space="preserve">
+    <value>The connection is being lost (LOSS_PENDING)</value>
+  </data>
+  <data name="XrSessionExiting" xml:space="preserve">
+    <value>Ending (EXITING)</value>
+  </data>
+  <data name="XrRenderInfo" xml:space="preserve">
+    <value>{0:0} fps, headset {1:0} Hz</value>
+  </data>
+  <data name="RenderLoopAllocates" xml:space="preserve">
+    <value>The render loop allocates (see the log)</value>
+  </data>
+  <data name="XrBelowRefresh" xml:space="preserve">
+    <value>Below the frame rate of the headset</value>
+  </data>
+  <data name="GpuFromOpenXr" xml:space="preserve">
+    <value>{0} (chosen by OpenXR)</value>
+  </data>
+  <data name="NoTracking" xml:space="preserve">
+    <value>No tracking</value>
+  </data>
+  <data name="RecenterWaitingTracking" xml:space="preserve">
+    <value>waiting for head tracking</value>
+  </data>
+  <data name="RecenterWaitingViewport" xml:space="preserve">
+    <value>waiting for the preview window</value>
+  </data>
+  <data name="RecenterRequested" xml:space="preserve">
+    <value>Requested, {0}</value>
+  </data>
+  <data name="RecenterLeft" xml:space="preserve">
+    <value>The front lies {0:0}° to the left of the front of the video (yaw {1:+0;-0;0}°)</value>
+  </data>
+  <data name="RecenterRight" xml:space="preserve">
+    <value>The front lies {0:0}° to the right of the front of the video (yaw {1:+0;-0;0}°)</value>
+  </data>
+  <data name="ViewportRunning" xml:space="preserve">
+    <value>Running, {0:0} fps</value>
+  </data>
+  <data name="ErrorSeeLog" xml:space="preserve">
+    <value>Error: {0} (details in the log)</value>
+  </data>
+  <data name="FieldOfView" xml:space="preserve">
+    <value>field of view</value>
+  </data>
+  <data name="LiveViewMinimized" xml:space="preserve">
+    <value>No picture: the preview window is minimized</value>
+  </data>
+  <data name="LiveViewHeadsetHidden" xml:space="preserve">
+    <value>No picture: the headset shows nothing right now (session not visible)</value>
+  </data>
+  <data name="LiveViewRate" xml:space="preserve">
+    <value>{0:0} frames/s</value>
+  </data>
+  <data name="DirectionUp" xml:space="preserve">
+    <value>up</value>
+  </data>
+  <data name="DirectionDown" xml:space="preserve">
+    <value>down</value>
+  </data>
+  <data name="DirectionFront" xml:space="preserve">
+    <value>front</value>
+  </data>
+  <data name="DirectionLeft" xml:space="preserve">
+    <value>left</value>
+  </data>
+  <data name="DirectionRight" xml:space="preserve">
+    <value>right</value>
+  </data>
+  <data name="DirectionBack" xml:space="preserve">
+    <value>behind</value>
+  </data>
+  <data name="Automatic" xml:space="preserve">
+    <value>Automatic</value>
+  </data>
+  <data name="AutomaticWith" xml:space="preserve">
+    <value>Automatic ({0})</value>
+  </data>
+  <data name="AutomaticWithSource" xml:space="preserve">
+    <value>Automatic ({0}, {1})</value>
+    <comment>{0} = what was found, {1} = where it comes from</comment>
+  </data>
+  <data name="CommandLineWith" xml:space="preserve">
+    <value>Command line ({0})</value>
+  </data>
+  <data name="AudioModeChannels" xml:space="preserve">
+    <value>Channels (mono, stereo, multichannel)</value>
+  </data>
+  <data name="AudioModeFuMa" xml:space="preserve">
+    <value>Ambisonics FuMa (first order only)</value>
+  </data>
+  <data name="MetadataNone" xml:space="preserve">
+    <value>none (sv3d/st3d missing)</value>
+  </data>
+  <data name="SidecarSavedIn" xml:space="preserve">
+    <value>saved in {0}</value>
+  </data>
+  <data name="SidecarNone" xml:space="preserve">
+    <value>none (everything automatic)</value>
+  </data>
+  <data name="FromSidecar" xml:space="preserve">
+    <value>From the sidecar: {0}</value>
+  </data>
+  <data name="DefaultTag" xml:space="preserve">
+    <value>default</value>
+  </data>
+  <data name="SourceMetadata" xml:space="preserve">
+    <value>metadata</value>
+  </data>
+  <data name="SourceGuess" xml:space="preserve">
+    <value>guessed from the size</value>
+  </data>
+  <data name="SourceCommandLine" xml:space="preserve">
+    <value>command line</value>
+  </data>
+  <data name="SourceDefault" xml:space="preserve">
+    <value>default</value>
+  </data>
+  <data name="CubemapPadding" xml:space="preserve">
+    <value>{0}, border {1} px</value>
+  </data>
+  <data name="OrientationInputError" xml:space="preserve">
+    <value>Orientation: enter numbers from −{0:0} to {0:0} degrees.</value>
+  </data>
+  <data name="FisheyeInputError" xml:space="preserve">
+    <value>Fisheye: field of view {0:0}–{1:0}°, center 0–1, radius {2}–{3}.</value>
+  </data>
+  <data name="IdleNoImage" xml:space="preserve">
+    <value>No image chosen</value>
+  </data>
+  <data name="IdleNameSeeThrough" xml:space="preserve">
+    <value>See-through (camera picture)</value>
+  </data>
+  <data name="SeeThroughPreview" xml:space="preserve">
+    <value>Instead of the camera picture the preview shows a dark area</value>
+  </data>
+  <data name="SeeThroughNotChecked" xml:space="preserve">
+    <value>Checked when the headset connects</value>
+  </data>
+  <data name="Loading" xml:space="preserve">
+    <value>Loading …</value>
+  </data>
+  <data name="SeeThroughAvailable" xml:space="preserve">
+    <value>Camera picture available</value>
+  </data>
+  <data name="SeeThroughMissing" xml:space="preserve">
+    <value>The headset offers no camera picture (ALPHA_BLEND missing); it then shows black</value>
+  </data>
+  <data name="RateEveryFrame" xml:space="preserve">
+    <value>Every frame (90 Hz in the headset)</value>
+  </data>
+  <data name="RecordingNoFileYet" xml:space="preserve">
+    <value>No file yet</value>
+  </data>
+  <data name="RecordingRunning" xml:space="preserve">
+    <value>Running for {0} · {1:N0} head rows · {2:N0} events</value>
+    <comment>{0} = duration, {1} = head rows, {2} = events, {3} = file pairs</comment>
+  </data>
+  <data name="RecordingVideoRunning" xml:space="preserve">
+    <value>Video {3} running for {0} · {1:N0} head rows · {2:N0} events</value>
+  </data>
+  <data name="RecordingRowsLost" xml:space="preserve">
+    <value>{0:N0} rows lost</value>
+  </data>
+  <data name="RecordingWaitingFirst" xml:space="preserve">
+    <value>Ready, waiting for Play. Every video gets its own pair of files</value>
+  </data>
+  <data name="RecordingWaitingOne" xml:space="preserve">
+    <value>Ready, waiting for Play · so far {0} pair of files, last {1}, {2:N0} head rows</value>
+  </data>
+  <data name="RecordingWaitingMany" xml:space="preserve">
+    <value>Ready, waiting for Play · so far {0} pairs of files, last {1}, {2:N0} head rows</value>
+  </data>
+  <data name="RecordingOffLast" xml:space="preserve">
+    <value>Off · last recording {0}, {1:N0} head rows, {2:N0} events</value>
+  </data>
+  <data name="DialogAddVideos" xml:space="preserve">
+    <value>Add videos to the playlist</value>
+  </data>
+  <data name="DialogVideoFilter" xml:space="preserve">
+    <value>Videos ({0})|{0}|All files (*.*)|*.*</value>
+    <comment>File dialog filter; {0} = the extensions</comment>
+  </data>
+  <data name="DialogIdleImage" xml:space="preserve">
+    <value>Choose a still image for idle (equirect 360°)</value>
+  </data>
+  <data name="DialogImageFilter" xml:space="preserve">
+    <value>Images ({0})|{0}|All files (*.*)|*.*</value>
+    <comment>File dialog filter; {0} = the extensions</comment>
+  </data>
+  <data name="DialogRecordingFolder" xml:space="preserve">
+    <value>Choose the folder for the recordings</value>
+  </data>
+  <data name="LanguageTip" xml:space="preserve">
+    <value>Language of the operator window and the manual. Takes effect after a restart, which Orbivo offers; the playlist stays. Recordings stay German in every language.</value>
+  </data>
+  <data name="PlayerNoFFmpeg" xml:space="preserve">
+    <value>No video possible: FFmpeg is missing (see the FFmpeg status line)</value>
+  </data>
+  <data name="ImageFileNotFound" xml:space="preserve">
+    <value>File not found</value>
+  </data>
+  <data name="ImageFolderNotFound" xml:space="preserve">
+    <value>Folder not found</value>
+  </data>
+  <data name="ImageNoAccess" xml:space="preserve">
+    <value>No access to the file</value>
+  </data>
+  <data name="ImageUnreadable" xml:space="preserve">
+    <value>Not a readable image format</value>
+  </data>
+  <data name="ImageTooLarge" xml:space="preserve">
+    <value>Image too large (at most {0} pixels per side)</value>
+  </data>
+  <data name="ImageLoadFailed" xml:space="preserve">
+    <value>Loading failed</value>
+  </data>
+  <data name="DetailsInLog" xml:space="preserve">
+    <value>{0} (details in the log)</value>
+  </data>
+  <data name="ManualMissing" xml:space="preserve">
+    <value>The manual is missing:
+{0}
+
+Please unpack the program package again.</value>
+  </data>
+  <data name="ManualOpenFailed" xml:space="preserve">
+    <value>The manual could not be opened ({0}).
+
+It is here and can also be opened in the browser directly:
+{1}</value>
+  </data>
+  <data name="ManualCaption" xml:space="preserve">
+    <value>Orbivo – Manual</value>
+  </data>
+  <data name="RestartQuestion" xml:space="preserve">
+    <value>The language changes when Orbivo starts again. Restart now?
+A running video and a running recording end; the playlist stays.</value>
+    <comment>Shown in both languages, the new one first.</comment>
+  </data>
+  <data name="RestartFailed" xml:space="preserve">
+    <value>Orbivo could not restart ({0}). The new language applies at the next start.</value>
+  </data>
+  <data name="UnexpectedError" xml:space="preserve">
+    <value>Unexpected error: {0}
+
+Orbivo is closing. Details are in the log file:
+{1}</value>
+  </data>
+  <data name="ErrorCaption" xml:space="preserve">
+    <value>Orbivo – Error</value>
+  </data>
+  <data name="MenuFile" xml:space="preserve">
+    <value>_File</value>
+  </data>
+  <data name="MenuAddVideos" xml:space="preserve">
+    <value>_Add videos …</value>
+  </data>
+  <data name="MenuClearPlaylist" xml:space="preserve">
+    <value>_Clear playlist</value>
+  </data>
+  <data name="MenuClearPlaylistTip" xml:space="preserve">
+    <value>Removes all videos from the playlist (asks first). Not while the loaded video is shown; after Stop it is closed too.</value>
+  </data>
+  <data name="ClearPlaylistQuestion" xml:space="preserve">
+    <value>Remove all {0} videos from the playlist?
+The files stay where they are.</value>
+  </data>
+  <data name="MenuExit" xml:space="preserve">
+    <value>E_xit</value>
+  </data>
+  <data name="MenuOptions" xml:space="preserve">
+    <value>_Options</value>
+  </data>
+  <data name="MenuSoundLock" xml:space="preserve">
+    <value>_Lock sound output and volume</value>
+  </data>
+  <data name="SoundLockedHint" xml:space="preserve">
+    <value>Locked: device and volume cannot be changed (menu Options). Mute (M) still works.</value>
+  </data>
+  <data name="MenuHelp" xml:space="preserve">
+    <value>_Help</value>
+  </data>
+  <data name="MenuManual" xml:space="preserve">
+    <value>_Manual</value>
+  </data>
+  <data name="MenuAbout" xml:space="preserve">
+    <value>_About Orbivo …</value>
+  </data>
+  <data name="AboutCaption" xml:space="preserve">
+    <value>About Orbivo</value>
+  </data>
+  <data name="AboutText" xml:space="preserve">
+    <value>Orbivo – player for 360° and 180° videos on the Varjo XR-3
+Version {0}
+
+Licenses of the bundled libraries: folder licenses and THIRD-PARTY-NOTICES.txt next to Orbivo.exe.
+
+Log file of this session:
+{1}</value>
+  </data>
+  <data name="MenuPlayback" xml:space="preserve">
+    <value>_Playback</value>
+  </data>
+  <data name="MenuAutoAdvance" xml:space="preserve">
+    <value>_Continue with the next video automatically</value>
+  </data>
+  <data name="MenuAutoAdvanceTip" xml:space="preserve">
+    <value>At the end of a video the next one of the playlist starts. Saved.</value>
+  </data>
+  <data name="MenuLoop" xml:space="preserve">
+    <value>_Repeat the current video (loop)</value>
+  </data>
+  <data name="MenuLoopTip" xml:space="preserve">
+    <value>The current video starts again at its end. Takes precedence over continuing automatically. Saved.</value>
+  </data>
+</root>

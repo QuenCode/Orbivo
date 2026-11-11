@@ -91,6 +91,15 @@ Begonnen am 2026-11-09 (`DECISIONS.md`): Das echte Material hat Ambisonics-Ton, 
 - **Fertig, wenn:** Richtung bei allen Testvideos gemessen (dekodiertes Feld passt zur Quelle, Ohrpegel folgt Kopfdrehung), keine Knackser beim Drehen, Lautheit je Ordnung wie Stereo (±1,5 dB), Audio-Thread allokiert nicht ✔ (ohne Brille). Echtes Material analysiert: AmbiX mit `SA3D`, wird automatisch erkannt ✔
 - **Hör-Test:** Ambisonics-Richtungstest: Der Ton kommt aus dem leuchtenden Kasten, auch oben und unten und beim Kopfdrehen. Schalter „Ton fest am Bild“ aus: Das Klangfeld dreht mit dem Kopf. Gleiches Ergebnis mit allen vier Testvideos. Dann mit echtem Material
 
+## M11 – Zweite Sprache (Englisch)
+- Operator-UI und Anleitung auf Englisch und Deutsch (F62): Texte als `.resx` (Englisch neutral, Deutsch als Satellit `de\*.resources.dll`), Fenster mit `{x:Static}`
+- Menüleiste Datei (Videos hinzufügen, Playlist leeren, Beenden), Wiedergabe (automatisch weiter, Loop), Optionen (Sprache, Ton-Sperre), Hilfe (Anleitung, Über Orbivo); Sprachwahl „Sprache / Language“ unter Optionen, gespeichert in `settings.json` (`language`); wirkt nach einem Neustart, den die App anbietet (Playlist bleibt); `--lang en|de` nur für eine Sitzung
+- Allererster Start (keine `settings.json`) englisch, bestehende Installationen bleiben deutsch
+- Aufzeichnungen (Spalten, Dateinamen, Ereignisse, Dezimalkomma) bleiben deutsch; Fehler, die Operator und Ereignis-Log bekommen, laufen als `OperatorText` in beiden Sprachen
+- `docs/Manual.html` als englische Fassung von `Anleitung.html`, beide verlinkt; F1 öffnet die passende; `--check` und `release.ps1` verlangen beide und die deutschen Satelliten
+- **Fertig, wenn:** beide `.resx`-Paare haben dieselben Schlüssel und Platzhalter (Test), alle Tests grün, Fenster in beiden Sprachen ohne abgeschnittene Texte
+- **Brillen-Test:** Sprache umstellen, Neustart bestätigen, Brille verbindet sich wieder; F1 öffnet die Anleitung der Sprache; Aufzeichnung in Englisch ist identisch aufgebaut wie in Deutsch
+
 ## Später – Surround und externer Ton
 - 5.1/7.1 über virtuelle Lautsprecher (F21)
 - Externe Tondatei neben dem Video (Sidecar `externalAudio`)

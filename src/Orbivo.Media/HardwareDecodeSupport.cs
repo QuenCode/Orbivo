@@ -1,5 +1,6 @@
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
+using Orbivo.Core.Localization;
 using SharpGen.Runtime;
 using Vortice.Direct3D11;
 using DxgiFormat = Vortice.DXGI.Format;
@@ -61,14 +62,16 @@ internal static class HardwareDecodeSupport
         int width,
         int height,
         ILogger logger,
-        out string? reason)
+        out OperatorText? reason)
     {
         reason = null;
         string codecName = ffmpeg.avcodec_get_name(codecId) ?? codecId.ToString();
         if (codecId == AVCodecID.AV_CODEC_ID_H264 && (bitDepth > 8 || !chroma420))
         {
             // DXVA has no H.264 profile beyond 8 bit 4:2:0 (High 10, 4:2:2 and 4:4:4 are software only).
-            reason = $"Für H.264 mit {bitDepth} Bit{(chroma420 ? string.Empty : " und ohne 4:2:0")} gibt es keine Hardware-Dekodierung";
+            reason = chroma420
+                ? new OperatorText(nameof(CoreText.HardwareNoH264), bitDepth)
+                : new OperatorText(nameof(CoreText.HardwareNoH264Not420), bitDepth);
             return false;
         }
 
@@ -90,7 +93,7 @@ internal static class HardwareDecodeSupport
         Guid? found = FindProfile(videoDevice, profiles);
         if (found is not Guid decoderProfile)
         {
-            reason = $"Die GPU hat keinen Hardware-Decoder für {codecName} mit {bitDepth} Bit";
+            reason = new OperatorText(nameof(CoreText.HardwareNoProfile), codecName, bitDepth);
             logger.LogInformation("The GPU offers none of the decoder profiles {Profiles} for {Codec}.", string.Join(", ", profiles), codecName);
             return false;
         }
@@ -99,7 +102,7 @@ internal static class HardwareDecodeSupport
         Result formatResult = videoDevice.CheckVideoDecoderFormat(decoderProfile, outputFormat, out RawBool formatSupported);
         if (formatResult.Failure || !formatSupported)
         {
-            reason = $"Die GPU kann {codecName} nicht nach {outputFormat} dekodieren";
+            reason = new OperatorText(nameof(CoreText.HardwareNoOutputFormat), codecName, outputFormat.ToString());
             logger.LogInformation("Decoder profile {Profile} does not output {Format} ({Result}).", decoderProfile, outputFormat, formatResult);
             return false;
         }
@@ -114,7 +117,7 @@ internal static class HardwareDecodeSupport
             OutputFormat = outputFormat,
         };
 
-        string sizeReason = $"Die GPU kann {codecName} in {width} × {height} nicht dekodieren (zu groß für den Hardware-Decoder)";
+        var sizeReason = new OperatorText(nameof(CoreText.HardwareTooLarge), codecName, width, height);
         Result countResult = videoDevice.GetVideoDecoderConfigCount(ref description, out uint configCount);
         if (countResult.Failure || configCount == 0)
         {

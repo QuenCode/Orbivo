@@ -1,6 +1,11 @@
+using Orbivo.Core.Localization;
+
 namespace Orbivo.Xr.OpenXr;
 
-/// <summary>German details of headset events for the event log (F51).</summary>
+/// <summary>
+/// German details of headset events for the event log (F51); they stay German in every UI language (docs/DECISIONS.md,
+/// M11). Only <see cref="Since"/> is for the operator window and follows the UI language.
+/// </summary>
 public static class XrEventText
 {
     /// <summary>Connection to the runtime and the headset.</summary>
@@ -32,7 +37,7 @@ public static class XrEventText
     public static string ReferenceSpaceChanged(string space) =>
         $"Bezugssystem {space} der Brille geändert (z. B. Recenter in Varjo Base)";
 
-    /// <summary>" seit 14:12:03" in local time, or " seit 08.11. 14:12" after midnight, for status texts.</summary>
+    /// <summary>" since 14:12:03" (" seit 14:12:03") in local time, or with the date after midnight, for status texts.</summary>
     public static string Since(DateTime sinceUtc, DateTime nowUtc)
     {
         if (sinceUtc == default)
@@ -42,7 +47,7 @@ public static class XrEventText
 
         DateTime local = sinceUtc.ToLocalTime();
         string format = local.Date == nowUtc.ToLocalTime().Date ? "HH:mm:ss" : "dd.MM. HH:mm";
-        return " seit " + local.ToString(format, System.Globalization.CultureInfo.InvariantCulture);
+        return Loc.Format(CoreText.XrSince, local.ToString(format, System.Globalization.CultureInfo.InvariantCulture));
     }
 
     /// <summary>State of the OpenXR session.</summary>

@@ -9,9 +9,28 @@
     <RootNamespace>Orbivo.App</RootNamespace>
     <!-- Embedded as Win32 resource: Explorer, taskbar and the native debug viewport window use it. -->
     <ApplicationIcon>Assets\orbivo.ico</ApplicationIcon>
-    <!-- Only German framework texts (WPF dialogs) in the output and the release package, not a dozen languages. -->
+    <!-- English is the neutral language; only the German satellites (ours and the framework's) go into the output and
+         the release package, not a dozen languages (M11). -->
     <SatelliteResourceLanguages>de</SatelliteResourceLanguages>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Operator window texts in English (UiText.resx) and German (UiText.de.resx); the build generates the class UiText. -->
+    <EmbeddedResource Update="Localization\UiText.resx">
+      <StronglyTypedFileName>$(IntermediateOutputPath)UiText.Designer.cs</StronglyTypedFileName>
+      <StronglyTypedLanguage>CSharp</StronglyTypedLanguage>
+      <StronglyTypedNamespace>Orbivo.App.Localization</StronglyTypedNamespace>
+      <StronglyTypedClassName>UiText</StronglyTypedClassName>
+      <PublicClass>true</PublicClass>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <!-- WPF compiles a temporary assembly (*_wpftmp.csproj) for the XAML before the resources are normally generated, and
+       that project does not run the generation itself: the typed class UiText is generated first and handed to it. -->
+  <Target Name="GenerateUiTextBeforeXaml" BeforeTargets="MarkupCompilePass1" DependsOnTargets="PrepareResourceNames;CoreResGen" />
+  <ItemGroup Condition="$(MSBuildProjectFile.EndsWith('_wpftmp.csproj'))">
+    <Compile Include="$(IntermediateOutputPath)UiText.Designer.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- WPF resource for the operator window's title bar. orbivo.svg and orbivo-512.png are the source artwork. -->
@@ -20,8 +39,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Operator manual (M9): next to Orbivo.exe in every build and in the release package, opened with F1. -->
+    <!-- Operator manual (M9) in German and English (M11): next to Orbivo.exe in every build and in the release package,
+         F1 opens the one of the UI language. -->
     <None Include="$(OrbivoRepoRoot)docs\Anleitung.html" Link="Anleitung.html"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="$(OrbivoRepoRoot)docs\Manual.html" Link="Manual.html"
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 

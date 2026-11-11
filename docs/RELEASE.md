@@ -44,7 +44,7 @@ gh auth login                                                                 # 
 | `dotnet test` (Debug, ein Testprojekt nach dem anderen) | ein Test scheitert |
 | Setzt die Version, macht aus „Unveröffentlicht“ den Abschnitt `## X.Y.Z – Datum` | – |
 | `dotnet publish` self-contained win-x64 (Release) nach `artifacts\release\Orbivo-X.Y.Z\`, dazu `licenses\` und `THIRD-PARTY-NOTICES.txt` | der Build scheitert (Version und Changelog werden zurückgesetzt) |
-| Prüft das Paket: Pflichtdateien da, `ffmpeg.exe` & Co. nicht da, `Orbivo.exe --check` lädt FFmpeg, Steam Audio und den OpenXR-Loader und findet die Anleitung | etwas fehlt |
+| Prüft das Paket: Pflichtdateien da, `ffmpeg.exe` & Co. nicht da, `Orbivo.exe --check` lädt FFmpeg, Steam Audio und den OpenXR-Loader und findet beide Anleitungen | etwas fehlt |
 | ZIP mit Ordner `Orbivo-X.Y.Z` darin, SHA256-Datei | – |
 | Commit „Release X.Y.Z“ (nur `Directory.Build.props` und `CHANGELOG.md`), annotiertes Tag `vX.Y.Z` | – |
 | Nur `-Publish`: `git push` von `development` und Tag, `main` vorwärts auf das Release (`git push origin development:main`), `gh release create` | `main` hat Commits, die `development` fehlen; `gh` fehlt |
@@ -59,7 +59,8 @@ Weitere Schalter:
 Orbivo-1.1.0/
   Orbivo.exe, *.dll           App und .NET-Laufzeit (self-contained)
   avcodec-63.dll …            FFmpeg (LGPL, austauschbar), phonon.dll, openxr_loader.dll
-  Anleitung.html              Bedienungsanleitung (F1 in der App)
+  Anleitung.html, Manual.html Bedienungsanleitung deutsch und englisch (F1 in der App)
+  de/*.resources.dll          deutsche Texte der App (Englisch steckt in den DLLs selbst)
   THIRD-PARTY-NOTICES.txt     Drittkomponenten und Lizenzen
   licenses/                   Lizenztexte von FFmpeg, Steam Audio, OpenXR
   *.pdb                       Symbole, damit Fehler im Log mit Zeilennummern stehen
@@ -70,7 +71,8 @@ ist ein Update: alten Ordner ersetzen.
 ## Kurzer Brillen-Test vor dem Veröffentlichen
 1. ZIP entpacken (nicht unter „Programme“), `Orbivo.exe` starten. Titelleiste: `Orbivo X.Y.Z – Operator` (ohne „-dev“).
 2. Status: FFmpeg, Steam Audio, OpenXR grün; Brille verbunden, etwa 90 fps.
-3. „Anleitung (F1)“ öffnet die Anleitung im Browser.
+3. F1 bzw. Hilfe → Anleitung öffnet die Anleitung der eingestellten Sprache im Browser; Optionen → „Sprache / Language“
+   umstellen, Neustart bestätigen, die Texte wechseln.
 4. Ein 8K-Testvideo abspielen: Bild in der Brille, Ton fest am Bild, A/V im grünen Bereich.
 5. Was sich in diesem Release geändert hat, gezielt ausprobieren (`CHANGELOG.md`).
 

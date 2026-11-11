@@ -1,4 +1,6 @@
+using System.Globalization;
 using Orbivo.Core.Formats;
+using Orbivo.Core.Localization;
 using Orbivo.Media;
 
 namespace Orbivo.App;
@@ -35,10 +37,24 @@ public sealed record StartupOptions(
     public const string CheckSwitch = "--check";
 
     /// <summary>
-    /// <c>--check</c>: check the native libraries and the manual next to the exe, log the result and exit without a window
+    /// <c>--check</c>: check the native libraries and the manuals next to the exe, log the result and exit without a window
     /// (exit code 0 = everything there, 1 = something missing). The release script uses it on the finished package (M9).
     /// </summary>
     public bool Check { get; init; }
+
+    /// <summary>
+    /// <c>--lang en|de</c>: language of the operator window for this session only; the saved choice stays (M11).
+    /// </summary>
+    public AppLanguage? Language { get; init; }
+
+    /// <summary>
+    /// <c>--wait-for-pid &lt;id&gt;</c>, internal: the instance that restarted this one after a change of the language.
+    /// This one waits until that process has ended, so it has let go of the headset, the sound device and the settings.
+    /// </summary>
+    public int? WaitForProcessId { get; init; }
+
+    public const string LanguageOption = "--lang";
+    public const string WaitForProcessOption = "--wait-for-pid";
 
     public const string ImageOption = "--image";
     public const string VideoOption = "--video";
@@ -55,6 +71,8 @@ public sealed record StartupOptions(
         StereoLayout? stereoLayout = null;
         DecoderPreference decoder = DecoderPreference.Auto;
         bool check = false;
+        AppLanguage? language = null;
+        int? waitForProcessId = null;
         var unknown = new List<string>();
         for (int i = 0; i < args.Count; i++)
         {
@@ -87,6 +105,33 @@ public sealed record StartupOptions(
                     }
                 }
             }
+            else if (Is(arg, LanguageOption))
+            {
+                string? value = TakeValue(args, ref i, LanguageOption, unknown);
+                if (value is not null)
+                {
+                    language = AppLanguages.FromCode(value);
+                    if (language is null)
+                    {
+                        unknown.Add($"{LanguageOption} {value} (expected en or de)");
+                    }
+                }
+            }
+            else if (Is(arg, WaitForProcessOption))
+            {
+                string? value = TakeValue(args, ref i, WaitForProcessOption, unknown);
+                if (value is not null)
+                {
+                    if (int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int processId))
+                    {
+                        waitForProcessId = processId;
+                    }
+                    else
+                    {
+                        unknown.Add($"{WaitForProcessOption} {value} (expected a process id)");
+                    }
+                }
+            }
             else if (Is(arg, DecoderOption))
             {
                 string? value = TakeValue(args, ref i, DecoderOption, unknown);
@@ -109,7 +154,38 @@ public sealed record StartupOptions(
             }
         }
 
-        return new StartupOptions(noXr, imagePath, videoPath, stereoLayout, decoder, unknown) { Check = check };
+        return new StartupOptions(noXr, imagePath, videoPath, stereoLayout, decoder, unknown)
+        {
+            Check = check,
+            Language = language,
+            WaitForProcessId = waitForProcessId,
+        };
+    }
+
+    /// <summary>
+    /// The arguments for the restart after a change of the language: the same as this start, without <c>--lang</c>
+    /// (it would override the new choice) and without an earlier <c>--wait-for-pid</c>.
+    /// </summary>
+    public static IReadOnlyList<string> ArgumentsForRestart(IReadOnlyList<string> args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        var kept = new List<string>();
+        for (int i = 0; i < args.Count; i++)
+        {
+            if (Is(args[i], LanguageOption) || Is(args[i], WaitForProcessOption))
+            {
+                if (i + 1 < args.Count && !args[i + 1].StartsWith("--", StringComparison.Ordinal))
+                {
+                    i++;
+                }
+
+                continue;
+            }
+
+            kept.Add(args[i]);
+        }
+
+        return kept;
     }
 
     private static StereoLayout? ParseStereoLayout(string value)

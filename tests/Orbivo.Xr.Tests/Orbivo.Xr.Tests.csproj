@@ -20,4 +20,9 @@
     <ProjectReference Include="..\..\src\Orbivo.Xr\Orbivo.Xr.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Same culture for every test run, whatever the Windows language (docs/DECISIONS.md, M11). -->
+    <Content Include="..\xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

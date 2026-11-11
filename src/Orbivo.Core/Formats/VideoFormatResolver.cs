@@ -1,4 +1,5 @@
 using Orbivo.Core.Geometry;
+using Orbivo.Core.Localization;
 
 namespace Orbivo.Core.Formats;
 
@@ -97,8 +98,7 @@ public static class VideoFormatResolver
 
         if (metadata.Spherical is { } spherical && (spherical.YawDegrees != 0 || spherical.PitchDegrees != 0 || spherical.RollDegrees != 0))
         {
-            warnings.Add(FormattableString.Invariant(
-                $"Metadaten enthalten eine Grundausrichtung (Yaw {spherical.YawDegrees:0.#}°, Pitch {spherical.PitchDegrees:0.#}°, Roll {spherical.RollDegrees:0.#}°). Sie wird nicht angewendet; bei Bedarf Ausrichtung einstellen."));
+            warnings.Add(Loc.Format(CoreText.MetadataOrientationIgnored, spherical.YawDegrees, spherical.PitchDegrees, spherical.RollDegrees));
         }
 
         var automatic = new VideoFormat(autoProjection, autoLayout, autoSwap, autoCubemap, FisheyeParameters.Default, OrientationOffset.Zero);
@@ -164,15 +164,14 @@ public static class VideoFormatResolver
                     return (ProjectionType.Equirect180, FormatSource.Metadata);
                 }
 
-                warnings.Add(FormattableString.Invariant(
-                    $"Metadaten: Equirect-Ausschnitt (links {spherical.BoundLeft:0.###}, oben {spherical.BoundTop:0.###}, rechts {spherical.BoundRight:0.###}, unten {spherical.BoundBottom:0.###}) wird nicht unterstützt; gezeigt als Equirect 360°. Bei Bedarf Projektion einstellen."));
+                warnings.Add(Loc.Format(CoreText.MetadataEquirectTile, spherical.BoundLeft, spherical.BoundTop, spherical.BoundRight, spherical.BoundBottom));
                 return (ProjectionType.Equirect360, FormatSource.Metadata);
             case SphericalProjectionKind.Cubemap:
                 return (ProjectionType.Cubemap, FormatSource.Metadata);
             case SphericalProjectionKind.Fisheye:
                 return (ProjectionType.Fisheye, FormatSource.Metadata);
             default:
-                warnings.Add($"Metadaten: Projektion „{Describe(spherical.Kind)}“ wird nicht unterstützt; angenommen wird Equirect 360°. Bei Bedarf Projektion einstellen.");
+                warnings.Add(Loc.Format(CoreText.MetadataProjectionUnsupported, Describe(spherical.Kind)));
                 return (ProjectionType.Equirect360, FormatSource.Default);
         }
     }
@@ -205,13 +204,13 @@ public static class VideoFormatResolver
                 return (known, FormatSource.Metadata, stereo.Inverted && known != StereoLayout.Mono);
             }
 
-            warnings.Add($"Metadaten: Stereo-Anordnung „{stereo.Kind}“ wird nicht unterstützt; Layout aus der Bildgröße geschätzt.");
+            warnings.Add(Loc.Format(CoreText.MetadataStereoUnsupported, stereo.Kind));
         }
 
         StereoLayout guess = GuessLayout(projection, cubemap, width, height);
         if (metadata.Spherical is not null && metadata.Stereo is null && guess != StereoLayout.Mono)
         {
-            warnings.Add($"Metadaten ohne Stereo-Angabe (st3d); Layout aus der Bildgröße geschätzt: {Describe(guess)}.");
+            warnings.Add(Loc.Format(CoreText.MetadataStereoMissing, Describe(guess)));
         }
 
         return (guess, FormatSource.Guess, false);
@@ -255,8 +254,7 @@ public static class VideoFormatResolver
             && Math.Abs(aspect - 1) <= AspectTolerance;
         if (Math.Abs((aspect / natural) - 1) > AspectTolerance && !squeezedSideBySide)
         {
-            warnings.Add(FormattableString.Invariant(
-                $"Seitenverhältnis je Auge {eyeWidth}×{eyeHeight} passt nicht zu {Describe(format.Projection)} {Describe(format.Layout)} (erwartet {natural:0.##}:1). Format prüfen."));
+            warnings.Add(Loc.Format(CoreText.FormatAspectMismatch, eyeWidth, eyeHeight, Describe(format.Projection), Describe(format.Layout), natural));
         }
     }
 
@@ -279,5 +277,5 @@ public static class VideoFormatResolver
         _ => "Mono",
     };
 
-    private static string Describe(SphericalProjectionKind kind) => Enum.IsDefined(kind) ? kind.ToString() : $"Nr. {(int)kind}";
+    private static string Describe(SphericalProjectionKind kind) => Enum.IsDefined(kind) ? kind.ToString() : Loc.Format(CoreText.MetadataProjectionNumber, (int)kind);
 }

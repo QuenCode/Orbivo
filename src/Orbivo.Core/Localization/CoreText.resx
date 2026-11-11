@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AudioModeAmbisonics" xml:space="preserve">
+    <value>Ambisonics order {0} ({1})</value>
+    <comment>{0} order 1-3, {1} AmbiX or FuMa</comment>
+  </data>
+  <data name="AudioModeAmbisonicsWithSource" xml:space="preserve">
+    <value>Ambisonics order {0} ({1}, {2})</value>
+    <comment>{0} order, {1} AmbiX or FuMa, {2} source</comment>
+  </data>
+  <data name="AudioModeChannels" xml:space="preserve">
+    <value>Channels</value>
+  </data>
+  <data name="AudioModeChannelsSidecar" xml:space="preserve">
+    <value>Channels (sidecar)</value>
+  </data>
+  <data name="AudioModeSourceSidecar" xml:space="preserve">
+    <value>sidecar</value>
+  </data>
+  <data name="AudioModeSourceMetadata" xml:space="preserve">
+    <value>metadata</value>
+  </data>
+  <data name="AudioModeSourceChannelCount" xml:space="preserve">
+    <value>guessed from the channel count</value>
+  </data>
+  <data name="AudioModeAllowedFuMa" xml:space="preserve">
+    <value>4 channels (order 1)</value>
+  </data>
+  <data name="AudioModeAllowedAmbiX" xml:space="preserve">
+    <value>4, 9 or 16 channels</value>
+  </data>
+  <data name="AudioModeSidecarMismatch" xml:space="preserve">
+    <value>Sound format {0} from the sidecar does not fit the sound track ({1} channels, expected {2}); automatic.</value>
+  </data>
+  <data name="AudioModeExtraChannels" xml:space="preserve">
+    <value>The sound track has {0} extra channels besides the Ambisonics sound field (e.g. head-locked stereo); they are not played.</value>
+  </data>
+  <data name="ConversionMonoOnBoth" xml:space="preserve">
+    <value>Mono on both sides</value>
+  </data>
+  <data name="ConversionDownmix" xml:space="preserve">
+    <value>{0} channels → mixed down to stereo</value>
+  </data>
+  <data name="MetadataOrientationIgnored" xml:space="preserve">
+    <value>The metadata contain a base orientation (yaw {0:0.#}°, pitch {1:0.#}°, roll {2:0.#}°). It is not applied; set the orientation if needed.</value>
+  </data>
+  <data name="MetadataEquirectTile" xml:space="preserve">
+    <value>Metadata: equirect section (left {0:0.###}, top {1:0.###}, right {2:0.###}, bottom {3:0.###}) is not supported; shown as Equirect 360°. Set the projection if needed.</value>
+  </data>
+  <data name="MetadataProjectionUnsupported" xml:space="preserve">
+    <value>Metadata: projection “{0}” is not supported; Equirect 360° is assumed. Set the projection if needed.</value>
+  </data>
+  <data name="MetadataProjectionNumber" xml:space="preserve">
+    <value>no. {0}</value>
+  </data>
+  <data name="MetadataStereoUnsupported" xml:space="preserve">
+    <value>Metadata: stereo arrangement “{0}” is not supported; layout guessed from the picture size.</value>
+  </data>
+  <data name="MetadataStereoMissing" xml:space="preserve">
+    <value>Metadata without stereo information (st3d); layout guessed from the picture size: {0}.</value>
+  </data>
+  <data name="FormatAspectMismatch" xml:space="preserve">
+    <value>Aspect ratio per eye {0}×{1} does not fit {2} {3} (expected {4:0.##}:1). Check the format.</value>
+  </data>
+  <data name="SidecarNotReadable" xml:space="preserve">
+    <value>Sidecar {0} not readable ({1}); format automatic.</value>
+  </data>
+  <data name="SidecarInvalidJson" xml:space="preserve">
+    <value>Sidecar {0} is not valid JSON ({1}); it is ignored and backed up as .bak at the next change.</value>
+  </data>
+  <data name="SidecarNoObject" xml:space="preserve">
+    <value>Sidecar {0} contains no JSON object; it is ignored and backed up as .bak at the next change.</value>
+  </data>
+  <data name="SidecarNewerVersion" xml:space="preserve">
+    <value>The sidecar comes from a newer Orbivo version (version {0}); changes are not saved.</value>
+  </data>
+  <data name="SidecarUnknownValue" xml:space="preserve">
+    <value>Sidecar: “{0}” = {1} unknown (allowed: {2}); ignored.</value>
+  </data>
+  <data name="SidecarNotBoolean" xml:space="preserve">
+    <value>Sidecar: “{0}” = {1} is not true/false; ignored.</value>
+  </data>
+  <data name="SidecarUnknownCubemap" xml:space="preserve">
+    <value>Sidecar: cube layout “{0}” unknown (allowed: {1} or an object); ignored.</value>
+  </data>
+  <data name="SidecarInvalidCubemapBecause" xml:space="preserve">
+    <value>Sidecar: cube layout {0} invalid ({1}); ignored.</value>
+  </data>
+  <data name="SidecarInvalidCubemap" xml:space="preserve">
+    <value>Sidecar: cube layout {0} invalid; ignored.</value>
+  </data>
+  <data name="SidecarInvalidFisheye" xml:space="preserve">
+    <value>Sidecar: fisheye values invalid ({0}); ignored.</value>
+  </data>
+  <data name="SidecarFisheyeNoObject" xml:space="preserve">
+    <value>Sidecar: “fisheye” = {0} is not an object; ignored.</value>
+  </data>
+  <data name="SidecarInvalidOrientation" xml:space="preserve">
+    <value>Sidecar: orientation {0} invalid (at most ±{1}° per axis); ignored.</value>
+  </data>
+  <data name="SidecarInvalidStereoWidth" xml:space="preserve">
+    <value>Sidecar: stereo width {0} invalid (allowed {1:0}–{2:0}°); ignored.</value>
+  </data>
+  <data name="RecordingStopped" xml:space="preserve">
+    <value>Recording stopped: {0}</value>
+  </data>
+  <data name="AudioNoDecoder" xml:space="preserve">
+    <value>There is no decoder for the sound codec {0}</value>
+  </data>
+  <data name="AudioFormatUnsupported" xml:space="preserve">
+    <value>Sound format not supported (details in the log)</value>
+  </data>
+  <data name="AudioCannotDecode" xml:space="preserve">
+    <value>Sound cannot be decoded (details in the log)</value>
+  </data>
+  <data name="FileNotFound" xml:space="preserve">
+    <value>File not found</value>
+  </data>
+  <data name="FileCannotOpen" xml:space="preserve">
+    <value>File cannot be opened (not a known video format?)</value>
+  </data>
+  <data name="FileHasNoVideo" xml:space="preserve">
+    <value>The file contains no video</value>
+  </data>
+  <data name="VideoCannotRead" xml:space="preserve">
+    <value>Video cannot be read (details in the log)</value>
+  </data>
+  <data name="FileReadFailed" xml:space="preserve">
+    <value>Reading the file failed (details in the log)</value>
+  </data>
+  <data name="HardwareNoH264" xml:space="preserve">
+    <value>There is no hardware decoding for H.264 with {0} bit</value>
+  </data>
+  <data name="HardwareNoH264Not420" xml:space="preserve">
+    <value>There is no hardware decoding for H.264 with {0} bit and without 4:2:0</value>
+  </data>
+  <data name="HardwareNoProfile" xml:space="preserve">
+    <value>The GPU has no hardware decoder for {0} with {1} bit</value>
+  </data>
+  <data name="HardwareNoOutputFormat" xml:space="preserve">
+    <value>The GPU cannot decode {0} to {1}</value>
+  </data>
+  <data name="HardwareTooLarge" xml:space="preserve">
+    <value>The GPU cannot decode {0} in {1} × {2} (too large for the hardware decoder)</value>
+  </data>
+  <data name="SoftwareChosen" xml:space="preserve">
+    <value>Software decoding chosen (--decoder sw)</value>
+  </data>
+  <data name="HardwareNoDecoder" xml:space="preserve">
+    <value>There is no hardware decoder for the codec {0}</value>
+  </data>
+  <data name="VideoNoDecoder" xml:space="preserve">
+    <value>There is no decoder for the codec {0}</value>
+  </data>
+  <data name="SoftwareOnly420" xml:space="preserve">
+    <value>{0}. Software decoding supports only 4:2:0 with 8 or 10 bit (this video: {1})</value>
+  </data>
+  <data name="VideoCannotDecode" xml:space="preserve">
+    <value>Video cannot be decoded (details in the log)</value>
+  </data>
+  <data name="DecodeSoftwareFailed" xml:space="preserve">
+    <value>The software decoder cannot decode the video (details in the log)</value>
+  </data>
+  <data name="DecodeHardwareRejected" xml:space="preserve">
+    <value>The hardware decoder rejects the video (profile or resolution too large for the GPU?). Details in the log</value>
+  </data>
+  <data name="DecodePixelFormatUnsupported" xml:space="preserve">
+    <value>The picture format of the decoder is not supported (details in the log)</value>
+  </data>
+  <data name="DecodeFailed" xml:space="preserve">
+    <value>Decoding failed (details in the log)</value>
+  </data>
+  <data name="PlayerInternalError" xml:space="preserve">
+    <value>Internal error in the player (details in the log)</value>
+  </data>
+  <data name="VideoHasNoFrames" xml:space="preserve">
+    <value>The video contains no frames</value>
+  </data>
+  <data name="HardwareRejectedVideo" xml:space="preserve">
+    <value>The hardware decoder rejected the video</value>
+  </data>
+  <data name="SidecarNotSaved" xml:space="preserve">
+    <value>Sidecar not saved: {0}</value>
+  </data>
+  <data name="SidecarNotOverwritten" xml:space="preserve">
+    <value>The sidecar comes from a newer Orbivo version or cannot be read, and is not overwritten.</value>
+  </data>
+  <data name="NativeMissing" xml:space="preserve">
+    <value>Missing: {0}</value>
+  </data>
+  <data name="NativeWrongVersion" xml:space="preserve">
+    <value>Wrong version {0} (expected {1})</value>
+  </data>
+  <data name="NativeLoadFailed" xml:space="preserve">
+    <value>Loading failed: {0}</value>
+  </data>
+  <data name="NativeVersionUnknown" xml:space="preserve">
+    <value>(version unknown)</value>
+  </data>
+  <data name="FFmpegWrongVersion" xml:space="preserve">
+    <value>Wrong version {0} (avcodec {1}, expected {2})</value>
+  </data>
+  <data name="FFmpegNotLgpl" xml:space="preserve">
+    <value>Not an LGPL build: {0}</value>
+  </data>
+  <data name="SteamAudioFound" xml:space="preserve">
+    <value>{0} found (expected {1})</value>
+  </data>
+  <data name="SoundOutputCannotStart" xml:space="preserve">
+    <value>The sound output could not start.</value>
+  </data>
+  <data name="SoundOutputInternalError" xml:space="preserve">
+    <value>Internal error of the sound output (see the log).</value>
+  </data>
+  <data name="SoundDeviceWindowsDefault" xml:space="preserve">
+    <value>Windows default</value>
+  </data>
+  <data name="SoundDeviceSelected" xml:space="preserve">
+    <value>selected device</value>
+  </data>
+  <data name="SoundOutputUnavailable" xml:space="preserve">
+    <value>Sound output not available ({0}). Retrying every {1:0} s.</value>
+  </data>
+  <data name="SoundOutputFailed" xml:space="preserve">
+    <value>Sound output failed ({0}). Retrying every {1:0} s.</value>
+  </data>
+  <data name="SpatialUnavailable" xml:space="preserve">
+    <value>Sound fixed to the picture not available: Steam Audio cannot be loaded ({0}). The sound plays as normal stereo.</value>
+  </data>
+  <data name="AmbisonicsNotBinaural" xml:space="preserve">
+    <value>Ambisonics not binaural: Steam Audio cannot be loaded ({0}). Fallback: two directional microphones left and right, without head movement.</value>
+  </data>
+  <data name="SoundNoDevice" xml:space="preserve">
+    <value>No device</value>
+  </data>
+  <data name="PreviewWindowTitle" xml:space="preserve">
+    <value>Orbivo – Preview (stands in for the headset)</value>
+  </data>
+  <data name="XrSince" xml:space="preserve">
+    <value> since {0}</value>
+    <comment>Leading space; {0} is the local time</comment>
+  </data>
+</root>
