@@ -4,6 +4,8 @@
 
 *English: [README.md](README.md)*
 
+![Orbivo – 360°/180°-Videoplayer für die Varjo XR-3 mit räumlichem Ton](docs/images/social-preview.png)
+
 Orbivo ist ein Windows-Player für 360°- und 180°-Videos (bis 8K, Mono und Stereo, räumlicher Ton) auf einer
 **Varjo XR-3**. Gedacht ist er für betreute Vorführungen: Ein **Operator** steuert alles am Desktop, die Person
 mit Brille schaut nur zu und sieht nie eine Bedienoberfläche.

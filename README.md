@@ -4,6 +4,8 @@
 
 *Deutsch: [README.de.md](README.de.md)*
 
+![Orbivo – 360° / 180° video player for the Varjo XR-3 with spatial sound](docs/images/social-preview.png)
+
 Orbivo is a Windows player for 360° and 180° videos (up to 8K, mono and stereo, spatial sound) on a **Varjo XR-3**.
 It is made for controlled viewing sessions: an **operator** controls everything from the desktop, the person wearing
 the headset only watches and never sees any user interface.
