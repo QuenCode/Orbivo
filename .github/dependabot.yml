@@ -22,3 +22,10 @@ updates:
     target-branch: development
     schedule:
       interval: weekly
+
+  # Python packages of the test media script (tools/testmedia, not shipped).
+  - package-ecosystem: pip
+    directory: /tools/testmedia
+    target-branch: development
+    schedule:
+      interval: weekly
