@@ -8,8 +8,8 @@ abstract: >-
   rotation; head movement and operator events can be recorded as CSV.
 authors:
   - name: QuenCode
-version: 1.1.0
-date-released: 2026-11-09
+version: 1.2.0
+date-released: 2026-11-11
 license: Apache-2.0
 repository-code: "https://github.com/QuenCode/Orbivo"
 keywords:

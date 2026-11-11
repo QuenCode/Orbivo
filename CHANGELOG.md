@@ -7,6 +7,8 @@ Was sich von Version zu Version für Operatoren und Auswertung ändert. Neue Ein
 
 ## Unveröffentlicht
 
+## 1.2.0 – 2026-11-11
+
 - Neue Menüleiste oben im Operatorfenster: Datei (Videos hinzufügen, Playlist leeren, Beenden), Wiedergabe (automatisch weiter, wiederholen), Optionen (Sprache, Tonausgabe und Lautstärke sperren), Hilfe (Anleitung, Über Orbivo). „Automatisch weiter“, „Wiederholen (Loop)“, die Ton-Sperre und der Link zur Anleitung sind dorthin umgezogen
 - Operatorfenster und Anleitung gibt es jetzt auch auf Englisch: Optionen → „Sprache / Language“, die neue Sprache gilt nach einem Neustart, den Orbivo gleich anbietet (die Playlist bleibt). Neue Installationen starten englisch, bestehende bleiben deutsch
 - Englische Anleitung `Manual.html` neben `Anleitung.html`; F1 öffnet die der eingestellten Sprache
