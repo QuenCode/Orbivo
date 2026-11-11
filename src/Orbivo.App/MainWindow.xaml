@@ -264,7 +264,7 @@
         </Grid>
       </GroupBox>
 
-      <!-- Live view (F42): what the participant sees, copied from the render thread about 30 times per second -->
+      <!-- Live view (F42): what the viewer sees, copied from the render thread about 30 times per second -->
       <GroupBox Grid.Row="2" Header="{x:Static loc:UiText.LiveViewHeader}">
         <DockPanel>
           <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">

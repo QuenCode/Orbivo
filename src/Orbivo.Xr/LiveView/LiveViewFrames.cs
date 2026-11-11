@@ -19,7 +19,7 @@ internal readonly record struct LiveViewFrame(ID3D11Texture2D Texture, int Width
 /// <summary>
 /// Hands the live view (F42) from a render thread (headset or preview window) to the live view presenter: three slot
 /// textures with <see cref="TripleBufferIndex"/>, newest wins. The render thread draws about 30 times per second what
-/// the participant sees into its slot and never waits (CLAUDE.md rule 1); the presenter copies the newest slot into the
+/// the viewer sees into its slot and never waits (CLAUDE.md rule 1); the presenter copies the newest slot into the
 /// operator window.
 /// </summary>
 /// <remarks>
@@ -90,7 +90,7 @@ public sealed class LiveViewFrames : IDisposable
     public long LastFrameTimestamp => Volatile.Read(ref _lastFrameTimestamp);
 
     /// <summary>
-    /// Render thread: draws what the participant sees into the next slot if the live view is on and the last image is
+    /// Render thread: draws what the viewer sees into the next slot if the live view is on and the last image is
     /// at least <see cref="MinFrameInterval"/> old. Does not block and does not allocate.
     /// </summary>
     /// <param name="renderer">The render thread's panorama renderer.</param>

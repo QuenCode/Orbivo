@@ -15,6 +15,7 @@ Was sich von Version zu Version für Operatoren und Auswertung ändert. Neue Ein
 - Orbivo ist Open Source unter der Apache License 2.0: `LICENSE.txt` und `NOTICE.txt` liegen im Programmordner, „Über Orbivo“ nennt Copyright und Lizenz
 - Eigener, schlanker FFmpeg-Build (FFmpeg 9.0.2 mit dav1d und zlib, LGPL-2.1-or-later) statt des BtbN-Builds: deutlich kleiner, ohne rund 85 eingebaute Fremdbibliotheken. Der vollständige Quellcode liegt jedem GitHub-Release bei, Lizenztexte und Build-Angaben im Ordner `licenses`
 - Fragen und Fehler gehen jetzt an github.com/QuenCode/Orbivo/issues (steht am Ende der Anleitung)
+- Die Person mit Brille heißt in Operatorfenster und Anleitung jetzt „Zuschauer“ (englisch „viewer“). Das Bezeichnungsfeld der Aufzeichnung heißt jetzt „Sitzung“; im Start-Ereignis der Aufzeichnung steht entsprechend „Sitzung: …“, Spalten und Dateinamen bleiben gleich
 
 ## 1.1.0 – 2026-11-09
 

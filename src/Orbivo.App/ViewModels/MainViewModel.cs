@@ -219,7 +219,7 @@ public sealed class MainViewModel : ObservableObject
             _headsetEntry = new StatusEntry(UiText.StatusHeadset, UiText.Starting, StatusLevel.Neutral);
             _sessionEntry = new StatusEntry("Session", "–", StatusLevel.Neutral);
             _xrRenderEntry = new StatusEntry(UiText.StatusXrRender, "–", StatusLevel.Neutral);
-            _viewEntry = new StatusEntry(UiText.StatusViewParticipant, "–", StatusLevel.Neutral);
+            _viewEntry = new StatusEntry(UiText.StatusViewerGaze, "–", StatusLevel.Neutral);
             entries.AddRange(
             [
                 _headsetEntry, _sessionEntry, _xrRenderEntry, _gpuEntry, _playbackEntry, _outputEntry, _playlistEntry,
@@ -448,7 +448,7 @@ public sealed class MainViewModel : ObservableObject
 
     public string Title { get; }
 
-    /// <summary>Live view (F42): what the participant sees, in the operator window. Off at every start.</summary>
+    /// <summary>Live view (F42): what the viewer sees, in the operator window. Off at every start.</summary>
     public bool LiveViewEnabled
     {
         get => _liveViewEnabled;
@@ -605,7 +605,7 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>Big indicator: what the participant sees right now.</summary>
+    /// <summary>Big indicator: what the viewer sees right now.</summary>
     public string OutputText
     {
         get => _outputText;
@@ -851,7 +851,7 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The loaded video cannot be removed while it plays, pauses, opens or shows its last frame: the participant
+    /// The loaded video cannot be removed while it plays, pauses, opens or shows its last frame: the viewer
     /// would lose the picture by a slip. After Stop (black, ready) it can.
     /// </summary>
     private bool CanRemove(PlaylistEntry entry)
@@ -1219,7 +1219,7 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>What the participant sees (F40): video, still frame, or black, and blackout or fade on top.</summary>
+    /// <summary>What the viewer sees (F40): video, still frame, or black, and blackout or fade on top.</summary>
     private void ShowOutput(PlayerStatus status)
     {
         OutputLevel output = status.Output;

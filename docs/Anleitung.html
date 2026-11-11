@@ -169,10 +169,10 @@ und an alle, die die Aufzeichnungen auswerten.</p>
 berechnet und kommt über normale Stereo-Kopfhörer.</p>
 <ul>
   <li><strong>Operator:</strong> bedient alles am Desktop mit Maus und Tastatur.</li>
-  <li><strong>Proband:</strong> trägt Brille und Kopfhörer, sieht nur das Video (oder die Leerlauf-Ansicht) und bedient nichts.
+  <li><strong>Zuschauer:</strong> trägt Brille und Kopfhörer, sieht nur das Video (oder die Leerlauf-Ansicht) und bedient nichts.
     In der Brille erscheint nie ein Menü.</li>
 </ul>
-<p>Das Bild folgt nur der <em>Drehung</em> des Kopfes. Geht der Proband ein paar Schritte, bewegt sich das Bild nicht mit: Der Inhalt
+<p>Das Bild folgt nur der <em>Drehung</em> des Kopfes. Geht der Zuschauer ein paar Schritte, bewegt sich das Bild nicht mit: Der Inhalt
 steht wie ein Panorama in großer Entfernung.</p>
 
 <!-- ============================================================= -->
@@ -224,14 +224,14 @@ Orbivo.exe --lang en</pre>
   <li><strong>Varjo Base</strong> starten, die Brille ist verbunden. Danach <strong>Orbivo</strong> starten.</li>
   <li>Im Status (rechts) prüfen: <em>Brille</em> und <em>Session</em> grün, <em>Bildausgabe</em> zeigt etwa 90 fps,
     <em>Tonausgabe</em> zeigt die Kopfhörer.</li>
-  <li><strong>Aufzeichnung</strong> vorbereiten (falls gewünscht): Ordner prüfen, „Proband/Sitzung“ eintragen (z.&nbsp;B. <code>P07</code>),
+  <li><strong>Aufzeichnung</strong> vorbereiten (falls gewünscht): Ordner prüfen, „Sitzung“ eintragen (z.&nbsp;B. <code>P07</code>),
     „Aufzeichnen“ einschalten. Siehe <a href="#aufzeichnung">Aufzeichnung bedienen</a>.</li>
   <li>Videos in die <strong>Playlist</strong> ziehen (die Playlist der letzten Sitzung ist schon da) und das erste <strong>laden</strong>
     (Doppelklick). Die Brille zeigt weiter die Leerlauf-Ansicht.</li>
-  <li>Der Proband setzt Brille und Kopfhörer auf und schaut in die gewünschte Richtung. <kbd>R</kbd> (<strong>Recenter</strong>) macht
+  <li>Der Zuschauer setzt Brille und Kopfhörer auf und schaut in die gewünschte Richtung. <kbd>R</kbd> (<strong>Recenter</strong>) macht
     diese Blickrichtung zur Vorderseite des Videos.</li>
   <li>Für einen weichen Start vorher <kbd>F</kbd> (nach Schwarz ausblenden), dann <kbd>Leertaste</kbd> (Play), dann <kbd>F</kbd> (einblenden).</li>
-  <li>Während der Wiedergabe den großen Balken über der Zeitleiste beobachten: Er zeigt, was der Proband gerade sieht.
+  <li>Während der Wiedergabe den großen Balken über der Zeitleiste beobachten: Er zeigt, was der Zuschauer gerade sieht.
     Die <strong>Live-Ansicht</strong> zeigt es als Bild.</li>
   <li>Am Ende: <kbd>F</kbd> oder <kbd>B</kbd> (Schwarz), Stop, Aufzeichnung ausschalten. Die Dateien liegen im gewählten Ordner.</li>
 </ol>
@@ -250,7 +250,7 @@ Orbivo.exe --lang en</pre>
     Tonausgabe und Lautstärke sperren. <strong>Hilfe:</strong> Anleitung (<kbd>F1</kbd>), Über Orbivo (Version, Lizenzen, Log-Datei).</td></tr>
   <tr><td>Playlist (links oben)</td><td>Videos sammeln, ordnen, laden.</td></tr>
   <tr><td>Format (links)</td><td>Projektion, Stereo-Layout, Ausrichtung des geladenen Videos. Wird pro Video gespeichert.</td></tr>
-  <tr><td>Live-Ansicht (links unten)</td><td>Zeigt, was der Proband sieht. Bei jedem Start aus.</td></tr>
+  <tr><td>Live-Ansicht (links unten)</td><td>Zeigt, was der Zuschauer sieht. Bei jedem Start aus.</td></tr>
   <tr><td>Ton (rechts oben)</td><td>Audio-Modus, Tonformat, Ton fest am Bild, Breite, Ausgabegerät; Hinweis, wenn die Ton-Sperre an ist.</td></tr>
   <tr><td>Brille im Leerlauf</td><td>Was die Brille zeigt, solange kein Video läuft: Schwarz, Kamerabild oder Standbild.</td></tr>
   <tr><td>Aufzeichnung</td><td>Kopfbewegung und Ereignisse als CSV-Dateien schreiben.</td></tr>
@@ -283,8 +283,8 @@ angeschlossen ist), lässt Orbivo sie weg und nennt sie im Status unter „Playl
 
 <!-- ============================================================= -->
 <h2 id="wiedergabe">6. Wiedergabe und Tasten</h2>
-<p>Der große Balken zeigt, was der Proband gerade sieht, z.&nbsp;B. „Brille: Video läuft“, „Brille: Leerlauf: Schwarz (Video noch nicht
-gestartet)“ oder „Brille: SCHWARZBILD“. Grün heißt: Der Proband sieht Videobild.</p>
+<p>Der große Balken zeigt, was der Zuschauer gerade sieht, z.&nbsp;B. „Brille: Video läuft“, „Brille: Leerlauf: Schwarz (Video noch nicht
+gestartet)“ oder „Brille: SCHWARZBILD“. Grün heißt: Der Zuschauer sieht Videobild.</p>
 <ul>
   <li><strong>Zeitleiste:</strong> klicken oder ziehen, um zu springen.</li>
   <li><strong>Gehe zu:</strong> Zeit eintippen und <kbd>Enter</kbd>, z.&nbsp;B. <code>83</code>, <code>1:23</code>, <code>1:23.5</code> oder
@@ -324,7 +324,7 @@ gestartet)“ oder „Brille: SCHWARZBILD“. Grün heißt: Der Proband sieht Vi
 
 <!-- ============================================================= -->
 <h2 id="recenter">8. Recenter</h2>
-<p><strong>Recenter</strong> (<kbd>R</kbd>) macht die aktuelle Blickrichtung des Probanden zur Vorderseite (Mitte) des Videos.
+<p><strong>Recenter</strong> (<kbd>R</kbd>) macht die aktuelle Blickrichtung des Zuschauers zur Vorderseite (Mitte) des Videos.
 Nur die Drehung um die Hochachse zählt, Neigung bleibt, wie sie ist. Bild und Ton drehen gemeinsam.</p>
 <ul>
   <li>Gilt auch für die folgenden Videos und nach einem kurzen Verbindungsabbruch der Brille.</li>
@@ -369,12 +369,12 @@ kopiert, kopiert das Sidecar mit. „Alles automatisch“ verwirft die Einstellu
     </ul>
     Klingt Ambisonics falsch (Ton von der falschen Seite, von oben statt vorne, dumpf), das andere Ambisonics-Format versuchen.
     Beim Umschalten setzt der Ton kurz neu an. Die Wahl wird pro Video im Sidecar gespeichert.</li>
-  <li><strong>Ambisonics</strong> enthält das ganze Klangfeld rundherum. Orbivo berechnet daraus binaural, was der Proband mit seiner
+  <li><strong>Ambisonics</strong> enthält das ganze Klangfeld rundherum. Orbivo berechnet daraus binaural, was der Zuschauer mit seiner
     Kopfhaltung hört: Geräusche kommen aus ihrer Richtung im Video, auch von oben und unten.</li>
-  <li><strong>Ton fest am Bild</strong> (Standard an): Der Ton steht fest im Video. Dreht der Proband den Kopf, bleibt der Ton beim Bild.
+  <li><strong>Ton fest am Bild</strong> (Standard an): Der Ton steht fest im Video. Dreht der Zuschauer den Kopf, bleibt der Ton beim Bild.
     Bei Stereo kommen linker und rechter Kanal von zwei unsichtbaren Lautsprechern links und rechts der Bildmitte, bei Ambisonics bleibt
     das ganze Klangfeld am Bild. Aus: Der Ton dreht mit dem Kopf. Stereo geht dann unverändert auf die Kopfhörer (richtig für Aufnahmen,
-    die schon binaural sind), Ambisonics wird immer so gehört, als schaue der Proband nach vorne. Wird pro Video im Sidecar gespeichert.</li>
+    die schon binaural sind), Ambisonics wird immer so gehört, als schaue der Zuschauer nach vorne. Wird pro Video im Sidecar gespeichert.</li>
   <li><strong>Breite</strong> (nur Stereo): Winkel der beiden Lautsprecher zur Bildmitte, 30–90°, Standard 75°.</li>
   <li>Mono-Ton hat keine Richtung und bleibt immer auf beiden Ohren.</li>
   <li><strong>Tonausgabe</strong>: das Gerät der Kopfhörer. „Windows-Standard“ folgt dem Standardgerät; ein fest gewähltes Gerät wird nie
@@ -392,7 +392,7 @@ kopiert, kopiert das Sidecar mit. „Alles automatisch“ verwirft die Einstellu
 Videobild.</p>
 <ul>
   <li><strong>Schwarz</strong> (Standard).</li>
-  <li><strong>See-through (Kamerabild):</strong> Der Proband sieht durch die Kameras der XR-3 den Raum. Praktisch beim Aufsetzen.</li>
+  <li><strong>See-through (Kamerabild):</strong> Der Zuschauer sieht durch die Kameras der XR-3 den Raum. Praktisch beim Aufsetzen.</li>
   <li><strong>Standbild:</strong> ein Equirect-360°-Bild (PNG, JPG). Quadratisch gilt als Top-Bottom-Stereo, 4:1 als Side-by-Side,
     sonst Mono.</li>
 </ul>
@@ -400,7 +400,7 @@ Videobild.</p>
 
 <!-- ============================================================= -->
 <h2 id="liveansicht">12. Live-Ansicht</h2>
-<p>„Anzeigen“ zeigt etwa 30-mal pro Sekunde, was der Proband sieht, aus seinem Blickwinkel (beide Augen zusammen, bei Stereo das linke
+<p>„Anzeigen“ zeigt etwa 30-mal pro Sekunde, was der Zuschauer sieht, aus seinem Blickwinkel (beide Augen zusammen, bei Stereo das linke
 Halbbild), mit Schwarzbild und Fade. Das Kamerabild kann sie nicht zeigen, dann steht dort „See-through“. Die Live-Ansicht ist bei jedem
 Start aus; ausgeschaltet kostet sie keine Rechenzeit.</p>
 
@@ -417,7 +417,7 @@ grau = keine Angabe.</p>
   <tr><td>Wiedergabe, Ausgabe, Playlist, Video</td><td>Zustand, Schwarzbild/Fade, Position in der Playlist, Datei und Format.</td></tr>
   <tr><td>Decoder</td><td>Hardware (normal) oder Software (langsamer), dekodierte Bilder pro Sekunde, Puffer, verworfene Bilder. „Puffer läuft leer“ heißt: Der Rechner schafft das Video nicht flüssig.</td></tr>
   <tr><td>Ton, Tonausgabe, A/V</td><td>Ton des Videos, Ausgabegerät, Abweichung zwischen Bild und Ton.</td></tr>
-  <tr><td>Blick (Proband)</td><td>Blickrichtung im Video, Yaw und Pitch in Grad (siehe <a href="#daten-achsen">Achsen und Winkel</a>).</td></tr>
+  <tr><td>Blick (Zuschauer)</td><td>Blickrichtung im Video, Yaw und Pitch in Grad (siehe <a href="#daten-achsen">Achsen und Winkel</a>).</td></tr>
   <tr><td>Recenter</td><td>Aktueller Recenter-Winkel.</td></tr>
   <tr><td>FFmpeg, Steam Audio, OpenXR</td><td>Mitgelieferte Bibliotheken. Rot heißt: Datei fehlt oder ist falsch, das ZIP neu entpacken.</td></tr>
   <tr><td>Log-Datei</td><td>Pfad des Diagnose-Logs dieser Sitzung. Bei Problemen mitschicken.</td></tr>
@@ -433,7 +433,7 @@ grau = keine Angabe.</p>
     Stop, Videoende, Entladen, ein anderes Video oder ein Fehler beenden es. Pause bleibt im selben Paar. Ohne laufendes Video wird nichts
     geschrieben. Nur änderbar, solange die Aufzeichnung aus ist.</li>
   <li><strong>Ordner</strong>: Standard <code>Dokumente\Orbivo\Aufzeichnungen</code>, wird gespeichert.</li>
-  <li><strong>Proband/Sitzung</strong>: optional, wird Teil des Dateinamens. Wird nicht gespeichert.</li>
+  <li><strong>Sitzung</strong>: optional, wird Teil des Dateinamens. Wird nicht gespeichert.</li>
   <li><strong>Kopf-Rate</strong>: Zeilen pro Sekunde in der Kopf-CSV: jedes Bild (90 Hz), 45, 30 (Standard) oder 10 Hz. Wirkt sofort.</li>
 </ul>
 <p>Darunter stehen Zustand, Dateiname und Zeilenzahl. Kann Orbivo nicht schreiben (Ordner fehlt, Platte voll), endet die Aufzeichnung mit
@@ -454,7 +454,7 @@ einer roten Meldung; die Wiedergabe läuft weiter.</p>
 mit „Nur bei laufendem Video“:
 2026-11-08_141530_P07_wald_kopf.csv
 2026-11-08_141530_P07_wald_ereignisse.csv</pre>
-<p>Aufbau: Datum und Uhrzeit des Beginns, optional Proband/Sitzung, optional Videoname (ohne Endung). Gibt es den Namen schon, hängt
+<p>Aufbau: Datum und Uhrzeit des Beginns, optional Sitzung, optional Videoname (ohne Endung). Gibt es den Namen schon, hängt
 Orbivo <code>_2</code>, <code>_3</code> … an. Es wird nie eine Datei überschrieben.</p>
 <p><strong>Format:</strong> Trennzeichen Semikolon, Dezimalkomma, UTF-8 mit BOM, erste Zeile = Spaltennamen. Ein deutsches Excel öffnet
 die Dateien per Doppelklick richtig. In anderen Programmen beim Einlesen angeben: Trennzeichen <code>;</code>, Dezimaltrennzeichen
@@ -479,14 +479,14 @@ dahin vollständig.</p>
   <tr><td><code>Kopf_qw … Kopf_qz</code></td><td>Kopfdrehung als Quaternion (w, x, y, z), siehe <a href="#daten-quaternion">Quaternion</a>.</td><td><code>0,991445</code> …</td></tr>
   <tr><td><code>Kopf_Yaw_Grad</code></td><td>Kopf nach links/rechts gedreht. <strong>Positiv = links.</strong> −180 bis 180.</td><td><code>35,20</code></td></tr>
   <tr><td><code>Kopf_Pitch_Grad</code></td><td>Kopf nach oben/unten geneigt. <strong>Positiv = oben.</strong> −90 bis 90.</td><td><code>-8,75</code></td></tr>
-  <tr><td><code>Kopf_Roll_Grad</code></td><td>Kopf zur Schulter gekippt. <strong>Positiv = linkes Ohr nach unten</strong> (gegen den Uhrzeigersinn, wie der Proband es sieht).</td><td><code>2,10</code></td></tr>
-  <tr><td><code>Blick_Video_Yaw_Grad</code></td><td>Wohin der Proband <em>im Video</em> schaut, links/rechts. 0 = Bildmitte (Vorderseite des Videos), positiv = links davon.</td><td><code>35,20</code></td></tr>
-  <tr><td><code>Blick_Video_Pitch_Grad</code></td><td>Wohin der Proband im Video schaut, oben/unten. 0 = Horizont des Videos, positiv = oberhalb.</td><td><code>-8,75</code></td></tr>
-  <tr><td><code>Recenter_Yaw_Grad</code></td><td>Recenter-Winkel in diesem Moment (0 = kein Recenter). Positiv: Der Proband schaute beim Recenter nach links.</td><td><code>0</code></td></tr>
+  <tr><td><code>Kopf_Roll_Grad</code></td><td>Kopf zur Schulter gekippt. <strong>Positiv = linkes Ohr nach unten</strong> (gegen den Uhrzeigersinn, wie der Zuschauer es sieht).</td><td><code>2,10</code></td></tr>
+  <tr><td><code>Blick_Video_Yaw_Grad</code></td><td>Wohin der Zuschauer <em>im Video</em> schaut, links/rechts. 0 = Bildmitte (Vorderseite des Videos), positiv = links davon.</td><td><code>35,20</code></td></tr>
+  <tr><td><code>Blick_Video_Pitch_Grad</code></td><td>Wohin der Zuschauer im Video schaut, oben/unten. 0 = Horizont des Videos, positiv = oberhalb.</td><td><code>-8,75</code></td></tr>
+  <tr><td><code>Recenter_Yaw_Grad</code></td><td>Recenter-Winkel in diesem Moment (0 = kein Recenter). Positiv: Der Zuschauer schaute beim Recenter nach links.</td><td><code>0</code></td></tr>
 </table>
 </div>
 <div class="note">
-  <p><strong>Was sah der Proband?</strong> Videobild sah er, wenn <code>Inhalt = Video</code> und <code>Helligkeit &gt; 0</code>.
+  <p><strong>Was sah der Zuschauer?</strong> Videobild sah er, wenn <code>Inhalt = Video</code> und <code>Helligkeit &gt; 0</code>.
   Bei <code>Helligkeit = 0</code> war es schwarz, gleich was in <code>Inhalt</code> steht.</p>
 </div>
 
@@ -550,7 +550,7 @@ Bereich −90° bis +90°.</figcaption>
     <marker id="ah-r" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--roll)"/></marker>
   </defs>
   <text x="130" y="18" text-anchor="middle" font-size="14" font-weight="600">Roll – von hinten gesehen</text>
-  <text x="130" y="36" text-anchor="middle" font-size="12">(Blick wie der Proband, nach vorn)</text>
+  <text x="130" y="36" text-anchor="middle" font-size="12">(Blick wie der Zuschauer, nach vorn)</text>
   <ellipse cx="130" cy="125" rx="34" ry="42" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.5"/>
   <ellipse cx="94" cy="128" rx="5" ry="11" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.2"/>
   <ellipse cx="166" cy="128" rx="5" ry="11" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.2"/>
@@ -562,13 +562,13 @@ Bereich −90° bis +90°.</figcaption>
   <text x="130" y="212" text-anchor="middle" font-size="12">Kopf gerade: 0°</text>
 </svg>
 <figcaption><strong>Roll</strong> (um die Blickachse): positiv = Kopf zur <strong>linken</strong> Schulter kippen
-(gegen den Uhrzeigersinn, wie der Proband es sieht). Bereich −180° bis +180°.</figcaption>
+(gegen den Uhrzeigersinn, wie der Zuschauer es sieht). Bereich −180° bis +180°.</figcaption>
 </figure>
 </div>
 
 <p><strong>Reihenfolge:</strong> Die drei Winkel sind so zu lesen: zuerst um die senkrechte Achse des Raums um Yaw drehen, dann den Kopf
 um seine eigene Querachse um Pitch neigen, dann um die eigene Blickachse um Roll kippen. Yaw und Pitch beschreiben also die
-<em>Blickrichtung</em> (wie Längen- und Breitengrad), Roll nur das Kippen um diese Richtung. Schaut der Proband fast senkrecht nach oben oder
+<em>Blickrichtung</em> (wie Längen- und Breitengrad), Roll nur das Kippen um diese Richtung. Schaut der Zuschauer fast senkrecht nach oben oder
 unten, ist Yaw nicht eindeutig; Orbivo setzt ihn dann auf 0 und rechnet die Drehung in Roll.</p>
 
 <p><strong>Bezug von <code>Kopf_…</code>:</strong> der Raum, wie Varjo Base ihn festlegt („vorn“ ist die Richtung, die Varjo Base beim Einrichten
@@ -577,7 +577,7 @@ nicht.</p>
 
 <h3 id="daten-blick">15.4 Kopf und Blick im Video</h3>
 <p>Für die meisten Auswertungen ist <code>Blick_Video_…</code> die richtige Spalte: Sie sagt, auf welche Stelle <em>des Videos</em> der
-Proband schaut. Sie berücksichtigt Recenter und die Ausrichtung des Videos (Format → Ausrichtung). <code>Kopf_…</code> dagegen ist die reine
+Zuschauer schaut. Sie berücksichtigt Recenter und die Ausrichtung des Videos (Format → Ausrichtung). <code>Kopf_…</code> dagegen ist die reine
 Kopfhaltung im Raum.</p>
 <p>Ohne Neigung und Kippung in der Ausrichtung des Videos (Pitch und Roll dort 0) gilt:</p>
 <pre>Blick_Video_Yaw   = Kopf_Yaw − Recenter_Yaw − Ausrichtung_Yaw     (auf −180 … 180 gebracht)
@@ -586,14 +586,14 @@ Blick_Video_Pitch = Kopf_Pitch</pre>
 „Format“) und im Sidecar. Der Blick hat keine Roll-Spalte: Für die Frage „wohin schaut er“ spielt Roll keine Rolle.</p>
 <div class="note">
   <p><strong>Wichtig:</strong> „Blick“ heißt hier <em>Kopfrichtung</em>, also die Mitte des Sichtfelds der Brille. Die Augenbewegung innerhalb
-  des Sichtfelds misst Orbivo nicht (kein Eye-Tracking). Das Sichtfeld der XR-3 ist etwa 115° breit, der Proband kann also auch Dinge
+  des Sichtfelds misst Orbivo nicht (kein Eye-Tracking). Das Sichtfeld der XR-3 ist etwa 115° breit, der Zuschauer kann also auch Dinge
   sehen, die bis zu gut 50° neben der Blickrichtung liegen.</p>
 </div>
 
 <h4>Beispiel</h4>
 <pre>Sekunden ;Videozeit_s;Kopf_Yaw_Grad;Kopf_Pitch_Grad;Blick_Video_Yaw_Grad;Blick_Video_Pitch_Grad;Recenter_Yaw_Grad
 12,033333;12,000     ;50,00        ;-10,00         ;30,00               ;-10,00                ;20,00</pre>
-<p>Beim Recenter schaute der Proband 20° nach links; das wurde die Bildmitte. Jetzt ist sein Kopf 50° nach links und 10° nach unten gedreht.
+<p>Beim Recenter schaute der Zuschauer 20° nach links; das wurde die Bildmitte. Jetzt ist sein Kopf 50° nach links und 10° nach unten gedreht.
 Im Video schaut er also 30° links der Bildmitte, 10° unter den Horizont, und zwar auf das Bild bei Sekunde 12,0 des Videos.</p>
 
 <h3 id="daten-pixel">15.5 Vom Winkel zum Bildpunkt</h3>
@@ -657,7 +657,7 @@ Pitch = asin(vorn_y)</pre>
   <li><strong>Sekunden</strong> beginnt bei 0 am Anfang des Dateipaars. Mit „Nur bei laufendem Video“ liegt 0 beim Play-Befehl, der das Video
     gestartet hat; das erste Videobild kommt kurz danach.</li>
   <li>In der Brille ist der Zeitpunkt jeder Kopfzeile der Moment, in dem das Bild in der Brille <em>angezeigt</em> wurde (die vorhergesagte Anzeigezeit,
-    die Varjo Base für jedes Bild liefert, kurz nach dem Rechnen). Kopfhaltung, Videozeit und Helligkeit einer Zeile passen also zu dem, was der Proband in
+    die Varjo Base für jedes Bild liefert, kurz nach dem Rechnen). Kopfhaltung, Videozeit und Helligkeit einer Zeile passen also zu dem, was der Zuschauer in
     diesem Moment sah.</li>
   <li><strong>Rate:</strong> In der Brille entstehen 90 Bilder pro Sekunde. Bei 45, 30 oder 10 Hz nimmt Orbivo davon jedes 2., 3. bzw.
     9. Bild. Die Abstände sind daher Vielfache von 11,1 ms und schwanken leicht. Für Auswertungen die Spalte <code>Sekunden</code> nehmen,
@@ -681,7 +681,7 @@ Pitch = asin(vorn_y)</pre>
 <div class="table-wrap">
 <table>
   <tr><th>Ereignis</th><th>Wann</th></tr>
-  <tr><td>Aufzeichnung</td><td>Start (mit Orbivo-Version, Kopf-Rate, Proband/Sitzung, Rechner, Zeitzone, ggf. vollem Videopfad) und Ende.</td></tr>
+  <tr><td>Aufzeichnung</td><td>Start (mit Orbivo-Version, Kopf-Rate, Sitzung, Rechner, Zeitzone, ggf. vollem Videopfad) und Ende.</td></tr>
   <tr><td>Laden, Entladen</td><td>Ein Video wird geöffnet bzw. geschlossen.</td></tr>
   <tr><td>Play, Pause, Stop, Seek</td><td>Befehle des Operators (Seek mit Ziel).</td></tr>
   <tr><td>Zustand</td><td>Die Wiedergabe hat ihren Zustand gewechselt (Bereit, Läuft, Pause, Ende …). Zwischen „Play“ und „Zustand: Läuft“ liegen einige Millisekunden.</td></tr>
@@ -728,7 +728,7 @@ print(video[["Videozeit_s", "Blick_Video_Yaw_Grad", "Blick_Video_Pitch_Grad"]].d
     die letzten 30 bleiben immer.</td></tr>
 </table>
 </div>
-<p>Nicht gespeichert werden absichtlich: Stumm, Recenter, Live-Ansicht, Proband/Sitzung.
+<p>Nicht gespeichert werden absichtlich: Stumm, Recenter, Live-Ansicht, Sitzung.
 Um alle Einstellungen zurückzusetzen, Orbivo beenden und <code>settings.json</code> löschen; Orbivo startet dann englisch wie beim
 allerersten Start.</p>
 
@@ -741,7 +741,7 @@ allerersten Start.</p>
   <tr><td>Brille zeigt nichts, Balken sagt „Leerlauf: Schwarz“</td><td>Kein Video läuft: Video laden und Play. Oder die Leerlauf-Ansicht umstellen.</td></tr>
   <tr><td>Balken sagt „SCHWARZBILD“</td><td><kbd>B</kbd> drücken bzw. <kbd>F</kbd> zum Einblenden.</td></tr>
   <tr><td>Bild verzerrt, doppelt oder Tiefe falsch</td><td>Format prüfen: Projektion, Stereo-Layout, Augen tauschen. Wird pro Video gespeichert.</td></tr>
-  <tr><td>Vorne im Video ist nicht vorne</td><td>Proband in die gewünschte Richtung schauen lassen, <kbd>R</kbd>. Für ein Video dauerhaft: Format → Ausrichtung (Yaw).</td></tr>
+  <tr><td>Vorne im Video ist nicht vorne</td><td>Zuschauer in die gewünschte Richtung schauen lassen, <kbd>R</kbd>. Für ein Video dauerhaft: Format → Ausrichtung (Yaw).</td></tr>
   <tr><td>Kein Ton</td><td>Stumm (<kbd>M</kbd>)? Schwarzbild? Lautstärke? „Tonausgabe“ im Status prüfen, Gerät wählen, „Aktualisieren“. Steht im Bereich Ton „Gesperrt“, erst unter Optionen entsperren.</td></tr>
   <tr><td>Ton kommt nicht aus der Richtung des Bildes</td><td>„Ton fest am Bild“ an? Bei Mono-Ton gibt es keine Richtung. Windows-„Spatial Sound“ für die Kopfhörer ausschalten.</td></tr>
   <tr><td>Ambisonics klingt verdreht, von oben oder dumpf</td><td>„Tonformat“ prüfen: das andere Ambisonics-Format (AmbiX bzw. FuMa) wählen. Sind die 4 Kanäle gar kein Ambisonics, „Kanäle“ wählen.</td></tr>

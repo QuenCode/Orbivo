@@ -409,7 +409,7 @@ public sealed class SessionRecorder : IDisposable
 
         string label = CleanLabel(options.Label);
         var start = new StringBuilder();
-        start.Append(CultureInfo.InvariantCulture, $"Start. Orbivo {options.AppVersion}, Kopf-Log: {DescribeRate(_rateHz)}, Proband/Sitzung: {(label.Length == 0 ? "–" : label)}");
+        start.Append(CultureInfo.InvariantCulture, $"Start. Orbivo {options.AppVersion}, Kopf-Log: {DescribeRate(_rateHz)}, Sitzung: {(label.Length == 0 ? "–" : label)}");
         if (options.PerVideo)
         {
             start.Append(CultureInfo.InvariantCulture, $", ein Dateipaar je Video, Video: {videoFile ?? "–"}");

@@ -16,7 +16,7 @@ public sealed record RecordingRateChoice(int RateHz, string Label)
 
 /// <summary>
 /// The "Aufzeichnung" group of the operator window (F50–F52): head log and event log on or off, target folder,
-/// participant/session label, head log rate and "Nur bei laufendem Video". The app starts and stops the recorder on
+/// session label, head log rate and "Nur bei laufendem Video". The app starts and stops the recorder on
 /// <see cref="EnabledChanged"/>; on, folder, rate and mode are kept in the settings, the label only for this session.
 /// </summary>
 public sealed class RecordingViewModel : ObservableObject
@@ -101,7 +101,7 @@ public sealed class RecordingViewModel : ObservableObject
 
     public string Folder => _folder;
 
-    /// <summary>Participant or session, part of the file names (not kept).</summary>
+    /// <summary>Viewer or session, part of the file names (not kept).</summary>
     public string Label
     {
         get => _label;

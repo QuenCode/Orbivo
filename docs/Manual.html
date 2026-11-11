@@ -169,10 +169,10 @@ everyone who analyzes the recordings.</p>
 through normal stereo headphones.</p>
 <ul>
   <li><strong>Operator:</strong> controls everything at the desktop with mouse and keyboard.</li>
-  <li><strong>Participant:</strong> wears headset and headphones, sees only the video (or the idle view) and controls nothing.
+  <li><strong>Viewer:</strong> wears headset and headphones, sees only the video (or the idle view) and controls nothing.
     A menu never appears in the headset.</li>
 </ul>
-<p>The picture follows only the <em>rotation</em> of the head. If the participant takes a few steps, the picture does not move along:
+<p>The picture follows only the <em>rotation</em> of the head. If the viewer takes a few steps, the picture does not move along:
 the content stands like a panorama far away.</p>
 
 <!-- ============================================================= -->
@@ -225,14 +225,14 @@ Orbivo.exe --lang de</pre>
   <li>Start <strong>Varjo Base</strong>, the headset is connected. Then start <strong>Orbivo</strong>.</li>
   <li>Check the status (on the right): <em>Headset</em> and <em>Session</em> green, <em>Picture output</em> shows about 90 fps,
     <em>Sound output</em> shows the headphones.</li>
-  <li>Prepare the <strong>recording</strong> (if wanted): check the folder, enter “Participant/session” (e.g. <code>P07</code>),
+  <li>Prepare the <strong>recording</strong> (if wanted): check the folder, enter “Session” (e.g. <code>P07</code>),
     switch on “Record”. See <a href="#recording">Using the recording</a>.</li>
   <li>Drag videos into the <strong>playlist</strong> (the playlist of the last session is already there) and <strong>load</strong> the first one
     (double-click). The headset keeps showing the idle view.</li>
-  <li>The participant puts on headset and headphones and looks in the desired direction. <kbd>R</kbd> (<strong>Recenter</strong>) makes
+  <li>The viewer puts on headset and headphones and looks in the desired direction. <kbd>R</kbd> (<strong>Recenter</strong>) makes
     this viewing direction the front of the video.</li>
   <li>For a soft start, first <kbd>F</kbd> (fade out to black), then <kbd>Space</kbd> (Play), then <kbd>F</kbd> (fade in).</li>
-  <li>During playback, watch the big bar above the timeline: it shows what the participant sees right now.
+  <li>During playback, watch the big bar above the timeline: it shows what the viewer sees right now.
     The <strong>live view</strong> shows it as a picture.</li>
   <li>At the end: <kbd>F</kbd> or <kbd>B</kbd> (black), Stop, switch off the recording. The files are in the chosen folder.</li>
 </ol>
@@ -251,7 +251,7 @@ Orbivo.exe --lang de</pre>
     lock sound output and volume. <strong>Help:</strong> manual (<kbd>F1</kbd>), about Orbivo (version, licenses, log file).</td></tr>
   <tr><td>Playlist (top left)</td><td>Collect, order and load videos.</td></tr>
   <tr><td>Format (left)</td><td>Projection, stereo layout, orientation of the loaded video. Saved per video.</td></tr>
-  <tr><td>Live view (bottom left)</td><td>Shows what the participant sees. Off at every start.</td></tr>
+  <tr><td>Live view (bottom left)</td><td>Shows what the viewer sees. Off at every start.</td></tr>
   <tr><td>Sound (top right)</td><td>Audio mode, sound format, sound fixed to the picture, width, output device; a note while the sound lock is on.</td></tr>
   <tr><td>Headset while idle</td><td>What the headset shows while no video runs: black, camera picture or still image.</td></tr>
   <tr><td>Recording</td><td>Write head movement and events as CSV files.</td></tr>
@@ -284,8 +284,8 @@ out and names it in the status under “Playlist”.</p>
 
 <!-- ============================================================= -->
 <h2 id="playback">6. Playback and keys</h2>
-<p>The big bar shows what the participant sees right now, e.g. “Headset: Video playing”, “Headset: Idle: Black (video not started
-yet)” or “Headset: BLACKOUT”. Green means: the participant sees the video picture.</p>
+<p>The big bar shows what the viewer sees right now, e.g. “Headset: Video playing”, “Headset: Idle: Black (video not started
+yet)” or “Headset: BLACKOUT”. Green means: the viewer sees the video picture.</p>
 <ul>
   <li><strong>Timeline:</strong> click or drag to jump.</li>
   <li><strong>Go to:</strong> type a time and press <kbd>Enter</kbd>, e.g. <code>83</code>, <code>1:23</code>, <code>1:23.5</code> or
@@ -325,7 +325,7 @@ yet)” or “Headset: BLACKOUT”. Green means: the participant sees the video 
 
 <!-- ============================================================= -->
 <h2 id="recenter">8. Recenter</h2>
-<p><strong>Recenter</strong> (<kbd>R</kbd>) makes the current viewing direction of the participant the front (center) of the video.
+<p><strong>Recenter</strong> (<kbd>R</kbd>) makes the current viewing direction of the viewer the front (center) of the video.
 Only the turn about the vertical axis counts; the tilt stays as it is. Picture and sound turn together.</p>
 <ul>
   <li>Also applies to the following videos and after a short loss of the headset connection.</li>
@@ -370,12 +370,12 @@ copies the video copies the sidecar along. “All automatic” discards the sett
     </ul>
     If Ambisonics sounds wrong (sound from the wrong side, from above instead of the front, dull), try the other Ambisonics format.
     On switching, the sound restarts briefly. The choice is saved per video in the sidecar.</li>
-  <li><strong>Ambisonics</strong> contains the whole sound field all around. From it Orbivo computes binaurally what the participant hears with
+  <li><strong>Ambisonics</strong> contains the whole sound field all around. From it Orbivo computes binaurally what the viewer hears with
     the current head position: sounds come from their direction in the video, also from above and below.</li>
-  <li><strong>Sound fixed to the picture</strong> (on by default): the sound stays fixed in the video. When the participant turns the head, the
+  <li><strong>Sound fixed to the picture</strong> (on by default): the sound stays fixed in the video. When the viewer turns the head, the
     sound stays with the picture. With stereo, the left and right channels come from two invisible speakers left and right of the center
     of the picture; with Ambisonics the whole sound field stays with the picture. Off: the sound turns with the head. Stereo then goes to the
-    headphones unchanged (right for recordings that are binaural already), Ambisonics is always heard as if the participant looked to the
+    headphones unchanged (right for recordings that are binaural already), Ambisonics is always heard as if the viewer looked to the
     front. Saved per video in the sidecar.</li>
   <li><strong>Width</strong> (stereo only): angle of the two speakers to the center of the picture, 30–90°, default 75°.</li>
   <li>Mono sound has no direction and always stays on both ears.</li>
@@ -394,7 +394,7 @@ copies the video copies the sidecar along. “All automatic” discards the sett
 the video picture.</p>
 <ul>
   <li><strong>Black</strong> (default).</li>
-  <li><strong>See-through (camera picture):</strong> the participant sees the room through the cameras of the XR-3. Handy when putting the
+  <li><strong>See-through (camera picture):</strong> the viewer sees the room through the cameras of the XR-3. Handy when putting the
     headset on.</li>
   <li><strong>Still image:</strong> an equirect 360° image (PNG, JPG). Square counts as top-bottom stereo, 4:1 as side-by-side,
     otherwise mono.</li>
@@ -403,7 +403,7 @@ the video picture.</p>
 
 <!-- ============================================================= -->
 <h2 id="liveview">12. Live view</h2>
-<p>“Show” shows about 30 times per second what the participant sees, from their point of view (both eyes combined, with stereo the left
+<p>“Show” shows about 30 times per second what the viewer sees, from their point of view (both eyes combined, with stereo the left
 half picture), with blackout and fade. It cannot show the camera picture; it then says “See-through”. The live view is off at every
 start; switched off it costs no computing time.</p>
 
@@ -420,7 +420,7 @@ gray = nothing to report.</p>
   <tr><td>Playback, Output, Playlist, Video</td><td>State, blackout/fade, position in the playlist, file and format.</td></tr>
   <tr><td>Decoder</td><td>Hardware (normal) or software (slower), decoded frames per second, buffer, dropped frames. “The buffer runs empty” means: the computer cannot play the video smoothly.</td></tr>
   <tr><td>Sound, Sound output, A/V</td><td>Sound of the video, output device, deviation between picture and sound.</td></tr>
-  <tr><td>View (participant)</td><td>Viewing direction in the video, yaw and pitch in degrees (see <a href="#data-axes">Axes and angles</a>).</td></tr>
+  <tr><td>Gaze (viewer)</td><td>Viewing direction in the video, yaw and pitch in degrees (see <a href="#data-axes">Axes and angles</a>).</td></tr>
   <tr><td>Recenter</td><td>Current recenter angle.</td></tr>
   <tr><td>FFmpeg, Steam Audio, OpenXR</td><td>Bundled libraries. Red means: a file is missing or wrong, unpack the ZIP again.</td></tr>
   <tr><td>Log file</td><td>Path of the diagnostic log of this session. Send it along when there are problems.</td></tr>
@@ -436,7 +436,7 @@ gray = nothing to report.</p>
     Stop, the end of the video, unloading, another video or an error end it. Pause stays in the same pair. Nothing is written without a
     running video. Can only be changed while the recording is off.</li>
   <li><strong>Folder</strong>: default <code>Documents\Orbivo\Aufzeichnungen</code>, saved.</li>
-  <li><strong>Participant/session</strong>: optional, becomes part of the file name. Not saved.</li>
+  <li><strong>Session</strong>: optional, becomes part of the file name. Not saved.</li>
   <li><strong>Head rate</strong>: rows per second in the head CSV: every frame (90 Hz), 45, 30 (default) or 10 Hz. Takes effect at once.</li>
 </ul>
 <p>Below are the state, the file name and the number of rows. If Orbivo cannot write (folder missing, disk full), the recording ends with
@@ -457,7 +457,7 @@ a red message; the playback goes on.</p>
 with “Only while a video runs”:
 2026-11-08_141530_P07_wald_kopf.csv
 2026-11-08_141530_P07_wald_ereignisse.csv</pre>
-<p>Structure: date and time of the start, optionally participant/session, optionally the name of the video (without extension). If the name
+<p>Structure: date and time of the start, optionally session, optionally the name of the video (without extension). If the name
 exists already, Orbivo appends <code>_2</code>, <code>_3</code> … A file is never overwritten.</p>
 <p><strong>Format:</strong> separator semicolon, decimal comma, UTF-8 with BOM, first row = column names. A German Excel opens the files
 correctly with a double-click. In other programs, state when importing: separator <code>;</code>, decimal separator
@@ -484,14 +484,14 @@ then.</p>
   <tr><td><code>Kopf_qw … Kopf_qz</code></td><td>Head rotation as a quaternion (w, x, y, z), see <a href="#data-quaternion">Quaternion</a>.</td><td><code>0,991445</code> …</td></tr>
   <tr><td><code>Kopf_Yaw_Grad</code></td><td>Head turned left/right, in degrees. <strong>Positive = left.</strong> −180 to 180.</td><td><code>35,20</code></td></tr>
   <tr><td><code>Kopf_Pitch_Grad</code></td><td>Head tilted up/down. <strong>Positive = up.</strong> −90 to 90.</td><td><code>-8,75</code></td></tr>
-  <tr><td><code>Kopf_Roll_Grad</code></td><td>Head tilted to the shoulder. <strong>Positive = left ear down</strong> (counterclockwise, as the participant sees it).</td><td><code>2,10</code></td></tr>
-  <tr><td><code>Blick_Video_Yaw_Grad</code></td><td>Where the participant looks <em>in the video</em> (Blick = view), left/right. 0 = center of the picture (front of the video), positive = left of it.</td><td><code>35,20</code></td></tr>
-  <tr><td><code>Blick_Video_Pitch_Grad</code></td><td>Where the participant looks in the video, up/down. 0 = horizon of the video, positive = above.</td><td><code>-8,75</code></td></tr>
-  <tr><td><code>Recenter_Yaw_Grad</code></td><td>Recenter angle at this moment (0 = no recenter). Positive: the participant looked to the left at the recenter.</td><td><code>0</code></td></tr>
+  <tr><td><code>Kopf_Roll_Grad</code></td><td>Head tilted to the shoulder. <strong>Positive = left ear down</strong> (counterclockwise, as the viewer sees it).</td><td><code>2,10</code></td></tr>
+  <tr><td><code>Blick_Video_Yaw_Grad</code></td><td>Where the viewer looks <em>in the video</em> (Blick = view), left/right. 0 = center of the picture (front of the video), positive = left of it.</td><td><code>35,20</code></td></tr>
+  <tr><td><code>Blick_Video_Pitch_Grad</code></td><td>Where the viewer looks in the video, up/down. 0 = horizon of the video, positive = above.</td><td><code>-8,75</code></td></tr>
+  <tr><td><code>Recenter_Yaw_Grad</code></td><td>Recenter angle at this moment (0 = no recenter). Positive: the viewer looked to the left at the recenter.</td><td><code>0</code></td></tr>
 </table>
 </div>
 <div class="note">
-  <p><strong>What did the participant see?</strong> They saw the video picture if <code>Inhalt = Video</code> and <code>Helligkeit &gt; 0</code>.
+  <p><strong>What did the viewer see?</strong> They saw the video picture if <code>Inhalt = Video</code> and <code>Helligkeit &gt; 0</code>.
   At <code>Helligkeit = 0</code> it was black, whatever <code>Inhalt</code> says.</p>
 </div>
 
@@ -555,7 +555,7 @@ Range −90° to +90°.</figcaption>
     <marker id="ah-r" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--roll)"/></marker>
   </defs>
   <text x="130" y="18" text-anchor="middle" font-size="14" font-weight="600">Roll – seen from behind</text>
-  <text x="130" y="36" text-anchor="middle" font-size="12">(looking ahead like the participant)</text>
+  <text x="130" y="36" text-anchor="middle" font-size="12">(looking ahead like the viewer)</text>
   <ellipse cx="130" cy="125" rx="34" ry="42" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.5"/>
   <ellipse cx="94" cy="128" rx="5" ry="11" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.2"/>
   <ellipse cx="166" cy="128" rx="5" ry="11" fill="var(--soft)" stroke="var(--fg)" stroke-width="1.2"/>
@@ -567,37 +567,37 @@ Range −90° to +90°.</figcaption>
   <text x="130" y="212" text-anchor="middle" font-size="12">head upright: 0°</text>
 </svg>
 <figcaption><strong>Roll</strong> (about the viewing axis): positive = tilt the head to the <strong>left</strong> shoulder
-(counterclockwise, as the participant sees it). Range −180° to +180°.</figcaption>
+(counterclockwise, as the viewer sees it). Range −180° to +180°.</figcaption>
 </figure>
 </div>
 
 <p><strong>Order:</strong> read the three angles like this: first turn by yaw about the vertical axis of the room, then tilt the head by
 pitch about its own transverse axis, then by roll about its own viewing axis. Yaw and pitch therefore describe the
-<em>viewing direction</em> (like longitude and latitude), roll only the tilt about this direction. If the participant looks almost straight
+<em>viewing direction</em> (like longitude and latitude), roll only the tilt about this direction. If the viewer looks almost straight
 up or down, yaw is ambiguous; Orbivo then sets it to 0 and counts the turn in roll.</p>
 
 <p><strong>Reference of <code>Kopf_…</code>:</strong> the room as Varjo Base defines it (“ahead” is the direction that Varjo Base set as ahead
 during setup or at the last recenter in Varjo Base). Recenter and the orientation of the video in Orbivo do not change these columns.</p>
 
 <h3 id="data-gaze">15.4 Head and view in the video</h3>
-<p>For most analyses <code>Blick_Video_…</code> is the right column: it says which spot <em>of the video</em> the participant looks at.
+<p>For most analyses <code>Blick_Video_…</code> is the right column: it says which spot <em>of the video</em> the viewer looks at.
 It takes recenter and the orientation of the video (Format → Orientation) into account. <code>Kopf_…</code>, on the other hand, is the bare
 head posture in the room.</p>
 <p>Without pitch and roll in the orientation of the video (both 0 there):</p>
 <pre>Blick_Video_Yaw   = Kopf_Yaw − Recenter_Yaw − orientation yaw     (brought to −180 … 180)
 Blick_Video_Pitch = Kopf_Pitch</pre>
 <p>Without recenter and without orientation both pairs of columns are equal. The orientation of a video is in the event log (event
-“Format”) and in the sidecar. The view has no roll column: for the question “where does the participant look”, roll does not matter.</p>
+“Format”) and in the sidecar. The view has no roll column: for the question “where does the viewer look”, roll does not matter.</p>
 <div class="note">
   <p><strong>Important:</strong> “view” here means the <em>head direction</em>, i.e. the center of the field of view of the headset. Orbivo does not
-  measure the eye movement within the field of view (no eye tracking). The field of view of the XR-3 is about 115° wide, so the participant
+  measure the eye movement within the field of view (no eye tracking). The field of view of the XR-3 is about 115° wide, so the viewer
   can also see things that lie up to a good 50° beside the viewing direction.</p>
 </div>
 
 <h4>Example</h4>
 <pre>Sekunden ;Videozeit_s;Kopf_Yaw_Grad;Kopf_Pitch_Grad;Blick_Video_Yaw_Grad;Blick_Video_Pitch_Grad;Recenter_Yaw_Grad
 12,033333;12,000     ;50,00        ;-10,00         ;30,00               ;-10,00                ;20,00</pre>
-<p>At the recenter the participant looked 20° to the left; that became the center of the picture. Now their head is turned 50° to the left
+<p>At the recenter the viewer looked 20° to the left; that became the center of the picture. Now their head is turned 50° to the left
 and 10° down. In the video they therefore look 30° left of the center of the picture, 10° below the horizon, at the frame at second 12.0
 of the video.</p>
 
@@ -663,7 +663,7 @@ pitch = asin(ahead_y)</pre>
     started the video; the first video frame comes shortly after.</li>
   <li>In the headset, the time of every head row is the moment the frame was <em>shown</em> in the headset (the predicted display time
     that Varjo Base delivers for every frame, shortly after rendering). Head posture, video time and brightness of a row therefore match what the
-    participant saw at that moment.</li>
+    viewer saw at that moment.</li>
   <li><strong>Rate:</strong> the headset makes 90 frames per second. At 45, 30 or 10 Hz Orbivo takes every 2nd, 3rd or
     9th of them. The intervals are therefore multiples of 11.1 ms and vary slightly. For analyses use the column <code>Sekunden</code>,
     not the row number.</li>
@@ -686,7 +686,7 @@ pitch = asin(ahead_y)</pre>
 <div class="table-wrap">
 <table>
   <tr><th>Event</th><th>When</th></tr>
-  <tr><td>Aufzeichnung (recording)</td><td>Start (with Orbivo version, head rate, participant/session, computer, time zone, full video path if any) and end.</td></tr>
+  <tr><td>Aufzeichnung (recording)</td><td>Start (with Orbivo version, head rate, session, computer, time zone, full video path if any) and end.</td></tr>
   <tr><td>Laden, Entladen (load, unload)</td><td>A video is opened or closed.</td></tr>
   <tr><td>Play, Pause, Stop, Seek</td><td>Commands of the operator (seek with its target).</td></tr>
   <tr><td>Zustand (state)</td><td>The playback changed its state (Bereit, Läuft, Pause, Ende …). There are a few milliseconds between “Play” and “Zustand: Läuft”.</td></tr>
@@ -734,7 +734,7 @@ print(video[["Videozeit_s", "Blick_Video_Yaw_Grad", "Blick_Video_Pitch_Grad"]].d
     the last 30 always stay.</td></tr>
 </table>
 </div>
-<p>Deliberately not saved: mute, recenter, live view, participant/session.
+<p>Deliberately not saved: mute, recenter, live view, session.
 To reset all settings, close Orbivo and delete <code>settings.json</code>; Orbivo then starts in English as at the very first start.</p>
 
 <!-- ============================================================= -->
@@ -746,7 +746,7 @@ To reset all settings, close Orbivo and delete <code>settings.json</code>; Orbiv
   <tr><td>The headset shows nothing, the bar says “Idle: Black”</td><td>No video runs: load a video and press Play. Or change the idle view.</td></tr>
   <tr><td>The bar says “BLACKOUT”</td><td>Press <kbd>B</kbd>, or <kbd>F</kbd> to fade in.</td></tr>
   <tr><td>Picture distorted, doubled or depth wrong</td><td>Check the format: projection, stereo layout, swap eyes. Saved per video.</td></tr>
-  <tr><td>The front of the video is not ahead</td><td>Let the participant look in the desired direction, <kbd>R</kbd>. Permanently for a video: Format → Orientation (yaw).</td></tr>
+  <tr><td>The front of the video is not ahead</td><td>Let the viewer look in the desired direction, <kbd>R</kbd>. Permanently for a video: Format → Orientation (yaw).</td></tr>
   <tr><td>No sound</td><td>Mute (<kbd>M</kbd>)? Blackout? Volume? Check “Sound output” in the status, choose the device, “Refresh”. If the Sound section says “Locked”, unlock it under Options first.</td></tr>
   <tr><td>Sound does not come from the direction of the picture</td><td>“Sound fixed to the picture” on? Mono sound has no direction. Switch off Windows “Spatial sound” for the headphones.</td></tr>
   <tr><td>Ambisonics sounds twisted, from above or dull</td><td>Check “Sound format”: choose the other Ambisonics format (AmbiX or FuMa). If the 4 channels are not Ambisonics at all, choose “Channels”.</td></tr>

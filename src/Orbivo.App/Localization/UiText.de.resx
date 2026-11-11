@@ -115,13 +115,13 @@
     <value>Alle Format- und Toneinstellungen dieses Videos verwerfen; das Sidecar wird gelöscht (fremde Einträge bleiben).</value>
   </data>
   <data name="LiveViewHeader" xml:space="preserve">
-    <value>Live-Ansicht (was der Proband sieht)</value>
+    <value>Live-Ansicht (was der Zuschauer sieht)</value>
   </data>
   <data name="LiveViewShow" xml:space="preserve">
     <value>Anzeigen</value>
   </data>
   <data name="LiveViewShowTip" xml:space="preserve">
-    <value>Zeigt das Bild der Brille aus dem Blickwinkel des Probanden (beide Augen zusammen, linkes Halbbild). Bei jedem Start aus; abgeschaltet kostet es keine Rechenzeit.</value>
+    <value>Zeigt das Bild der Brille aus dem Blickwinkel des Zuschauers (beide Augen zusammen, linkes Halbbild). Bei jedem Start aus; abgeschaltet kostet es keine Rechenzeit.</value>
   </data>
   <data name="Off" xml:space="preserve">
     <value>Aus</value>
@@ -145,7 +145,7 @@
     <value>Ton fest am Bild</value>
   </data>
   <data name="SoundFixedTip" xml:space="preserve">
-    <value>Ein: Der Ton steht fest im Video. Bei Stereo kommen links und rechts von zwei Lautsprechern im Bild, bei Ambisonics bleibt das ganze Klangfeld am Bild. Dreht der Proband den Kopf, wandert der Ton mit dem Bild. Aus: Der Ton dreht mit dem Kopf (Stereo unverändert, Ambisonics immer von vorne gehört). Wird pro Video im Sidecar gespeichert.</value>
+    <value>Ein: Der Ton steht fest im Video. Bei Stereo kommen links und rechts von zwei Lautsprechern im Bild, bei Ambisonics bleibt das ganze Klangfeld am Bild. Dreht der Zuschauer den Kopf, wandert der Ton mit dem Bild. Aus: Der Ton dreht mit dem Kopf (Stereo unverändert, Ambisonics immer von vorne gehört). Wird pro Video im Sidecar gespeichert.</value>
   </data>
   <data name="SoundWidth" xml:space="preserve">
     <value>Breite:</value>
@@ -181,7 +181,7 @@
     <value>Equirect-360°-Bild (PNG, JPG). Quadratisch = Top-Bottom, 4:1 = Side-by-Side, sonst Mono</value>
   </data>
   <data name="IdleChoiceTip" xml:space="preserve">
-    <value>Was der Proband sieht, solange kein Video läuft. Pause und Ende zeigen weiter das Videobild. Schwarzbild (B) und Fade wirken auch hier; Schwarzbild bleibt immer schwarz. Wird gespeichert.</value>
+    <value>Was der Zuschauer sieht, solange kein Video läuft. Pause und Ende zeigen weiter das Videobild. Schwarzbild (B) und Fade wirken auch hier; Schwarzbild bleibt immer schwarz. Wird gespeichert.</value>
   </data>
   <data name="IdleImage" xml:space="preserve">
     <value>Standbild:</value>
@@ -211,7 +211,7 @@
     <value>Nur änderbar, solange keine Aufzeichnung läuft</value>
   </data>
   <data name="RecordingLabel" xml:space="preserve">
-    <value>Proband/Sitzung:</value>
+    <value>Sitzung:</value>
   </data>
   <data name="RecordingLabelTip" xml:space="preserve">
     <value>Optional, wird Teil der Dateinamen (z. B. 2026-11-08_141203_P07_kopf.csv). Wird nicht gespeichert.</value>
@@ -277,7 +277,7 @@
     <value>Fade-Dauer in Sekunden (0,1 bis 30)</value>
   </data>
   <data name="RecenterTip" xml:space="preserve">
-    <value>Die aktuelle Blickrichtung des Probanden wird die Vorderseite des Videos, für Bild und Ton (Taste R). Gilt auch für die nächsten Videos</value>
+    <value>Die aktuelle Blickrichtung des Zuschauers wird die Vorderseite des Videos, für Bild und Ton (Taste R). Gilt auch für die nächsten Videos</value>
   </data>
   <data name="ResetRecenter" xml:space="preserve">
     <value>Recenter zurücksetzen</value>
@@ -366,8 +366,8 @@
   <data name="StatusXrRender" xml:space="preserve">
     <value>Bildausgabe</value>
   </data>
-  <data name="StatusViewParticipant" xml:space="preserve">
-    <value>Blick (Proband)</value>
+  <data name="StatusViewerGaze" xml:space="preserve">
+    <value>Blick (Zuschauer)</value>
   </data>
   <data name="StatusLogFile" xml:space="preserve">
     <value>Log-Datei</value>

@@ -115,13 +115,13 @@
     <value>Discard all format and sound settings of this video; the sidecar is deleted (entries of others stay).</value>
   </data>
   <data name="LiveViewHeader" xml:space="preserve">
-    <value>Live view (what the participant sees)</value>
+    <value>Live view (what the viewer sees)</value>
   </data>
   <data name="LiveViewShow" xml:space="preserve">
     <value>Show</value>
   </data>
   <data name="LiveViewShowTip" xml:space="preserve">
-    <value>Shows the picture of the headset from the participant’s point of view (both eyes combined, left half picture). Off at every start; switched off it costs no computing time.</value>
+    <value>Shows the picture of the headset from the viewer’s point of view (both eyes combined, left half picture). Off at every start; switched off it costs no computing time.</value>
   </data>
   <data name="Off" xml:space="preserve">
     <value>Off</value>
@@ -145,7 +145,7 @@
     <value>Sound fixed to the picture</value>
   </data>
   <data name="SoundFixedTip" xml:space="preserve">
-    <value>On: the sound stays fixed in the video. With stereo, left and right come from two speakers in the picture; with Ambisonics the whole sound field stays with the picture. When the participant turns the head, the sound moves with the picture. Off: the sound turns with the head (stereo unchanged, Ambisonics always heard from the front). Saved per video in the sidecar.</value>
+    <value>On: the sound stays fixed in the video. With stereo, left and right come from two speakers in the picture; with Ambisonics the whole sound field stays with the picture. When the viewer turns the head, the sound moves with the picture. Off: the sound turns with the head (stereo unchanged, Ambisonics always heard from the front). Saved per video in the sidecar.</value>
   </data>
   <data name="SoundWidth" xml:space="preserve">
     <value>Width:</value>
@@ -181,7 +181,7 @@
     <value>Equirect 360° image (PNG, JPG). Square = top-bottom, 4:1 = side-by-side, otherwise mono</value>
   </data>
   <data name="IdleChoiceTip" xml:space="preserve">
-    <value>What the participant sees while no video runs. Pause and end keep showing the video picture. Blackout (B) and fade work here too; blackout always stays black. Saved.</value>
+    <value>What the viewer sees while no video runs. Pause and end keep showing the video picture. Blackout (B) and fade work here too; blackout always stays black. Saved.</value>
   </data>
   <data name="IdleImage" xml:space="preserve">
     <value>Still image:</value>
@@ -211,7 +211,7 @@
     <value>Can only be changed while no recording runs</value>
   </data>
   <data name="RecordingLabel" xml:space="preserve">
-    <value>Participant/session:</value>
+    <value>Session:</value>
   </data>
   <data name="RecordingLabelTip" xml:space="preserve">
     <value>Optional, becomes part of the file names (e.g. 2026-11-08_141203_P07_kopf.csv). Not saved.</value>
@@ -277,7 +277,7 @@
     <value>Fade duration in seconds (0.1 to 30)</value>
   </data>
   <data name="RecenterTip" xml:space="preserve">
-    <value>The current viewing direction of the participant becomes the front of the video, for picture and sound (key R). Also applies to the next videos</value>
+    <value>The current viewing direction of the viewer becomes the front of the video, for picture and sound (key R). Also applies to the next videos</value>
   </data>
   <data name="ResetRecenter" xml:space="preserve">
     <value>Reset recenter</value>
@@ -323,7 +323,7 @@
   </data>
   <data name="OutputHeadset" xml:space="preserve">
     <value>Headset: {0}</value>
-    <comment>Line under the transport buttons: what the participant sees.</comment>
+    <comment>Line under the transport buttons: what the viewer sees.</comment>
   </data>
   <data name="OutputIdle" xml:space="preserve">
     <value>Idle</value>
@@ -368,8 +368,8 @@
   <data name="StatusXrRender" xml:space="preserve">
     <value>Picture output</value>
   </data>
-  <data name="StatusViewParticipant" xml:space="preserve">
-    <value>View (participant)</value>
+  <data name="StatusViewerGaze" xml:space="preserve">
+    <value>Gaze (viewer)</value>
   </data>
   <data name="StatusLogFile" xml:space="preserve">
     <value>Log file</value>

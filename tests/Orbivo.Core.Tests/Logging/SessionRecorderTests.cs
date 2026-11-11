@@ -290,7 +290,7 @@ public sealed class SessionRecorderTests : IDisposable
 
     [Theory]
     [InlineData("P07", "P07")]
-    [InlineData("  Proband 7  ", "Proband_7")]
+    [InlineData("  Sitzung 7  ", "Sitzung_7")]
     [InlineData("a/b:c*d", "a_b_c_d")]
     [InlineData("", "")]
     [InlineData("...", "")]
