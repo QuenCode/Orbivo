@@ -32,8 +32,8 @@ gh auth login                                                                 # 
    ```powershell
    powershell -NoProfile -ExecutionPolicy Bypass -File release.ps1 -Version 1.1.0 -Publish
    ```
-   Pusht `development` und das Tag, setzt `main` auf das Release und legt das GitHub-Release (privates Repository) mit ZIP,
-   Prüfsumme und den Notizen aus `CHANGELOG.md` an. Schritt 2 und 4 gehen auch in einem: gleich mit `-Publish` aufrufen.
+   Pusht `development` und das Tag, setzt `main` auf das Release und legt das GitHub-Release mit ZIP, Prüfsumme,
+   dem FFmpeg-Quellarchiv (`native\_downloads\orbivo-ffmpeg-…-source.tar`, LGPL-Pflicht) und den Notizen aus `CHANGELOG.md` an. Schritt 2 und 4 gehen auch in einem: gleich mit `-Publish` aufrufen.
 
 ## Was `release.ps1` tut
 | Schritt | Bricht ab, wenn … |
@@ -61,6 +61,7 @@ Orbivo-1.1.0/
   avcodec-63.dll …            FFmpeg (LGPL, austauschbar), phonon.dll, openxr_loader.dll
   Anleitung.html, Manual.html Bedienungsanleitung deutsch und englisch (F1 in der App)
   de/*.resources.dll          deutsche Texte der App (Englisch steckt in den DLLs selbst)
+  LICENSE.txt, NOTICE.txt     Lizenz von Orbivo (Apache-2.0) und Copyright-Hinweis
   THIRD-PARTY-NOTICES.txt     Drittkomponenten und Lizenzen
   licenses/                   Lizenztexte von FFmpeg, Steam Audio, OpenXR
   *.pdb                       Symbole, damit Fehler im Log mit Zeilennummern stehen
@@ -84,4 +85,4 @@ ist ein Update: alten Ordner ersetzen.
 - **Fehler in einem veröffentlichten Release:** auf `development` beheben, im Changelog eintragen, neues Release mit
   erhöhter PATCH-Version (z. B. 1.1.1). Veröffentlichte Tags werden nie verschoben.
 - **Von Hand veröffentlichen** (ohne `gh`): Tag und Branches pushen, auf GitHub unter „Releases“ ein Release zum Tag
-  anlegen, ZIP und `.sha256` anhängen, Text aus `artifacts\release\Orbivo-X.Y.Z-notes.md` bzw. dem Changelog.
+  anlegen, ZIP, `.sha256` und das FFmpeg-Quellarchiv aus `native\_downloads` anhängen, Text aus `artifacts\release\Orbivo-X.Y.Z-notes.md` bzw. dem Changelog.

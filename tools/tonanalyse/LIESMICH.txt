@@ -1,4 +1,4 @@
-Orbivo-Tonanalyse
+﻿Orbivo-Tonanalyse
 =================
 
 Zweck: Zeigt, wie der Ton eines Videos technisch aufgebaut ist (Codec, Kanäle, Ambisonics-Metadaten,
@@ -22,4 +22,5 @@ Datenschutz
 
 Inhalt
 - Tonanalyse.cmd, Tonanalyse.ps1: das Skript (PowerShell, im Klartext lesbar)
-- ffmpeg\: FFmpeg (LGPL, unverändert, Build von BtbN/FFmpeg-Builds), Lizenz in ffmpeg\FFmpeg-LICENSE.txt
+- ffmpeg\: FFmpeg (LGPL-2.1-or-later, unverändert, eigener Build mit dav1d und zlib), Lizenztexte und
+  Build-Angaben in ffmpeg\ (FFmpeg-*, dav1d-COPYING.txt, zlib-LICENSE.txt). Quellcode: siehe FFmpeg-BUILD-INFO.txt

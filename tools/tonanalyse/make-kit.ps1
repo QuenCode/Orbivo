@@ -9,8 +9,10 @@ $out = Join-Path $here 'out'
 $stage = Join-Path $out 'Orbivo-Tonanalyse'
 $zip = Join-Path $out 'Orbivo-Tonanalyse.zip'
 
-$ffmpegFiles = @('ffmpeg.exe', 'ffprobe.exe', 'avcodec-63.dll', 'avdevice-63.dll', 'avfilter-12.dll', 'avformat-63.dll',
+$ffmpegFiles = @('ffmpeg.exe', 'ffprobe.exe', 'avcodec-63.dll', 'avfilter-12.dll', 'avformat-63.dll',
     'avutil-61.dll', 'swresample-7.dll', 'swscale-10.dll')
+# Licenses of the FFmpeg build (LGPL-2.1-or-later with dav1d and zlib); the source is in the GitHub release.
+$licenseFiles = @('FFmpeg-COPYING.LGPLv2.1.txt', 'FFmpeg-LICENSE.md', 'FFmpeg-BUILD-INFO.txt', 'dav1d-COPYING.txt', 'zlib-LICENSE.txt')
 
 if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 New-Item -ItemType Directory -Force (Join-Path $stage 'ffmpeg') | Out-Null
@@ -23,7 +25,9 @@ foreach ($name in $ffmpegFiles) {
     if (-not (Test-Path -LiteralPath $source)) { throw "$name fehlt in native\win-x64 (native\fetch-native.ps1 ausführen)." }
     Copy-Item -LiteralPath $source -Destination (Join-Path $stage 'ffmpeg')
 }
-Copy-Item -LiteralPath (Join-Path $native 'licenses\FFmpeg-LICENSE.txt') -Destination (Join-Path $stage 'ffmpeg')
+foreach ($name in $licenseFiles) {
+    Copy-Item -LiteralPath (Join-Path $native "licenses\$name") -Destination (Join-Path $stage 'ffmpeg')
+}
 
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 Compress-Archive -Path $stage -DestinationPath $zip

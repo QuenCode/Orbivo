@@ -12,6 +12,8 @@ Was sich von Version zu Version für Operatoren und Auswertung ändert. Neue Ein
 - Englische Anleitung `Manual.html` neben `Anleitung.html`; F1 öffnet die der eingestellten Sprache
 - Aufzeichnungen bleiben in jeder Sprache unverändert deutsch (Spalten, Dateinamen, Ereignisse, Dezimalkomma)
 - Startoption `--lang en|de` für eine einzelne Sitzung
+- Orbivo ist Open Source unter der Apache License 2.0: `LICENSE.txt` und `NOTICE.txt` liegen im Programmordner, „Über Orbivo“ nennt Copyright und Lizenz
+- Eigener, schlanker FFmpeg-Build (FFmpeg 9.0.2 mit dav1d und zlib, LGPL-2.1-or-later) statt des BtbN-Builds: deutlich kleiner, ohne rund 85 eingebaute Fremdbibliotheken. Der vollständige Quellcode liegt jedem GitHub-Release bei, Lizenztexte und Build-Angaben im Ordner `licenses`
 
 ## 1.1.0 – 2026-11-09
 

@@ -8,52 +8,73 @@ Die nativen DLLs sind **nicht im Git**. Sie gehören nach `native/win-x64/` und 
 powershell -NoProfile -ExecutionPolicy Bypass -File native\fetch-native.ps1
 ```
 
-Das Skript lädt die gepinnten Archive nach `native/_downloads/` (ca. 290 MB), prüft die SHA256-Prüfsummen und entpackt nur die benötigten Dateien. Danach `dotnet build`. Mit `-Force` werden die Archive neu geladen.
+Das Skript lädt die gepinnten Archive nach `native/_downloads/`, prüft die SHA256-Prüfsummen und entpackt nur die benötigten Dateien. Danach `dotnet build`. Mit `-Force` werden die Archive neu geladen. Solange das Repository privat ist, lädt das Skript den FFmpeg-Build über die GitHub CLI (`gh`, angemeldet).
 
 Ergebnis:
 
 ```
-native/win-x64/
+native/win-x64/                 was die App braucht (und das Tonanalyse-Kit)
   avcodec-63.dll  avformat-63.dll  avutil-61.dll  swresample-7.dll  swscale-10.dll
-  avfilter-12.dll  avdevice-63.dll  ffmpeg.exe  ffprobe.exe
+  avfilter-12.dll  ffmpeg.exe  ffprobe.exe
   phonon.dll
   openxr_loader.dll
   openxr-tools/  hello_xr.exe  openxr_runtime_list.exe
-  licenses/  FFmpeg-LICENSE.txt  SteamAudio-LICENSE.md  SteamAudio-THIRDPARTY.md  OpenXR-LICENSE.txt
+  licenses/  FFmpeg-COPYING.LGPLv2.1.txt  FFmpeg-LICENSE.md  FFmpeg-BUILD-INFO.txt  dav1d-COPYING.txt  zlib-LICENSE.txt
+             SteamAudio-LICENSE.md  SteamAudio-THIRDPARTY.md  OpenXR-LICENSE.txt
+native/ffmpeg-full/             voller FFmpeg-Build nur für tools/testmedia, wird nie ausgeliefert
+native/_downloads/              Archive, dazu orbivo-ffmpeg-9.0.2-1-source.tar (für release.ps1)
 ```
 
-**Archive selbst sichern:** Die drei ZIP-Dateien aus `native/_downloads/` an einem eigenen Ort aufbewahren. GitHub-Releases können verschwinden (siehe Vorhaltezeit unten).
+**Archive selbst sichern:** Die Dateien aus `native/_downloads/` an einem eigenen Ort aufbewahren. GitHub-Releases können verschwinden (siehe Vorhaltezeit unten).
 
-## FFmpeg 9.0.2 (LGPL, shared)
+## FFmpeg 9.0.2 für Orbivo (eigener Build, LGPL-2.1-or-later)
+
+Seit 1.2 liefert Orbivo einen **eigenen, schlanken FFmpeg-Build** aus (`build/ffmpeg/`, gebaut auf GitHub Actions). Er
+enthält FFmpeg mit allen eigenen Komponenten, dazu fest eingebunden nur **dav1d** (AV1 in Software, BSD-2-Clause) und
+**zlib**. Keine weiteren Fremdbibliotheken, kein Netzwerk, kein avdevice, nichts GPL oder nonfree.
 
 | | |
 |---|---|
-| Quelle | GitHub [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds), Variante `win64-lgpl-shared-9.0` |
-| Release | `autobuild-2026-10-31-12-59` |
-| Datei | `ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-shared-9.0.zip` (76,6 MB) |
-| SHA256 | `e907b01fa4783913151237e37df2a10fa97d99a1598a021bf59d4ae62ffed4c0` |
-| FFmpeg-Version | `n9.0.2-39-g7adfbe40dc-20261031` |
-| Lizenz | **LGPL v3 oder später** (BtbN baut mit `--enable-version3`), Text in `licenses/FFmpeg-LICENSE.txt` |
+| Quelle | GitHub-Release [`ffmpeg-9.0.2-1`](https://github.com/QuenCode/Orbivo/releases/tag/ffmpeg-9.0.2-1) dieses Repositorys (Vorabversion) |
+| Datei | `orbivo-ffmpeg-9.0.2-1-win64-lgpl-shared.zip` |
+| SHA256 | `3224ff4e073f75da98c1c6c599ccefd9792e61f91d47357f81d4bd4e262954c0` |
+| Quellcode | `orbivo-ffmpeg-9.0.2-1-source.tar` (FFmpeg 9.0.2, dav1d 1.5.4, zlib 1.4 als Originalarchive, Build-Skript, Workflow), SHA256 `d84883e01256b7ebd81853eb80e8dd45aa786a28a10540f33733f84c4bc9b19d` |
+| Lizenz | **LGPL-2.1-or-later**; Texte in `licenses/`, Build-Einstellungen in `licenses/FFmpeg-BUILD-INFO.txt` |
 
-| Datei (aus `bin/`) | Zweck | In der App-Ausgabe |
+| Datei | Zweck | In der App-Ausgabe |
 |---|---|---|
 | `avcodec-63.dll` | Decoder | ja |
 | `avformat-63.dll` | Container/Demux | ja |
 | `avutil-61.dll` | Hilfsfunktionen, Hardware-Kontext | ja |
 | `swresample-7.dll` | Audio-Konvertierung | ja |
 | `swscale-10.dll` | Bild-Konvertierung (nur Software-Fallback) | ja |
-| `avfilter-12.dll`, `avdevice-63.dll` | nur für `ffmpeg.exe` | nein |
-| `ffmpeg.exe`, `ffprobe.exe` | Testmedien (`tools/testmedia`), Analyse | nein |
+| `avfilter-12.dll` | nur für `ffmpeg.exe` | nein |
+| `ffmpeg.exe`, `ffprobe.exe` | Tonanalyse-Kit (`tools/tonanalyse`), Analyse | nein |
 
 **Gekoppelt an FFmpeg.AutoGen 9.0.1.1** (`Directory.Packages.props`). Die Bindings laden genau diese Hauptversionen (avcodec 63, avformat 63, avutil 61, swresample 7, swscale 10). Die App prüft beim Start Version und Lizenz (`FFmpegRuntime`) und lehnt Nicht-LGPL-Builds ab.
 
-**Warum BtbN:** gyan.dev bietet Shared-Builds nur unter GPL an. Die BtbN-Variante `lgpl-shared` enthält keine GPL-Bibliotheken (kein x264/x265). Enthalten sind u. a. D3D11VA, NVDEC/NVENC, dav1d, SVT-AV1, OpenH264 und FreeType (`drawtext`).
+**Warum ein eigener Build:** Der BtbN-Build `lgpl-shared` (bis 1.1) bindet rund 85 Fremdprojekte und über 600 Rust-Pakete fest in die DLLs ein, mit eigenen Hinweis- und Quellcode-Pflichten. Orbivo braucht davon nur dav1d (`docs/DECISIONS.md`, 11.11.2026).
+
+**Pflichten bei der Auslieferung:** dynamisch gelinkt (shared), DLLs bleiben austauschbar, Lizenztexte beilegen, Quellcode verfügbar halten. Umgesetzt: Das Release-Paket (`release.ps1`) enthält `licenses\` und `THIRD-PARTY-NOTICES.txt` (aus `build/`); `release.ps1 -Publish` hängt das Quellcode-Archiv an jedes GitHub-Release.
+
+**Update:**
+1. In `build/ffmpeg/build-ffmpeg.sh` Versionen, URLs und SHA256 ändern (bei gleichen Quellen nur `BUILD_NUMBER` erhöhen), committen und pushen. Der Workflow baut und prüft (D3D11VA-Decoder, keine Fremd-DLLs, keine GPL).
+2. Artefakt des Laufs laden (`gh run download`), testen, als GitHub-Release `ffmpeg-<Version>-<Build>` (Vorabversion) mit ZIP, Quellarchiv und `SHA256SUMS.txt` veröffentlichen.
+3. Tag, Dateinamen und SHA256 in `fetch-native.ps1`, `build/THIRD-PARTY-NOTICES.txt` und dieser Datei anpassen.
+4. Neue FFmpeg-**Haupt**version nur zusammen mit der passenden FFmpeg.AutoGen-Version; dann auch die DLL-Namen in `build/Native.targets`, `FFmpegRuntime.ExpectedLibraries`, `release.ps1` und `tools/tonanalyse/make-kit.ps1`.
+
+## FFmpeg 9.0.2 voller Build (nur Testmedien)
+
+`tools/testmedia` braucht Encoder (NVENC, SVT-AV1, OpenH264) und `drawtext`. Dafür lädt `fetch-native.ps1` den
+BtbN-Build nach `native/ffmpeg-full/`. Er wird **nie** in die App oder ein Paket kopiert und nicht weitergegeben.
+
+| | |
+|---|---|
+| Quelle | GitHub [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds), Variante `win64-lgpl-shared-9.0`, Release `autobuild-2026-10-31-12-59` |
+| Datei | `ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-shared-9.0.zip` (76,6 MB) |
+| SHA256 | `e907b01fa4783913151237e37df2a10fa97d99a1598a021bf59d4ae62ffed4c0` |
 
 **Vorhaltezeit:** BtbN behält die letzten 14 Tages-Builds und den letzten Build jedes Monats für zwei Jahre. Gepinnt ist der letzte Build vom Oktober 2026, er bleibt also bis etwa Oktober 2028 verfügbar.
-
-**Update:** Neue FFmpeg-Hauptversion nur zusammen mit der passenden FFmpeg.AutoGen-Version. Dabei URL und SHA256 in `fetch-native.ps1`, die DLL-Liste in `build/Native.targets` und `FFmpegRuntime.ExpectedLibraries` sowie diese Datei anpassen.
-
-**Pflichten bei der Auslieferung (M9):** dynamisch gelinkt (shared), DLLs bleiben austauschbar, Lizenztext und Hinweis auf Quelle (FFmpeg-Version, BtbN-Build-Skripte) beilegen. Umgesetzt: Das Release-Paket (`release.ps1`) enthält `licenses\` und `THIRD-PARTY-NOTICES.txt` (aus `build/`). Bei einem Update von FFmpeg, Steam Audio oder dem OpenXR-Loader dort Version und Quelle anpassen.
 
 ## Steam Audio 4.8.1
 

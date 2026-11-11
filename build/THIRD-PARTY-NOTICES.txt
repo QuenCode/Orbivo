@@ -1,6 +1,9 @@
 Orbivo - Hinweise zu Drittkomponenten / Third-party notices
 =============================================================
 
+Orbivo selbst steht unter der Apache License 2.0 (LICENSE.txt, NOTICE.txt), Copyright 2026 QuenCode.
+Orbivo itself is licensed under the Apache License 2.0 (LICENSE.txt, NOTICE.txt), copyright 2026 QuenCode.
+
 Orbivo enthält die folgenden Komponenten anderer Hersteller. Die Lizenztexte der nativen
 Bibliotheken liegen im Ordner "licenses" neben Orbivo.exe.
 Orbivo includes the following third-party components. The license texts of the native
@@ -9,13 +12,17 @@ libraries are in the "licenses" folder next to Orbivo.exe.
 
 FFmpeg 9.0.2 (avcodec-63.dll, avformat-63.dll, avutil-61.dll, swresample-7.dll, swscale-10.dll)
 -----------------------------------------------------------------------------------------------
-Lizenz / License: GNU Lesser General Public License, Version 3 oder später / or later
-  (LGPL-3.0-or-later), Text: licenses\FFmpeg-LICENSE.txt
-Version: n9.0.2-39-g7adfbe40dc-20261031, unverändert / unmodified
-Build: BtbN/FFmpeg-Builds, Variante win64-lgpl-shared-9.0, Release autobuild-2026-10-31-12-59
-  https://github.com/BtbN/FFmpeg-Builds
-Quellcode / Source code: https://ffmpeg.org/download.html, Stand / commit 7adfbe40dc,
-  Build-Skripte / build scripts: https://github.com/BtbN/FFmpeg-Builds
+Lizenz / License: GNU Lesser General Public License, Version 2.1 oder später / or later
+  (LGPL-2.1-or-later), Texte / texts: licenses\FFmpeg-COPYING.LGPLv2.1.txt, licenses\FFmpeg-LICENSE.md
+Version: FFmpeg 9.0.2, unverändert / unmodified, https://ffmpeg.org
+Build: eigener Build für Orbivo / own build for Orbivo (orbivo-ffmpeg-9.0.2-1), Einstellungen und
+  Prüfsummen / settings and checksums: licenses\FFmpeg-BUILD-INFO.txt
+Fest eingebunden / statically linked:
+  dav1d 1.5.4, Copyright (c) VideoLAN and dav1d authors, BSD-2-Clause, licenses\dav1d-COPYING.txt
+  zlib 1.4, Copyright (c) Jean-loup Gailly and Mark Adler, zlib License, licenses\zlib-LICENSE.txt
+Quellcode / Source code: Der vollständige Quellcode (FFmpeg, dav1d, zlib, Build-Skript) liegt jedem
+  Release bei als / The complete source code (FFmpeg, dav1d, zlib, build script) is attached to every
+  release as orbivo-ffmpeg-9.0.2-1-source.tar: https://github.com/QuenCode/Orbivo/releases
 Die FFmpeg-Bibliotheken sind dynamisch eingebunden und können durch eine kompatible eigene
 Version (gleiche Hauptversionen der DLLs) ersetzt werden.
 The FFmpeg libraries are linked dynamically and may be replaced with a compatible build of

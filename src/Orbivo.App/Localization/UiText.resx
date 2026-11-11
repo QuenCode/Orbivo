@@ -923,6 +923,7 @@ The files stay where they are.</value>
   <data name="AboutText" xml:space="preserve">
     <value>Orbivo – player for 360° and 180° videos on the Varjo XR-3
 Version {0}
+Copyright 2026 QuenCode, Apache License 2.0 (LICENSE.txt next to Orbivo.exe)
 
 Licenses of the bundled libraries: folder licenses and THIRD-PARTY-NOTICES.txt next to Orbivo.exe.
 

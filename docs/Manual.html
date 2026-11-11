@@ -762,10 +762,15 @@ To reset all settings, close Orbivo and delete <code>settings.json</code>; Orbiv
 
 <!-- ============================================================= -->
 <h2 id="version">18. Version and licenses</h2>
-<p>The version is in the title bar of the operator window, under Help → About Orbivo and in every diagnostic log. The folder <code>licenses</code> next to the exe holds
+<p>The version is in the title bar of the operator window, under Help → About Orbivo and in every diagnostic log.</p>
+<p>Orbivo itself is open source under the <strong>Apache License 2.0</strong>, copyright 2026 QuenCode. The license text is in
+<code>LICENSE.txt</code> next to the exe, along with <code>NOTICE.txt</code>. The folder <code>licenses</code> next to the exe holds
 the licenses of the bundled libraries; <code>THIRD-PARTY-NOTICES.txt</code> gives an overview:</p>
 <ul>
-  <li><strong>FFmpeg</strong> (LGPL v3 or later) as replaceable DLLs, unchanged from the build by BtbN.</li>
+  <li><strong>FFmpeg</strong> (LGPL 2.1 or later) as replaceable DLLs: Orbivo uses code of FFmpeg licensed under the LGPL, in a
+    lean build of its own with dav1d (BSD) and zlib. The complete source code is attached to every release on
+    <a href="https://github.com/QuenCode/Orbivo/releases">github.com/QuenCode/Orbivo/releases</a>
+    (<code>orbivo-ffmpeg-…-source.tar</code>); the build settings are in <code>licenses\FFmpeg-BUILD-INFO.txt</code>.</li>
   <li><strong>Steam Audio</strong> (Apache-2.0), <strong>OpenXR loader</strong> (Apache-2.0).</li>
   <li><strong>.NET</strong>, <strong>NAudio</strong>, <strong>Silk.NET</strong>, <strong>Vortice.Windows</strong>, <strong>CommunityToolkit.Mvvm</strong> (MIT).</li>
 </ul>

@@ -13,7 +13,7 @@
       3. Test the ZIP (ideally with the headset).
       4. .\release.ps1 -Version 1.1.0 -Publish
          Pushes 'development' and the tag, moves 'main' forward to the release and creates the GitHub release with
-         the ZIP (private repository, needs the GitHub CLI 'gh').
+         the ZIP and the FFmpeg source archive (needs the GitHub CLI 'gh').
          Without a prior step 2 it does both in one go.
 
     Works with Windows PowerShell 5.1 and PowerShell 7.
@@ -59,6 +59,8 @@ $changelogPath = Join-Path $root 'CHANGELOG.md'
 $appProject = Join-Path $root 'src\Orbivo.App\Orbivo.App.csproj'
 $nativeDir = Join-Path $root 'native\win-x64'
 $noticesPath = Join-Path $root 'build\THIRD-PARTY-NOTICES.txt'
+$licensePath = Join-Path $root 'LICENSE'
+$noticePath = Join-Path $root 'NOTICE'
 $releaseDir = Join-Path $root 'artifacts\release'
 $releaseBranch = 'development'
 $stableBranch = 'main'
@@ -67,10 +69,13 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 
 # Must match build/Native.targets (what the app needs) and native/README.md.
 $nativeLibraries = @('avcodec-63.dll', 'avformat-63.dll', 'avutil-61.dll', 'swresample-7.dll', 'swscale-10.dll', 'phonon.dll', 'openxr_loader.dll')
+# License texts in native/win-x64/licenses (fetch-native.ps1); all of them go into the package.
+$nativeLicenses = @('licenses\FFmpeg-COPYING.LGPLv2.1.txt', 'licenses\FFmpeg-LICENSE.md', 'licenses\FFmpeg-BUILD-INFO.txt',
+    'licenses\dav1d-COPYING.txt', 'licenses\zlib-LICENSE.txt',
+    'licenses\SteamAudio-LICENSE.md', 'licenses\SteamAudio-THIRDPARTY.md', 'licenses\OpenXR-LICENSE.txt')
 # Manuals and German texts in both languages (M11); English is built into the exe.
 $requiredInPackage = @('Orbivo.exe', 'Anleitung.html', 'Manual.html', 'de\Orbivo.resources.dll', 'de\Orbivo.Core.resources.dll',
-    'THIRD-PARTY-NOTICES.txt', 'licenses\FFmpeg-LICENSE.txt',
-    'licenses\SteamAudio-LICENSE.md', 'licenses\SteamAudio-THIRDPARTY.md', 'licenses\OpenXR-LICENSE.txt') + $nativeLibraries
+    'LICENSE.txt', 'NOTICE.txt', 'THIRD-PARTY-NOTICES.txt') + $nativeLicenses + $nativeLibraries
 # Tools of the FFmpeg build that are not part of the app (native/README.md).
 $forbiddenInPackage = @('ffmpeg.exe', 'ffprobe.exe', 'avfilter-12.dll', 'avdevice-63.dll')
 
@@ -189,11 +194,28 @@ function Assert-ReleaseBranchReady([string] $tag) {
 }
 
 function Assert-NativeLibraries {
-    foreach ($file in $nativeLibraries + @('licenses\FFmpeg-LICENSE.txt', 'licenses\SteamAudio-LICENSE.md', 'licenses\SteamAudio-THIRDPARTY.md', 'licenses\OpenXR-LICENSE.txt')) {
+    foreach ($file in $nativeLibraries + $nativeLicenses) {
         if (-not (Test-Path (Join-Path $nativeDir $file))) {
             Fail "native\win-x64\$file is missing. Run native\fetch-native.ps1 first (native/README.md)."
         }
     }
+    $null = Get-FFmpegSourceArchive
+}
+
+# The complete source of the shipped FFmpeg build (LGPL), attached to every GitHub release. Its name follows from
+# the first line of FFmpeg-BUILD-INFO.txt ("FFmpeg for Orbivo - build orbivo-ffmpeg-9.0.2-1"); fetch-native.ps1
+# downloads it into native\_downloads.
+function Get-FFmpegSourceArchive {
+    $buildInfo = Join-Path $nativeDir 'licenses\FFmpeg-BUILD-INFO.txt'
+    $firstLine = (Get-Content -LiteralPath $buildInfo -TotalCount 1)
+    if ($firstLine -notmatch 'build (orbivo-ffmpeg-\S+)$') {
+        Fail "$buildInfo does not name the FFmpeg build in its first line."
+    }
+    $archive = Join-Path $root "native\_downloads\$($Matches[1])-source.tar"
+    if (-not (Test-Path $archive)) {
+        Fail "$archive is missing. Run native\fetch-native.ps1 first (native/README.md)."
+    }
+    return $archive
 }
 
 function Invoke-Tests {
@@ -229,6 +251,9 @@ function New-Package([string] $packageName, [bool] $isRelease) {
 
     Copy-Item (Join-Path $nativeDir 'licenses') (Join-Path $stage 'licenses') -Recurse
     Copy-Item $noticesPath (Join-Path $stage 'THIRD-PARTY-NOTICES.txt')
+    # Orbivo's own license (Apache-2.0) and notice, as .txt so they open with a double click.
+    Copy-Item $licensePath (Join-Path $stage 'LICENSE.txt')
+    Copy-Item $noticePath (Join-Path $stage 'NOTICE.txt')
 
     Write-Step 'Checking the package'
     foreach ($file in $requiredInPackage) {
@@ -313,10 +338,12 @@ function Publish-Release([string] $releaseVersion, [string] $tag, [string] $zip)
         Fail "$zip is missing. Delete the tag ('git tag -d $tag') and run the release again."
     }
 
+    $ffmpegSource = Get-FFmpegSourceArchive
     $notesFile = Join-Path $releaseDir "Orbivo-$releaseVersion-notes.md"
     $notes = Get-ReleaseNotes $releaseVersion
     $hash = (Get-Content "$zip.sha256" -Raw).Trim()
-    $body = "$notes`n`n---`nZIP entpacken (nicht unter C:\Programme), Orbivo.exe starten. Anleitung: Anleitung.html im Programmordner oder F1 in der App.`n`nUnpack the ZIP (not under C:\Program Files), start Orbivo.exe. Manual: Manual.html in the program folder or F1 in the app.`n`nSHA256: ``$hash```n"
+    $sourceName = [IO.Path]::GetFileName($ffmpegSource)
+    $body = "$notes`n`n---`nZIP entpacken (nicht unter C:\Programme), Orbivo.exe starten. Anleitung: Anleitung.html im Programmordner oder F1 in der App.`n`nUnpack the ZIP (not under C:\Program Files), start Orbivo.exe. Manual: Manual.html in the program folder or F1 in the app.`n`nSHA256: ``$hash```n`nOrbivo nutzt FFmpeg-Bibliotheken unter der LGPL-2.1-or-later; der vollständige Quellcode liegt als ``$sourceName`` bei.`nOrbivo uses FFmpeg libraries under the LGPL-2.1-or-later; the complete source code is attached as ``$sourceName``.`n"
     Write-Text $notesFile $body
 
     Write-Step "Pushing $releaseBranch, $stableBranch and $tag"
@@ -327,7 +354,7 @@ function Publish-Release([string] $releaseVersion, [string] $tag, [string] $zip)
     Invoke-Native 'git' @('fetch', '--quiet', 'origin', "${stableBranch}:${stableBranch}")
 
     Write-Step "Creating the GitHub release $tag"
-    Invoke-Native 'gh' @('release', 'create', $tag, $zip, "$zip.sha256", '--verify-tag', '--title', "Orbivo $releaseVersion", '--notes-file', $notesFile)
+    Invoke-Native 'gh' @('release', 'create', $tag, $zip, "$zip.sha256", $ffmpegSource, '--verify-tag', '--title', "Orbivo $releaseVersion", '--notes-file', $notesFile)
 }
 
 # --- main ---

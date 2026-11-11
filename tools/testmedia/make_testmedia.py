@@ -23,7 +23,8 @@ from orbivo_testmedia.wavfile import write_wav
 
 TOOL_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TOOL_DIR.parents[1]
-DEFAULT_FFMPEG = REPO_ROOT / "native" / "win-x64" / "ffmpeg.exe"
+# Full FFmpeg build (encoders, drawtext) for test media only; never shipped (native/README.md).
+DEFAULT_FFMPEG = REPO_ROOT / "native" / "ffmpeg-full" / "ffmpeg.exe"
 DEFAULT_OUT = TOOL_DIR / "out"
 DEFAULT_DURATION_S = 20.0
 LONG_DURATION_S = 600.0

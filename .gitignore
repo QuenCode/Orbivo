@@ -432,6 +432,8 @@ FodyWeavers.xsd
 # Native third-party binaries are not versioned (see native/README.md)
 native/win-x64/
 native/_downloads/
+# Full FFmpeg build for test media only (never shipped)
+native/ffmpeg-full/
 # Generated test media (see tools/testmedia/README.md)
 tools/testmedia/out/
 # Python virtual environments
@@ -440,3 +442,6 @@ tools/testmedia/out/
 # Orbivo-Tonanalyse: built kit and local results
 tools/tonanalyse/out/
 tools/tonanalyse/Tonanalyse-Ergebnis*.txt
+
+# Local working material (icon drafts, analysis results of real videos); never published
+_input/

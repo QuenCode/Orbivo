@@ -17,7 +17,7 @@ Die Ergebnisse landen in `tools/testmedia/out/` und sind nicht im Git.
   ```
   python -m pip install -r tools/testmedia/requirements.txt
   ```
-- `ffmpeg.exe` aus `native/win-x64/` (Einrichtung siehe `native/README.md`) oder `--ffmpeg <Pfad>`
+- `ffmpeg.exe` aus `native/ffmpeg-full/` (voller FFmpeg-Build mit Encodern, nur für Testmedien; Einrichtung siehe `native/README.md`) oder `--ffmpeg <Pfad>`
 - NVIDIA-GPU für den Standard-Encoder `hevc_nvenc`. Ohne NVIDIA: `--codec libsvtav1` (AV1, Software, deutlich langsamer)
 - Windows-Sprachausgabe mit deutscher Stimme (z. B. „Microsoft Hedda“). Fehlt sie, enthält der Audiotest nur Rauschimpulse und das Skript gibt eine Warnung aus.
 
