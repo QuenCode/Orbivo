@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Orbivo.Core.Status;
 using Orbivo.Xr.Graphics;
+using SharpGen.Runtime;
 
 namespace Orbivo.Media.Tests.Support;
 
@@ -31,8 +32,9 @@ public sealed class HardwareDecodeFixture : IDisposable
         {
             Device = GraphicsDevice.CreateOnHighPerformanceGpu(NullLogger.Instance, requestDebugLayer: false);
         }
-        catch (InvalidOperationException exception)
+        catch (Exception exception) when (exception is InvalidOperationException or SharpGenException)
         {
+            // CI runners and remote sessions have no GPU with video support; the decoder tests skip there.
             _unavailableReason = $"No hardware GPU: {exception.Message}";
         }
     }

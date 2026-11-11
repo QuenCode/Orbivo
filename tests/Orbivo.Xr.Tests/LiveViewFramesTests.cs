@@ -19,6 +19,9 @@ public sealed class LiveViewFramesTests(WarpRendererFixture fixture) : IClassFix
     [Fact]
     public void LiveView_ShowsTheSameImageAsADirectRender()
     {
+        Assert.SkipUnless(
+            File.Exists(TestMedia.MonoTestImagePath),
+            $"Test image missing: {TestMedia.MonoTestImagePath}. Create it with: python tools/testmedia/make_testmedia.py --what images --sizes 4k");
         using StillImageTexture image = StillImageTexture.Create(fixture.Device, TestMedia.LoadBgra32(TestMedia.MonoTestImagePath));
         using var frames = new LiveViewFrames(fixture.Device) { Enabled = true };
         frames.SetTargetSize(400, 300);
