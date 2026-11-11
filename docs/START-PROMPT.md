@@ -1,14 +1,18 @@
-# Erster Prompt für Claude Code
+# First prompt for Claude Code
 
-Kopiere den folgenden Text in die erste Claude-Code-Sitzung im leeren Repository (mit CLAUDE.md und docs/ darin):
-
----
-Lies CLAUDE.md und alle Dateien in docs/. Fasse in wenigen Sätzen zusammen, was du verstanden hast, und nenne Unklarheiten oder Widersprüche, die du siehst.
-Schlage dann einen konkreten Plan für Meilenstein M0 vor (Projekte, Pakete mit Versionen, Ordner, Testmedien-Skript) und warte auf mein OK, bevor du Dateien anlegst.
----
-
-Für jeden weiteren Meilenstein:
+Orbivo was started with the following prompts. The first one went into the first Claude Code session in the empty
+repository (with CLAUDE.md and docs/ in it). The originals were German; this is a translation.
 
 ---
-Wir starten Meilenstein Mx laut docs/ROADMAP.md. Erst Plan, dann nach meinem OK umsetzen. Am Ende: Build und Tests grün, Commit, und die Checkliste für meinen manuellen Brillen-Test.
+Read CLAUDE.md and all files in docs/. Summarize in a few sentences what you understood, and name any unclear points or
+contradictions you see.
+Then propose a concrete plan for milestone M0 (projects, packages with versions, folders, test media script) and wait
+for my OK before you create files.
+---
+
+For every further milestone:
+
+---
+We start milestone Mx according to docs/ROADMAP.md. Plan first, then implement after my OK. At the end: build and
+tests green, commit, and the checklist for my manual headset test.
 ---

@@ -5,7 +5,7 @@
 *Deutsch: [README.de.md](README.de.md)*
 
 Orbivo is a Windows player for 360° and 180° videos (up to 8K, mono and stereo, spatial sound) on a **Varjo XR-3**.
-It is made for studies and assessments: an **operator** controls everything from the desktop, the person wearing
+It is made for controlled viewing sessions: an **operator** controls everything from the desktop, the person wearing
 the headset only watches and never sees any user interface.
 
 ## Features
@@ -67,7 +67,7 @@ themselves when these are missing.
 | `src/Orbivo.Audio` | sound output (WASAPI) and spatial sound (Steam Audio) |
 | `src/Orbivo.Xr` | OpenXR and Direct3D 11 rendering |
 | `build/ffmpeg` | the lean FFmpeg build that Orbivo ships |
-| `docs` | requirements, architecture, decisions, roadmap (German), manuals |
+| `docs` | requirements, architecture, decisions, roadmap, release process, manuals |
 
 ## Status
 

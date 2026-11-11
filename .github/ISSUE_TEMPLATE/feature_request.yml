@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        English or German is fine. Please check docs/SPEC.md ("Bewusst nicht im Umfang") first: interaction in VR,
+        English or German is fine. Please check docs/SPEC.md ("Deliberately out of scope") first: interaction in VR,
         streaming and 6DoF video are out of scope on purpose.
   - type: textarea
     id: need

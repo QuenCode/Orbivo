@@ -5,7 +5,7 @@
 *English: [README.md](README.md)*
 
 Orbivo ist ein Windows-Player für 360°- und 180°-Videos (bis 8K, Mono und Stereo, räumlicher Ton) auf einer
-**Varjo XR-3**. Gedacht ist er für Studien und Assessments: Ein **Operator** steuert alles am Desktop, die Person
+**Varjo XR-3**. Gedacht ist er für betreute Vorführungen: Ein **Operator** steuert alles am Desktop, die Person
 mit Brille schaut nur zu und sieht nie eine Bedienoberfläche.
 
 ## Funktionen
@@ -59,7 +59,7 @@ Testbilder, Testvideos und ein Ambisonics-Test entstehen mit `python tools/testm
 (siehe [tools/testmedia/README.md](tools/testmedia/README.md)). Tests, die diese Dateien, eine GPU oder ein
 Audiogerät brauchen, überspringen sich selbst, wenn etwas fehlt.
 
-Die technische Dokumentation ist deutsch: [Anforderungen](docs/SPEC.md), [Architektur](docs/ARCHITECTURE.md),
+Die technische Dokumentation ist englisch: [Anforderungen](docs/SPEC.md), [Architektur](docs/ARCHITECTURE.md),
 [Entscheidungen](docs/DECISIONS.md), [Meilensteine](docs/ROADMAP.md), [Releases](docs/RELEASE.md).
 
 ## Stand
@@ -73,7 +73,7 @@ Sicherheitslücken: [SECURITY.md](SECURITY.md).
 Der Großteil des Quellcodes wurde mit [Claude Code](https://claude.com/claude-code) (Anthropic) geschrieben. Der
 Projektinhaber hat die Anforderungen geschrieben, die Entscheidungen getroffen, die Ergebnisse geprüft und alles mit
 der Brille getestet. Die Arbeitsregeln für die KI stehen in [CLAUDE.md](CLAUDE.md), der erste Prompt in
-[docs/START-PROMPT.md](docs/START-PROMPT.md), jede Entscheidung mit Begründung in
+[docs/START-PROMPT.md](docs/START-PROMPT.md) (übersetzt), jede Entscheidung mit Begründung in
 [docs/DECISIONS.md](docs/DECISIONS.md). Commits, an denen die KI mitgeschrieben hat, tragen eine Zeile
 `Co-Authored-By: Claude`. Auch das App-Icon ist mit Claude entstanden.
 

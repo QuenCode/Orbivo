@@ -1,76 +1,94 @@
-# Orbivo – Hinweise für Claude Code
+# Orbivo – notes for Claude Code
 
-## Projekt in einem Satz
-Windows-Player für 360°/180°-Videos (≥ 8K, Stereo, räumlicher Ton) auf einer **Varjo XR-3**.
-Bedient wird er **ausschließlich von einem Operator am Desktop**. Die Person mit Brille interagiert nicht.
+## The project in one sentence
+Windows player for 360°/180° videos (≥ 8K, stereo, spatial sound) on a **Varjo XR-3**.
+It is operated **only by an operator at the desktop**. The person wearing the headset does not interact.
 
-Details: `docs/SPEC.md` (Anforderungen), `docs/ARCHITECTURE.md` (Aufbau), `docs/ROADMAP.md` (Meilensteine).
-Lies vor jeder Aufgabe den passenden Meilenstein in `docs/ROADMAP.md`.
+Details: `docs/SPEC.md` (requirements), `docs/ARCHITECTURE.md` (structure), `docs/ROADMAP.md` (milestones).
+Before every task, read the matching milestone in `docs/ROADMAP.md`.
 
-## Tech-Stack (nicht ohne Rückfrage ändern)
+## Tech stack (do not change without asking)
 - .NET 10 (LTS), C#, `net10.0-windows`, x64 only
 - UI: WPF + CommunityToolkit.Mvvm
-- XR: Silk.NET.OpenXR, Runtime = Varjo OpenXR (Varjo Base)
-- Grafik: Vortice.Windows (Direct3D11, DXGI, D3DCompiler)
-- Media: FFmpeg (LGPL-**Shared**-Build) über FFmpeg.AutoGen, Hardware-Decoding D3D11VA
-- Audio-Ausgabe: NAudio (WASAPI, Exclusive oder Shared mit kleinem Puffer)
-- Räumlicher Ton: Steam Audio (`phonon.dll`, Apache-2.0) per P/Invoke
+- XR: Silk.NET.OpenXR, runtime = Varjo OpenXR (Varjo Base)
+- Graphics: Vortice.Windows (Direct3D11, DXGI, D3DCompiler)
+- Media: FFmpeg (LGPL **shared** build) via FFmpeg.AutoGen, hardware decoding D3D11VA
+- Audio output: NAudio (WASAPI, exclusive or shared with a small buffer)
+- Spatial sound: Steam Audio (`phonon.dll`, Apache-2.0) via P/Invoke
 - Tests: xUnit
 
-Neue NuGet-Pakete oder native DLLs **nur nach Rückfrage**. Versionen in `Directory.Packages.props` pinnen.
+New NuGet packages or native DLLs **only after asking**. Pin versions in `Directory.Packages.props`.
 
-## Hardware-Ziel
-- Desktop: RTX 5080, Laptop: RTX 4080 (NVDEC, HEVC/AV1 bis 8192×8192)
-- Varjo XR-3 über Varjo Base, keine Controller nötig
-- Kopfhörer: neutrale, kabelgebundene Stereo-Kopfhörer. **Die gesamte Raumklang-Berechnung passiert im Player.**
+## Target hardware
+- Desktop: RTX 5080, laptop: RTX 4080 (NVDEC, HEVC/AV1 up to 8192×8192)
+- Varjo XR-3 via Varjo Base, no controllers needed
+- Headphones: neutral, wired stereo headphones. **All spatial sound processing happens in the player.**
 
-## Harte Regeln
-1. **Render-Thread (OpenXR-Frame-Loop) blockiert nie**: keine Locks mit Wartezeit, keine I/O, keine Allokationen pro Frame, kein `async`.
-2. **Audio-Callback blockiert nie** und allokiert nicht.
-3. Kommunikation UI → Player nur über Befehle (`Channel<PlayerCommand>`); Player → UI nur über Status-Snapshots/Events. Kein direkter Zugriff der UI auf Player-Interna.
-4. **Audio-Clock ist Master-Clock.** Gibt es keinen Ton, übernimmt eine Systemuhr.
-5. Video-Frames bleiben auf der GPU (NV12/P010-Texturen). Keine CPU-Kopie von Videoframes. Einzige Ausnahme: Software-Decoder-Fallback (siehe `docs/DECISIONS.md`).
-6. 360°-Inhalt wird **nur rotatorisch** dargestellt (Kopfposition ignorieren, Inhalt im Unendlichen).
-7. In der Brille wird **nie** UI angezeigt. Nur Video, Leerlauf-Ansicht (Schwarz, Kamerabild, Standbild; F7), Schwarzbild oder Fade.
-8. Projektionsmathematik existiert zweimal: HLSL-Shader und C#-Referenz (`ProjectionMath`) mit Unit-Tests. **Beide immer synchron ändern.**
-9. Koordinatensystem überall: OpenXR-Konvention, rechtshändig, +Y oben, −Z vorne, +X rechts. Umrechnungen nur an klar benannten Stellen.
+## Hard rules
+1. **The render thread (OpenXR frame loop) never blocks**: no locks with waiting, no I/O, no allocations per frame,
+   no `async`.
+2. **The audio callback never blocks** and does not allocate.
+3. Communication UI → player only through commands (`Channel<PlayerCommand>`); player → UI only through status
+   snapshots/events. The UI has no direct access to player internals.
+4. **The audio clock is the master clock.** Without sound, a system clock takes over.
+5. Video frames stay on the GPU (NV12/P010 textures). No CPU copy of video frames. Only exception: the software
+   decoder fallback (see `docs/DECISIONS.md`).
+6. 360° content is shown **rotation only** (head position ignored, content at infinity).
+7. The headset **never** shows UI. Only video, the idle view (black, camera picture, still image; F7), blackout or
+   fade.
+8. The projection math exists twice: HLSL shader and C# reference (`ProjectionMath`) with unit tests. **Always change
+   both together.**
+9. Coordinate system everywhere: OpenXR convention, right-handed, +Y up, −Z forward, +X right. Conversions only at
+   clearly named places.
 
-## Code-Konventionen
-- `Nullable` aktiviert, `TreatWarningsAsErrors` an, `unsafe` nur in `Orbivo.Xr`, `.Media`, `.Audio`
-- Code, Bezeichner und Kommentare auf Englisch; **Operator-UI auf Englisch und Deutsch** (`UiText.resx`/`UiText.de.resx` in `Orbivo.App`, `CoreText.resx`/`CoreText.de.resx` in `Orbivo.Core`). Jeder neue oder geänderte Text in **beiden** Sprachen; der Test `LocalizationTests` prüft gleiche Schlüssel und Platzhalter. Aufzeichnungen (CSV-Spalten, Ereignistexte, Dateinamen) bleiben immer deutsch, das Diagnose-Log englisch
-- Native Ressourcen (COM, FFmpeg, Steam Audio) immer mit `IDisposable` und klarer Ownership
-- Logging: `Microsoft.Extensions.Logging`, Datei-Log pro Sitzung im Ordner `Logs` neben der exe (älter als 30 Tage wird beim Start gelöscht, die letzten 30 Sitzungen bleiben immer)
-- Keine stillen Catch-Blöcke. Fehler loggen und als Status an die UI melden.
+## Code conventions
+- `Nullable` enabled, `TreatWarningsAsErrors` on, `unsafe` only in `Orbivo.Xr`, `.Media`, `.Audio`
+- Code, identifiers, comments and the documentation in `docs/` in English; **operator UI in English and German**
+  (`UiText.resx`/`UiText.de.resx` in `Orbivo.App`, `CoreText.resx`/`CoreText.de.resx` in `Orbivo.Core`). Every new or
+  changed text in **both** languages; the test `LocalizationTests` checks for equal keys and placeholders. Recordings
+  (CSV columns, event texts, file names) always stay German, the diagnostic log English. German counterparts exist
+  only for user-facing documents: `docs/Anleitung.html` (to `docs/Manual.html`) and `README.de.md` (to `README.md`)
+- Native resources (COM, FFmpeg, Steam Audio) always with `IDisposable` and clear ownership
+- Logging: `Microsoft.Extensions.Logging`, one file log per session in the `Logs` folder next to the exe (older than
+  30 days is deleted at startup, the last 30 sessions always stay)
+- No silent catch blocks. Log errors and report them to the UI as status.
 
-## Build & Test
+## Build & test
 ```
 dotnet build Orbivo.sln -c Debug
 dotnet test
-dotnet run --project src/Orbivo.App -- --no-xr      # Desktop-Debug-Viewport ohne Brille (--lang en|de wählt die Sprache nur für diesen Start)
+dotnet run --project src/Orbivo.App -- --no-xr      # desktop debug viewport without headset (--lang en|de picks the language for this start only)
 dotnet run --project src/Orbivo.App -- --no-xr --image tools/testmedia/out/equirect360_mono_4096x2048.png
-dotnet run --project src/Orbivo.App -- --image tools/testmedia/out/equirect360_mono_4096x2048.png   # Testbild in der Brille (Varjo Base muss laufen)
-dotnet run --project src/Orbivo.App -- --no-xr --video tools/testmedia/out/equirect360_tb_8192x8192_hevc_8bit_30fps.mp4   # Video in der Vorschau als erster Playlist-Eintrag, Play im Operatorfenster
-dotnet run --project src/Orbivo.App -- --video tools/testmedia/out/equirect360_tb_8192x8192_hevc_8bit_30fps.mp4            # Video in der Brille (--stereo mono|tb|sbs erzwingt das Layout, --decoder auto|hw|sw den Decoder)
-powershell -NoProfile -ExecutionPolicy Bypass -File native\fetch-native.ps1   # native DLLs laden
-python tools/testmedia/make_testmedia.py            # Testbilder, -videos, Ambisonics-Test
-powershell -NoProfile -ExecutionPolicy Bypass -File release.ps1 -PackageOnly              # Probepaket bauen und prüfen (ohne Version, Commit, Tag)
-powershell -NoProfile -ExecutionPolicy Bypass -File release.ps1 -Version 1.1.0 [-Publish] # Release (docs/RELEASE.md)
-$env:ORBIVO_LONG_TESTS=1; dotnet test --project tests/Orbivo.Media.Tests -- --filter-class "*SoakTests"   # 30-Minuten-Dauertest mit Aufzeichnung (ORBIVO_SOAK_MINUTES kürzt ihn)
+dotnet run --project src/Orbivo.App -- --image tools/testmedia/out/equirect360_mono_4096x2048.png   # test image in the headset (Varjo Base must be running)
+dotnet run --project src/Orbivo.App -- --no-xr --video tools/testmedia/out/equirect360_tb_8192x8192_hevc_8bit_30fps.mp4   # video in the preview as the first playlist entry, Play in the operator window
+dotnet run --project src/Orbivo.App -- --video tools/testmedia/out/equirect360_tb_8192x8192_hevc_8bit_30fps.mp4            # video in the headset (--stereo mono|tb|sbs forces the layout, --decoder auto|hw|sw the decoder)
+powershell -NoProfile -ExecutionPolicy Bypass -File native\fetch-native.ps1   # load the native DLLs
+python tools/testmedia/make_testmedia.py            # test images, test videos, Ambisonics test
+powershell -NoProfile -ExecutionPolicy Bypass -File release.ps1 -PackageOnly              # build and check a trial package (no version, commit, tag)
+powershell -NoProfile -ExecutionPolicy Bypass -File release.ps1 -Version 1.1.0 [-Publish] # release (docs/RELEASE.md)
+$env:ORBIVO_LONG_TESTS=1; dotnet test --project tests/Orbivo.Media.Tests -- --filter-class "*SoakTests"   # 30-minute soak test with recording (ORBIVO_SOAK_MINUTES shortens it)
 ```
-FFmpeg-, Steam-Audio- und OpenXR-Loader-DLLs liegen in `native/win-x64/` (nicht im Git, siehe `native/README.md`) und werden beim Build ins Ausgabeverzeichnis kopiert.
-Gearbeitet wird auf dem Branch `development`.
+FFmpeg, Steam Audio and OpenXR loader DLLs live in `native/win-x64/` (not in Git, see `native/README.md`) and are
+copied to the output directory during the build.
+Work happens on the branch `development`.
 
-## Was du (Claude) nicht prüfen kannst
-Du siehst die Brille nicht und hörst den Ton nicht. Deshalb:
-- Alles, was ohne Brille testbar ist, über `--no-xr`-Modus, Unit-Tests und Log-Ausgaben absichern.
-- `Orbivo.Xr.Tests` rendert auf WARP und legt die Ansichten als PNG unter `tests/Orbivo.Xr.Tests/bin/…/rendered-views/` ab. Die kann man sich ansehen.
-- `Orbivo.Media.Tests` dekodiert die Testvideos mit echter GPU und FFmpeg (8K-Benchmark in der Testausgabe) und spielt Open/Play/Pause/Stop über den Befehlskanal durch.
-- Am Ende jedes Meilensteins eine kurze **Checkliste für den manuellen Test mit Brille** ausgeben (was tun, was sollte man sehen/hören).
-- Bei Unsicherheit über Orientierung oder Vorzeichen (Projektion, Ambisonics-Rotation): Testmaterial aus `tools/testmedia` nutzen und den Menschen gezielt fragen, was er sieht oder hört.
+## What you (Claude) cannot check
+You do not see the headset and do not hear the sound. Therefore:
+- Cover everything that can be tested without a headset through `--no-xr` mode, unit tests and log output.
+- `Orbivo.Xr.Tests` renders on WARP and stores the views as PNG under `tests/Orbivo.Xr.Tests/bin/…/rendered-views/`.
+  They can be looked at.
+- `Orbivo.Media.Tests` decodes the test videos with a real GPU and FFmpeg (8K benchmark in the test output) and runs
+  open/play/pause/stop through the command channel.
+- At the end of every milestone, output a short **checklist for the manual test with the headset** (what to do, what
+  one should see/hear).
+- When unsure about orientation or signs (projection, Ambisonics rotation): use test material from `tools/testmedia`
+  and ask the human specifically what they see or hear.
 
-## Arbeitsweise
-- Ein Meilenstein nach dem anderen, kleine Commits mit aussagekräftigen Messages
-- Vor größeren Strukturänderungen kurz Plan vorschlagen und auf OK warten
-- Offene Punkte oder Annahmen in `docs/DECISIONS.md` festhalten (Datum, Entscheidung, Begründung)
-- Ändert sich etwas, das Operatoren oder Auswertende merken (Bedienung, Aufzeichnungsformat, Sidecar), dann `docs/Anleitung.html` **und** `docs/Manual.html` (englisch) mitpflegen und die Änderung in `CHANGELOG.md` unter „Unveröffentlicht“ eintragen
-- Releases nur über `release.ps1` und nur auf ausdrücklichen Wunsch; `-Publish` pusht und veröffentlicht
+## Way of working
+- One milestone after the other, small commits with meaningful messages
+- Before larger structural changes, briefly propose a plan and wait for an OK
+- Record open points or assumptions in `docs/DECISIONS.md` (date, decision, reason)
+- If something changes that operators or analysts notice (operation, recording format, sidecar), update
+  `docs/Anleitung.html` **and** `docs/Manual.html` (English) and add the change to `CHANGELOG.md` under
+  "Unveröffentlicht"
+- Releases only through `release.ps1` and only when explicitly requested; `-Publish` pushes and publishes

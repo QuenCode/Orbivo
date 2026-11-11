@@ -1,199 +1,408 @@
-# Architektur
+# Architecture
 
-## Solution-Struktur
+## Solution structure
 ```
 Orbivo.sln
-Directory.Build.props          # Nullable, TreatWarningsAsErrors, LangVersion, x64, Version (nur release.ps1 ändert sie)
-Directory.Packages.props       # zentrale, gepinnte Paketversionen
-release.ps1                    # Release bauen und veröffentlichen (docs/RELEASE.md)
-CHANGELOG.md                   # Änderungen je Version, Quelle der Release-Notizen
-build/                         # Native.targets (native DLLs ins Ausgabeverzeichnis), THIRD-PARTY-NOTICES.txt (fürs Paket)
+Directory.Build.props          # Nullable, TreatWarningsAsErrors, LangVersion, x64, Version (only release.ps1 changes it)
+Directory.Packages.props       # central, pinned package versions
+release.ps1                    # build and publish a release (docs/RELEASE.md)
+CHANGELOG.md                   # changes per version, source of the release notes
+build/                         # Native.targets (native DLLs into the output directory), THIRD-PARTY-NOTICES.txt (for the package), ffmpeg/ (own FFmpeg build)
 src/
-  Orbivo.Core/            # keine UI-, XR- oder Native-Abhängigkeiten
-    Commands/                  # PlayerCommand-Records (Open, Close, Play, Pause, Stop, Seek, Loop, Blackout, Fade, SetVideoFormat, Recenter)
-    Playback/                  # PlaybackStateMachine, SystemPlaybackClock, FramePacer, OutputFader (Blackout/Fade), MediaTime
-    Playlists/                 # Playlist (Reihenfolge, aktuelles Video, Weiter/Zurück, Dateien aus Drag & Drop)
+  Orbivo.Core/            # no UI, XR or native dependencies
+    Commands/                  # PlayerCommand records (Open, Close, Play, Pause, Stop, Seek, Loop, Blackout, Fade, SetVideoFormat, Recenter)
+    Playback/                  # PlaybackStateMachine, SystemPlaybackClock, FramePacer, OutputFader (blackout/fade), MediaTime
+    Playlists/                 # Playlist (order, current video, next/previous, files from drag & drop)
     Formats/                   # ProjectionType, StereoLayout, CubemapLayout, FisheyeParameters, VideoFormat, FormatOverrides,
-                               # EmbeddedFormatMetadata, VideoFormatResolver (Rangfolge), SidecarFile (Laden/Speichern)
-    Geometry/                  # ProjectionMath (C#-Referenz der Shader-Mathematik), OrientationMath, FovAngles, RecenterControl (M8)
-    Audio/                     # AudioRingBuffer, AudioConversionPlan, Uhr; StereoPlacement, AudioCoordinates, ListenerOrientation (M7)
-    Logging/                   # SessionRecorder (Kopf-CSV F50, Ereignis-Log F51), HeadSampleGate, SessionEventQueue, GermanCsv
-    Status/                    # PlayerStatus-Snapshot (immutable record)
-  Orbivo.Media/           # FFmpeg: Demux, Decode (D3D11VA), Metadaten (sv3d/st3d, Kanal-Layout)
-  Orbivo.Audio/           # NAudio-Ausgabe (Output/), Steam-Audio-Interop (SteamAudio/), Ton fest am Bild (Spatial/)
-  Orbivo.Xr/              # OpenXR-Session, D3D11-Device, Swapchains, Renderer, HLSL-Shader
-    OpenXr/                    # XrHost (XR-Render-Thread), Instance, Session, Swapchains, Lifecycle, Umrechnungen
-    Graphics/                  # D3D11-Device, Shader-Compiler
-    Rendering/                 # PanoramaRenderer, IViewSource, Standbild-Textur
-    Shaders/                   # *.hlsl, als Ressource eingebettet und beim Start kompiliert
-    DebugViewport/             # Vorschaufenster für --no-xr (eigenes Win32-Fenster, eigener Render-Thread)
-    LiveView/                  # Live-Ansicht (F42): LiveViewFrames (3 Slot-Texturen), LiveViewPresenter (Thread), LiveViewWindow (Kindfenster)
-  Orbivo.App/             # WPF-Operator-UI (MVVM), Composition Root, Settings; kopiert docs/Anleitung.html und docs/Manual.html neben die exe
+                               # EmbeddedFormatMetadata, VideoFormatResolver (precedence), SidecarFile (load/save)
+    Geometry/                  # ProjectionMath (C# reference of the shader math), OrientationMath, FovAngles, RecenterControl (M8)
+    Audio/                     # AudioRingBuffer, AudioConversionPlan, clock; StereoPlacement, AudioCoordinates, ListenerOrientation (M7)
+    Logging/                   # SessionRecorder (head CSV F50, event log F51), HeadSampleGate, SessionEventQueue, GermanCsv
+    Status/                    # PlayerStatus snapshot (immutable record)
+  Orbivo.Media/           # FFmpeg: demux, decode (D3D11VA), metadata (sv3d/st3d, channel layout)
+  Orbivo.Audio/           # NAudio output (Output/), Steam Audio interop (SteamAudio/), sound fixed to the picture (Spatial/)
+  Orbivo.Xr/              # OpenXR session, D3D11 device, swapchains, renderer, HLSL shaders
+    OpenXr/                    # XrHost (XR render thread), instance, session, swapchains, lifecycle, conversions
+    Graphics/                  # D3D11 device, shader compiler
+    Rendering/                 # PanoramaRenderer, IViewSource, still image texture
+    Shaders/                   # *.hlsl, embedded as resources and compiled at startup
+    DebugViewport/             # preview window for --no-xr (own Win32 window, own render thread)
+    LiveView/                  # live view (F42): LiveViewFrames (3 slot textures), LiveViewPresenter (thread), LiveViewWindow (child window)
+  Orbivo.App/             # WPF operator UI (MVVM), composition root, settings; copies docs/Anleitung.html and docs/Manual.html next to the exe
 tests/
-  Orbivo.Core.Tests/      # ProjectionMath, Sidecar, Clock/Sync-Logik, Zustandsautomat
-  Orbivo.Audio.Tests/     # Renderer und Ausgabe mit simulierten Geräten, Richtung mit echter phonon.dll (Pegel der Ohren)
-  Orbivo.Xr.Tests/        # Shader gegen ProjectionMath (WARP), Richtungstest mit dem Testbild, alle Projektionen gegen Equirect 360, Maus-Steuerung
-  Orbivo.Media.Tests/     # Dekodieren mit echter GPU, Player über den Befehlskanal, A/V-Sync, 30-Minuten-Dauertest (opt-in)
+  Orbivo.Core.Tests/      # ProjectionMath, sidecar, clock/sync logic, state machine
+  Orbivo.Audio.Tests/     # renderer and output with simulated devices, direction with the real phonon.dll (ear levels)
+  Orbivo.Xr.Tests/        # shaders against ProjectionMath (WARP), direction test with the test image, all projections against equirect 360, mouse control
+  Orbivo.Media.Tests/     # decoding with a real GPU, player through the command channel, A/V sync, 30-minute soak test (opt-in)
 tools/
-  testmedia/                   # Skripte (ffmpeg + Python) zum Erzeugen von Testvideos und Test-Ambisonics
+  testmedia/                   # scripts (ffmpeg + Python) that create test videos and test Ambisonics
+  tonanalyse/                  # analysis kit for the sound track of real material (technical data only)
 native/
-  README.md                    # Woher die FFmpeg- und phonon-DLLs kommen, welche Version
-docs/                          # SPEC, ARCHITECTURE, ROADMAP, DECISIONS, RELEASE; Anleitung.html (Bedienungsanleitung, wird ausgeliefert)
+  README.md                    # where the FFmpeg, phonon and OpenXR DLLs come from, which version
+docs/                          # SPEC, ARCHITECTURE, ROADMAP, DECISIONS, RELEASE; Anleitung.html and Manual.html (operator manual, shipped)
 ```
 
 ## Threads
-| Thread | Aufgabe | Darf blockieren? |
+| Thread | Task | May block? |
 |---|---|---|
-| WPF-UI | Operator-UI, schreibt Befehle in `Channel<PlayerCommand>` | ja (UI-üblich) |
-| Player-Control | Liest Befehle, steuert Demux/Decoder, Zustandsautomat, publiziert `PlayerStatus` (~10 Hz). Hält bei „Läuft“ und „Pause“ Bildschirm und System wach (`DisplayKeepAwake`) | ja |
-| Demux (`MediaDemuxer`) | liest Pakete und verteilt sie auf Video- und Audio-`PacketQueue`; führt Seeks aus und legt eine Seek-Marke in beide Queues | ja |
-| Video-Decode | dekodiert in GPU-Frames, kopiert sie in den Ring der `VideoFrameQueue` (6 Slots) und gibt sie über `FramePacer` frei. Führt Seeks aus und wartet nach dem Dateiende auf den nächsten Seek | ja |
-| Audio-Decode (`AudioDecoder`) | dekodiert, konvertiert mit swresample nach float32 Stereo interleaved in der Geräte-Samplerate, schreibt mit Medienposition in `AudioRingBuffer` | ja |
-| Audio-Out (`AudioOutput`, MMCSS „Pro Audio“) | wartet auf das WASAPI-Ereignis, liest Befehle, Geräteposition → `AudioClockTracker` → `ClockSnapshot`; `AudioRenderer` füllt den Puffer aus dem Ringpuffer (bei „Ton fest am Bild“ über die `SpatialStage`). Geräte öffnen und Wiederholung laufen zwischen den Perioden, nie darin | **nein** in der Periode (wartet nur auf das Geräte-Ereignis) |
-| XR-Render (`XrHost`) | OpenXR-Frame-Loop, wählt Frame nach Clock, rendert beide Augen, liest Head-Pose. Ohne laufende Session: Verbindungsaufbau und Wiederholung; holt dabei fällige Video-Frames ab, damit der Decoder mit der Uhr mitläuft | **nein** im Frame-Loop (wartet nur in `xrWaitFrame`); ohne Session darf er warten |
-| Vorschau-Render (nur `--no-xr`) | Fensternachrichten und Maus, rendert ein Auge ins Vorschaufenster | **nein** (wartet nur auf den Frame-Takt der Swapchain, wie `xrWaitFrame`) |
-| Live-Ansicht (`LiveViewPresenter`, nur wenn eingeschaltet) | kopiert das neueste Bild der Live-Ansicht ins Kindfenster im Operatorfenster und zeigt es an | ja (wartet auf den Frame-Takt seiner Swapchain); der Render-Thread wartet nie auf ihn |
-| Aufzeichnung (`SessionRecorder`) | holt Kopfproben (`HeadSampleGate`) und Ereignisse (`SessionEventQueue`) ab und schreibt die beiden CSV-Dateien; öffnet und schließt sie bei Start und Stopp | ja (Datei-I/O); Render- und Player-Thread warten nie auf ihn |
+| WPF UI | operator UI, writes commands into `Channel<PlayerCommand>` | yes (as usual for UI) |
+| Player control | reads commands, controls demux/decoders, state machine, publishes `PlayerStatus` (~10 Hz). Keeps display and system awake while "playing" and "paused" (`DisplayKeepAwake`) | yes |
+| Demux (`MediaDemuxer`) | reads packets and distributes them to the video and audio `PacketQueue`; performs seeks and puts a seek marker into both queues | yes |
+| Video decode | decodes into GPU frames, copies them into the ring of the `VideoFrameQueue` (6 slots) and releases them through `FramePacer`. Performs seeks and waits for the next seek after the end of the file | yes |
+| Audio decode (`AudioDecoder`) | decodes, converts with swresample to float32 stereo interleaved at the device sample rate, writes with media position into `AudioRingBuffer` | yes |
+| Audio out (`AudioOutput`, MMCSS "Pro Audio") | waits for the WASAPI event, reads commands, device position → `AudioClockTracker` → `ClockSnapshot`; `AudioRenderer` fills the buffer from the ring buffer (with "sound fixed to the picture" through the `SpatialStage`). Opening devices and retries happen between periods, never inside one | **no** within the period (waits only for the device event) |
+| XR render (`XrHost`) | OpenXR frame loop, picks the frame by clock, renders both eyes, reads the head pose. Without a running session: connecting and retrying; meanwhile it collects due video frames so that the decoder keeps pace with the clock | **no** in the frame loop (waits only in `xrWaitFrame`); without a session it may wait |
+| Preview render (only `--no-xr`) | window messages and mouse, renders one eye into the preview window | **no** (waits only for the frame pacing of the swapchain, like `xrWaitFrame`) |
+| Live view (`LiveViewPresenter`, only when switched on) | copies the newest live view image into the child window in the operator window and presents it | yes (waits for the frame pacing of its swapchain); the render thread never waits for it |
+| Recording (`SessionRecorder`) | collects head samples (`HeadSampleGate`) and events (`SessionEventQueue`) and writes the two CSV files; opens and closes them at start and stop | yes (file I/O); render and player threads never wait for it |
 
-Geteilte Daten zwischen nicht blockierenden Threads: lock-freie Strukturen (SPSC-Queues, `Volatile`/`Interlocked`). Die aktuelle Kopforientierung im Bildsystem (mit Ausrichtungs-Offset) veröffentlichen XR-Render- bzw. Vorschau-Thread jedes Bild als `ListenerOrientation` (`SnapshotCell`, Quaternion und Zeitstempel); der Audio-Thread liest sie einmal je Block.
+Shared data between non-blocking threads: lock-free structures (SPSC queues, `Volatile`/`Interlocked`). The XR render
+or preview thread publishes the current head orientation in the picture frame (with orientation offset) every frame
+as `ListenerOrientation` (`SnapshotCell`, quaternion and timestamp); the audio thread reads it once per block.
 
-## Datenfluss Video
-1. Ein `ID3D11Device` mit `ID3D11Multithread::SetMultithreadProtected(true)` wird von Renderer und FFmpeg gemeinsam genutzt (`AVHWDeviceContext` auf dieses Device setzen).
-2. Der Decoder liefert `AV_PIX_FMT_D3D11`-Frames (Texture-Array und Index).
-3. Pro Frame `CopySubresourceRegion` in eine eigene Ring-Textur (NV12 oder P010). Das entkoppelt vom Decoder-Pool, und das Frame kann sofort freigegeben werden. Die Kopie läuft auf dem geteilten Immediate Context (Multithread-Lock), damit liegt sie auf der GPU vor jedem Draw, der das Slot liest.
-4. `FramePacer` (Core) übergibt Slots lock-frei: eine SPSC-Queue freier Slots (Decoder → Render) und eine fertiger Slots mit pts (Render ← Decoder). Der Render-Thread wählt das jüngste Frame mit `pts ≤ Zielzeit` und gibt ältere sofort zurück.
-5. `VideoPlayer` (Media) ist die einzige Schnittstelle für die Render-Threads (`IVideoFrameSource.TryGetFrame(Anzeigezeitpunkt)` und `GetOutputBrightness(Anzeigezeitpunkt)` für Blackout/Fade). Beim Öffnen/Stoppen tauscht der Control-Thread die Queue; ein Hazard-Pointer verhindert, dass er eine Queue freigibt, die der Render-Thread gerade benutzt.
-5a. **Seek** bleibt in derselben Queue: Der Decode-Thread startet eine neue Generation im `FramePacer`. Der Render-Thread gibt Slots älterer Generationen zurück, zeigt aber sein aktuelles Frame weiter, bis ein Frame der neuen Generation fällig ist.
-6. Der Shader sampelt Luma-SRV (R8/R16) und Chroma-SRV (R8G8/R16G16) und konvertiert YUV→RGB (Matrix und Range aus dem Stream: BT.601/BT.709/BT.2020, limited/full; `color.hlsl`, C#-Referenz `VideoColor`). BT.2020 wird in linearem Licht auf BT.709 umgerechnet.
-6a. **Software-Fallback** (`DECISIONS.md`, 2026-11-07): Kann die GPU das Video nicht dekodieren (`HardwareDecodeSupport` fragt vor dem Öffnen `ID3D11VideoDevice`), dekodiert FFmpeg auf der CPU (4:2:0, 8/10 Bit). swscale schreibt jedes Bild als NV12/P010 in eine gemappte Staging-Textur (`Map` mit `DoNotWait`, zwei im Wechsel), danach `CopySubresourceRegion` in den Slot wie bei Schritt 3. Scheitert die Hardware vor dem ersten Bild trotzdem, öffnet der Player die Datei neu in Software. Die einzige Stelle, an der Frames von der CPU zur GPU gehen (Ausnahme von Regel 5).
-7. **Gamma-Falle:** Bei einem `*_SRGB`-Swapchain-Format muss der Shader linearisiert ausgeben. Entschieden in M1 (`DECISIONS.md`): durchgehend sRGB-Views, der Shader rechnet und schreibt linear. Seit M3 linearisiert der Shader das Video nach YUV→RGB mit der sRGB-Kurve, die Code-Werte kommen also unverändert an.
+## Video data flow
+1. One `ID3D11Device` with `ID3D11Multithread::SetMultithreadProtected(true)` is shared by renderer and FFmpeg (set
+   the `AVHWDeviceContext` to this device).
+2. The decoder delivers `AV_PIX_FMT_D3D11` frames (texture array and index).
+3. Per frame `CopySubresourceRegion` into an own ring texture (NV12 or P010). This decouples from the decoder pool,
+   and the frame can be released at once. The copy runs on the shared immediate context (multithread lock), so on the
+   GPU it comes before every draw that reads the slot.
+4. `FramePacer` (Core) hands over slots lock-free: one SPSC queue of free slots (decoder → render) and one of ready
+   slots with pts (render ← decoder). The render thread picks the newest frame with `pts ≤ target time` and returns
+   older ones at once.
+5. `VideoPlayer` (Media) is the only interface for the render threads (`IVideoFrameSource.TryGetFrame(display time)`
+   and `GetOutputBrightness(display time)` for blackout/fade). On open/stop the control thread swaps the queue; a
+   hazard pointer prevents it from releasing a queue the render thread is using.
+5a. **Seek** stays in the same queue: the decode thread starts a new generation in the `FramePacer`. The render thread
+   returns slots of older generations but keeps showing its current frame until a frame of the new generation is due.
+6. The shader samples the luma SRV (R8/R16) and the chroma SRV (R8G8/R16G16) and converts YUV→RGB (matrix and range
+   from the stream: BT.601/BT.709/BT.2020, limited/full; `color.hlsl`, C# reference `VideoColor`). BT.2020 is
+   converted to BT.709 in linear light.
+6a. **Software fallback** (`DECISIONS.md`, 2026-11-07): if the GPU cannot decode the video (`HardwareDecodeSupport`
+   asks `ID3D11VideoDevice` before opening), FFmpeg decodes on the CPU (4:2:0, 8/10 bit). swscale writes each picture
+   as NV12/P010 into a mapped staging texture (`Map` with `DoNotWait`, two alternating), then `CopySubresourceRegion`
+   into the slot as in step 3. If the hardware still fails before the first picture, the player reopens the file in
+   software. The only place where frames go from the CPU to the GPU (exception to rule 5).
+7. **Gamma trap:** with a `*_SRGB` swapchain format the shader must output linear values. Decided in M1
+   (`DECISIONS.md`): sRGB views throughout, the shader computes and writes linear. Since M3 the shader linearizes the
+   video after YUV→RGB with the sRGB curve, so the code values arrive unchanged.
 
 ## Rendering
-- Pro Auge ein Fullscreen-Triangle, kein Kugel-Mesh.
-- Der Pixel-Shader rekonstruiert die Blickrichtung: `dir = normalize(mul(invViewRotProj, ndc))`. Die View-Matrix enthält **nur Rotation** (Kopf-Orientierung × Recenter-Offset × Video-Offset). Projektionsmatrix aus dem asymmetrischen `XrFovf`.
-- Der Ausrichtungs-Offset des Videos (F14) dreht die Blickrichtung vor der Projektion: `view' = conj(R) · view` mit `R = yaw · pitch · roll` (`OrientationOffset.ApplyToView`). So dreht sich das Bild um R: Yaw +30° legt die bisherige Bildmitte 30° nach links.
-- Umgesetzt als drei Vektoren statt Matrix (`ViewRayBasis`): `dir = normalize(ndc.x·R + ndc.y·U + C)`. C# berechnet R, U und C, der Shader bekommt sie im Constant Buffer. So teilen C# und HLSL kein Matrix-Layout.
-- Abtastung ohne Mipmaps (`SampleLevel 0`), U wiederholend, V am Rand begrenzt. Dadurch gibt es hinten bei ±180° keine Naht.
-- `dir → (u,v)` je nach `ProjectionType` (`ProjectedEyeUv` in `projection.hlsl`, `ProjectionMath.EyeUv` in C#). Die Parameter der Projektion (Würfel-Layout als Tabelle je Fläche, Fisheye-Kreis) rechnet C# einmal pro Frame aus dem `VideoFormat` (`ProjectionMath.CreateProjectionParameters`) und legt sie in den Constant Buffer. Danach Stereo-Layout anwenden (Halbbild je Auge wählen): `SourceUv = clamp(uv, min, max) · Scale + Offset` (`EyeSourceRect`). Top-Bottom: oben = linkes Auge; Side-by-Side: links = linkes Auge. Begrenzt wird auf ein halbes Texel vor der Halbbildgrenze, bei allen Projektionen außer Equirect 360 auch links und rechts.
-- **Augen tauschen** (F11): `VideoFormat.SourceEye` nimmt für das linke Auge das rechte Halbbild und umgekehrt.
-- Außerhalb des gültigen Bereichs (z. B. Rückseite bei VR180, außerhalb des Fisheye-Kreises) wird Schwarz ausgegeben.
-- Fade und Blackout sind ein Multiplikator im Shader (`Brightness`), bei 0 wird nur gelöscht. Der Faktor kommt pro Frame aus `OutputFader` (über den Player) und ist `level^2,2`, damit der Fade in wahrgenommener Helligkeit gleichmäßig läuft.
-- Varjo-spezifisch: Zuerst Standard-Stereo (`PRIMARY_STEREO`). Quad-Views (`XR_VARJO_quad_views`) sind eine spätere Optimierung.
+- One fullscreen triangle per eye, no sphere mesh.
+- The pixel shader reconstructs the viewing direction: `dir = normalize(mul(invViewRotProj, ndc))`. The view matrix
+  contains **only rotation** (head orientation × recenter offset × video offset). Projection matrix from the
+  asymmetric `XrFovf`.
+- The orientation offset of the video (F14) turns the viewing direction before the projection:
+  `view' = conj(R) · view` with `R = yaw · pitch · roll` (`OrientationOffset.ApplyToView`). This turns the picture by
+  R: yaw +30° moves the former picture center 30° to the left.
+- Implemented as three vectors instead of a matrix (`ViewRayBasis`): `dir = normalize(ndc.x·R + ndc.y·U + C)`. C#
+  computes R, U and C, the shader gets them in the constant buffer. So C# and HLSL share no matrix layout.
+- Sampling without mipmaps (`SampleLevel 0`), U wrapping, V clamped at the edge. This avoids a seam at ±180° behind.
+- `dir → (u,v)` per `ProjectionType` (`ProjectedEyeUv` in `projection.hlsl`, `ProjectionMath.EyeUv` in C#). C#
+  computes the projection parameters (cube layout as a table per face, fisheye circle) once per frame from the
+  `VideoFormat` (`ProjectionMath.CreateProjectionParameters`) and puts them into the constant buffer. Then the stereo
+  layout is applied (half picture per eye): `SourceUv = clamp(uv, min, max) · Scale + Offset` (`EyeSourceRect`).
+  Top-bottom: top = left eye; side-by-side: left = left eye. Clamped to half a texel before the half-picture border,
+  for all projections except equirect 360 also left and right.
+- **Swap eyes** (F11): `VideoFormat.SourceEye` takes the right half picture for the left eye and vice versa.
+- Outside the valid range (e.g. the back side with VR180, outside the fisheye circle) the output is black.
+- Fade and blackout are a multiplier in the shader (`Brightness`); at 0 the target is only cleared. The factor comes
+  per frame from `OutputFader` (through the player) and is `level^2.2`, so that the fade runs evenly in perceived
+  brightness.
+- Varjo-specific: standard stereo (`PRIMARY_STEREO`) first. Quad views (`XR_VARJO_quad_views`) are a later
+  optimization.
 
-## Live-Ansicht (F42, M6.5)
-- **Blickwinkel:** In der Brille rechnet `CombinedView` (Core) aus beiden Augen eine Ansicht: Richtung = Mitte der Augen (Kopf), Sichtfeld vom linken Rand des linken Auges bis zum rechten Rand des rechten Auges, oben und unten jeweils das Größere; jede Kante höchstens 80° von der Achse. Gezeigt wird das linke Halbbild (bei Stereo). In `--no-xr` zeigt sie das Bild der Vorschau.
-- **Render-Thread:** `LiveViewFrames.RenderIfDue` zeichnet nach den Augen, höchstens alle 30 ms (90 Hz: jedes 3. Bild), mit Fade und Schwarzbild, in eine von drei Slot-Texturen (1920 × 1080, B8G8R8A8, sRGB-View). Größe: das Seitenverhältnis des Sichtfelds, eingepasst in die Fläche im Operatorfenster. Die Übergabe läuft über `TripleBufferIndex` (Core, lock-frei, das neueste gewinnt). Ist die Live-Ansicht aus, zeichnet der Render-Thread nichts zusätzlich.
-- **Anzeige-Thread:** `LiveViewPresenter` kopiert das neueste Bild mittig in die Swapchain eines Win32-Kindfensters (WPF `HwndHost`, `LiveViewHost`) und zeigt es an. Flip-Model mit Frame-Latency-Handle, sonst das ältere Copy-Model.
-- **Geteilter Immediate Context:** Der Anzeige-Thread benutzt nur Befehle, die keinen Pipeline-Zustand ändern (Löschen, Kopieren, Present, Flush; kein `ClearState`). Ein eigener Draw würde dem Render-Thread mitten im Bild Shader und Ziele verstellen. Weil beide Threads in denselben Context schreiben, kommt die Kopie eines Slots auf der GPU immer nach dem Zeichnen hinein.
-- Das Kindfenster lässt Mausklicks zum Operatorfenster durch (`HTTRANSPARENT`) und nimmt nie den Tastaturfokus. Es wird auf dem UI-Thread erzeugt; vor dem Zerstören wird der Anzeige-Thread beendet.
+## Live view (F42, M6.5)
+- **Point of view:** in the headset `CombinedView` (Core) computes one view from both eyes: direction = middle of the
+  eyes (head), field of view from the left edge of the left eye to the right edge of the right eye, top and bottom the
+  larger of the two; every edge at most 80° from the axis. The left half picture is shown (with stereo). In
+  `--no-xr` it shows the preview picture.
+- **Render thread:** `LiveViewFrames.RenderIfDue` draws after the eyes, at most every 30 ms (90 Hz: every 3rd frame),
+  with fade and blackout, into one of three slot textures (1920 × 1080, B8G8R8A8, sRGB view). Size: the aspect ratio of
+  the field of view, fitted into the area in the operator window. The handover runs through `TripleBufferIndex`
+  (Core, lock-free, the newest wins). With the live view off, the render thread draws nothing extra.
+- **Display thread:** `LiveViewPresenter` copies the newest image centered into the swapchain of a Win32 child window
+  (WPF `HwndHost`, `LiveViewHost`) and presents it. Flip model with frame latency handle, otherwise the older copy
+  model.
+- **Shared immediate context:** the display thread only uses commands that do not change pipeline state (clear,
+  copy, present, flush; no `ClearState`). An own draw would change shaders and targets of the render thread in the
+  middle of a frame. Because both threads write into the same context, the copy of a slot always reaches the GPU after
+  the drawing.
+- The child window passes mouse clicks through to the operator window (`HTTRANSPARENT`) and never takes the keyboard
+  focus. It is created on the UI thread; the display thread is stopped before it is destroyed.
 
-## Projektionsmathematik (Referenz)
-Konvention: +Y oben, −Z vorne, +X rechts. `dir` normalisiert.
+## Projection math (reference)
+Convention: +Y up, −Z forward, +X right. `dir` normalized.
 - **Equirect 360:** `lon = atan2(dir.x, -dir.z)`, `lat = asin(dir.y)`, `u = lon/(2π) + 0.5`, `v = 0.5 − lat/π`
-- **Equirect 180:** wie oben, aber `u = lon/π + 0.5`, gültig für `|lon| ≤ π/2`
-- **Cubemap:** Die Hauptachse bestimmt die Fläche (bei Gleichstand X vor Y vor Z). Auf der Fläche `(s, t) ∈ [−1, 1]²`, s nach rechts, t nach unten, so wie man die Fläche von der Würfelmitte aus sieht. Ungedrehte Flächen: vorne, hinten, links, rechts aufrecht; OBEN mit der Oberkante nach hinten (+Z), UNTEN mit der Oberkante nach vorne (wie ffmpeg `v360`). `CubemapLayout` beschreibt Raster (Spalten × Zeilen), Flächen je Zelle (`rludfb`) und Drehung je Zelle in Vierteldrehungen im Uhrzeigersinn, in der Schreibweise von `v360` (`in_forder`, `in_frot`). Vorbelegt: 3×2 und 6×1 und 1×6 (`rludfb`, `000000`), EAC (`lfrdbu`, `000313`). Optionaler Rand je Fläche (`cbmp`-Padding) in Pixeln.
-- **EAC:** Cubemap mit Winkelkorrektur `s' = (4/π)·atan(s)` je Flächenachse (`s ∈ [−1, 1]`; 45° liegen am Flächenrand, 22,5° auf halber Strecke), Layout nach YouTube (siehe oben). Gegen ffmpeg `v360` (`eac`) geprüft, gegen echtes YouTube-Material noch offen.
-- **Fisheye (äquidistant):** `θ = atan2(|dir.xy|, −dir.z)` (Winkel zur Blickachse vorne), Abstand vom Kreismittelpunkt `r = θ / (fov/2)` in Kreisradien, Richtung im Kreis aus `dir.xy` (rechts = +x, oben = +y). `u = centerX + r·(dir.x/|dir.xy|)·radius·H/W`, `v = centerY − r·(dir.y/|dir.xy|)·radius`; Mittelpunkt in Anteilen der Halbbild-Breite und -Höhe, Radius als Anteil der Halbbild-Höhe. Gültig für `θ ≤ fov/2`, sonst Schwarz.
+- **Equirect 180:** as above, but `u = lon/π + 0.5`, valid for `|lon| ≤ π/2`
+- **Cubemap:** the major axis determines the face (on a tie X before Y before Z). On the face `(s, t) ∈ [−1, 1]²`,
+  s to the right, t downwards, as the face is seen from the center of the cube. Unrotated faces: front, back, left,
+  right upright; UP with its top edge to the back (+Z), DOWN with its top edge to the front (like ffmpeg `v360`).
+  `CubemapLayout` describes the grid (columns × rows), the faces per cell (`rludfb`) and the rotation per cell in
+  quarter turns clockwise, in the notation of `v360` (`in_forder`, `in_frot`). Presets: 3×2 and 6×1 and 1×6
+  (`rludfb`, `000000`), EAC (`lfrdbu`, `000313`). Optional border per face (`cbmp` padding) in pixels.
+- **EAC:** cubemap with the angle correction `s' = (4/π)·atan(s)` per face axis (`s ∈ [−1, 1]`; 45° lie at the face
+  edge, 22.5° halfway), layout as on YouTube (see above). Checked against ffmpeg `v360` (`eac`), against real YouTube
+  material still open.
+- **Fisheye (equidistant):** `θ = atan2(|dir.xy|, −dir.z)` (angle to the forward viewing axis), distance from the
+  circle center `r = θ / (fov/2)` in circle radii, direction in the circle from `dir.xy` (right = +x, up = +y).
+  `u = centerX + r·(dir.x/|dir.xy|)·radius·H/W`, `v = centerY − r·(dir.y/|dir.xy|)·radius`; center as fractions of
+  the half-picture width and height, radius as a fraction of the half-picture height. Valid for `θ ≤ fov/2`,
+  otherwise black.
 
-Alle Formeln stehen in `ProjectionMath.cs` und in `projection.hlsl`. Die Unit-Tests prüfen bekannte Richtungen (vorne, links, oben, hinten) gegen erwartete UV. `ProjectionFormatShaderTests` vergleicht Shader und C# pixelweise für alle Formate, `ProjectionImageRenderTests` rendert die Testbilder aller Projektionen und vergleicht jede Ansicht mit derselben Ansicht des Equirect-360-Testbilds.
+All formulas are in `ProjectionMath.cs` and in `projection.hlsl`. The unit tests check known directions (front, left,
+up, back) against expected UVs. `ProjectionFormatShaderTests` compares shader and C# pixel by pixel for all formats,
+`ProjectionImageRenderTests` renders the test images of all projections and compares every view with the same view of
+the equirect 360 test image.
 
-## Formatpfad (M6)
-1. Beim Öffnen (`OpenMediaCommand`) liest der Player-Control-Thread das Sidecar (`SidecarFile.Load`). Die Wahl des Operators (`FormatOverrides`) gilt danach bis zum nächsten Video, auch über Stop und Neustart des Decoders.
-2. Beim Öffnen des Decoders liest `MediaDemuxer.ReadFormatMetadata` die Spherical-Video-Metadaten aus den Side-Data des Videostreams (`AV_PKT_DATA_SPHERICAL`, `AV_PKT_DATA_STEREO3D`; MP4 `sv3d`/`st3d`, Matroska, Frame-Packing-SEI).
-3. `VideoFormatResolver.Resolve` bestimmt jedes Teil des Formats einzeln: `--stereo` (nur Sitzung) vor Sidecar vor Metadaten vor Schätzung aus der Bildgröße. Ergebnis: verwendetes Format, das automatische Format (für „Automatisch (…)“ im Operatorfenster), die Quelle jedes Teils und deutsche Hinweise.
-4. Das Format geht als `VideoFormat` an die `VideoFrameQueue`; jedes `VideoFrame` trägt es zum Render-Thread. Eine Änderung (`SetVideoFormatCommand`) setzt `VideoFrameQueue.PictureFormat` (ein Referenz-Tausch, lock-frei), der Render-Thread sieht sie mit dem nächsten Frame, ohne Neuöffnen.
-5. Der Player speichert jede Änderung sofort im Sidecar und meldet das Format mit Quellen, Hinweisen und Sidecar-Zustand als `VideoFormatStatus` im `PlayerStatus`.
+## Format path (M6)
+1. On open (`OpenMediaCommand`) the player control thread reads the sidecar (`SidecarFile.Load`). The operator's
+   choice (`FormatOverrides`) then applies until the next video, also across stop and decoder restarts.
+2. When the decoder opens, `MediaDemuxer.ReadFormatMetadata` reads the spherical video metadata from the side data of
+   the video stream (`AV_PKT_DATA_SPHERICAL`, `AV_PKT_DATA_STEREO3D`; MP4 `sv3d`/`st3d`, Matroska, frame packing
+   SEI).
+3. `VideoFormatResolver.Resolve` determines each part of the format separately: `--stereo` (session only) before
+   sidecar before metadata before a guess from the picture size. Result: the format used, the automatic format (for
+   "Automatic (…)" in the operator window), the source of each part and hints.
+4. The format goes as `VideoFormat` to the `VideoFrameQueue`; every `VideoFrame` carries it to the render thread. A
+   change (`SetVideoFormatCommand`) sets `VideoFrameQueue.PictureFormat` (a reference swap, lock-free); the render
+   thread sees it with the next frame, without reopening.
+5. The player saves every change in the sidecar at once and reports the format with sources, hints and sidecar state
+   as `VideoFormatStatus` in the `PlayerStatus`.
 
-Standbilder (`--image`) bleiben ein Testwerkzeug für Equirect 360 ohne Sidecar.
+Still images (`--image`) remain a test tool for equirect 360 without a sidecar.
 
 ## Audio
-Stand M10: Stereo direkt oder „fest am Bild“ (zwei virtuelle Lautsprecher, binaural mit Steam Audio, M7) und Ambisonics Ordnung 1–3 binaural (M10). Surround folgt später.
+As of M10: stereo direct or "fixed to the picture" (two virtual speakers, binaural with Steam Audio, M7) and
+Ambisonics orders 1–3 binaural (M10). Surround follows later.
 
-### Datenfluss Ton
-1. `MediaDemuxer` wählt die Tonspur (`av_find_best_stream`, passend zum Videostream) und füllt die Audio-`PacketQueue`. Das Kanal-Layout jeder Tonspur liest er **vor** `avformat_find_stream_info` (`EmbeddedAudioLayout`): Danach meldet FFmpeg für AAC mit `SA3D` nur noch „4.0“ statt „ambisonic 1“.
-2. `AudioDecoder` dekodiert; `AudioModeResolver` (Core) bestimmt den Audio-Modus (siehe „Ambisonics“), `AudioConversionPlan` legt die Umrechnung fest: Stereo durchreichen, Mono auf beide Seiten, Mehrkanal auf Stereo mischen, Ambisonics ungemischt (alle Kanäle, `AV_CHANNEL_ORDER_UNSPEC` auf beiden Seiten von swresample), Resampling auf die Samplerate des Ausgabegeräts. Ergebnis: float32 interleaved mit Medienposition, 2 Kanäle bzw. 4/9/16 bei Ambisonics.
-3. `AudioRingBuffer` (Core, SPSC, 2¹⁷ Frames ≈ 2,7 s bei 48 kHz) ist medienadressiert: Der Leser holt „Daten ab Medienzeit t“, zu späte Daten werden übersprungen, Lücken werden Stille. Flush (Seek, Stop) als Handshake: Die alten Daten bleiben lesbar, bis die Ausgabe ausgeblendet und bestätigt hat. Jeder Platz fasst `AmbisonicsLayout.MaxChannels` = 16 Kanäle (8 MB), jede Generation (`Start`) nennt ihre Kanalzahl (`FrameChannels`); der Renderer liest sie mit jedem Block.
-4. `AudioOutput` (Orbivo.Audio) besitzt den Audio-Out-Thread und das Gerät. Der Player spricht nur über `IAudioOutput` (Core) mit ihr: Befehle (Attach, Play, Pause, Hold, Lautstärke, Stumm, Gerät) über eine lock-freie Queue, Uhr und Status über Snapshots.
-5. `AudioRenderer` (Zustände Still / Läuft / Blendet zur Pause aus / Blendet zum Halt aus) holt pro Periode die Frames zur gehörten Medienzeit, wendet Transport-Rampe (5 ms Smoothstep) und Verstärkung an und zählt Aussetzer. `SampleWriter` schreibt in das Geräteformat (float32, int16/24/32; Stereo auf die ersten zwei Kanäle, ein Mono-Gerät bekommt den Mittelwert).
-6. Verstärkung = `level³(Lautstärke)` × (stumm ? 0 : 1) × `level³(Fade/Schwarzbild)` zu dem Zeitpunkt, an dem der erste Frame der Periode gehört wird, geglättet mit 5 ms (`GainSmoother`).
+### Sound data flow
+1. `MediaDemuxer` picks the sound track (`av_find_best_stream`, matching the video stream) and fills the audio
+   `PacketQueue`. It reads the channel layout of every sound track **before** `avformat_find_stream_info`
+   (`EmbeddedAudioLayout`): afterwards FFmpeg reports only "4.0" instead of "ambisonic 1" for AAC with `SA3D`.
+2. `AudioDecoder` decodes; `AudioModeResolver` (Core) determines the audio mode (see "Ambisonics"),
+   `AudioConversionPlan` sets the conversion: pass stereo through, mono to both sides, mix multichannel to stereo,
+   Ambisonics unmixed (all channels, `AV_CHANNEL_ORDER_UNSPEC` on both sides of swresample), resampling to the sample
+   rate of the output device. Result: float32 interleaved with media position, 2 channels or 4/9/16 with Ambisonics.
+3. `AudioRingBuffer` (Core, SPSC, 2¹⁷ frames ≈ 2.7 s at 48 kHz) is addressed by media time: the reader fetches "data
+   from media time t", late data is skipped, gaps become silence. Flush (seek, stop) as a handshake: the old data
+   stays readable until the output has faded out and confirmed. Each slot holds `AmbisonicsLayout.MaxChannels` = 16
+   channels (8 MB); every generation (`Start`) states its channel count (`FrameChannels`); the renderer reads it with
+   every block.
+4. `AudioOutput` (Orbivo.Audio) owns the audio out thread and the device. The player talks to it only through
+   `IAudioOutput` (Core): commands (attach, play, pause, hold, volume, mute, device) through a lock-free queue, clock
+   and status through snapshots.
+5. `AudioRenderer` (states silent / playing / fading to pause / fading to hold) fetches per period the frames for the
+   media time being heard, applies the transport ramp (5 ms smoothstep) and gain, and counts dropouts. `SampleWriter`
+   writes in the device format (float32, int16/24/32; stereo to the first two channels, a mono device gets the
+   average).
+6. Gain = `level³(volume)` × (muted ? 0 : 1) × `level³(fade/blackout)` at the time the first frame of the period is
+   heard, smoothed over 5 ms (`GainSmoother`).
 
-### Geräte
-- `IAudioEndpoint` kapselt ein Gerät: `WasapiAudioEndpoint` (Shared Mode, ereignisgesteuert, 20 ms Puffer, Position über `IAudioClock` mit QPC-Zeitstempel), `NullAudioEndpoint` (stiller Ersatz mit Systemtakt) und `SimulatedAudioEndpoint` (für Tests: Drift, Latenz, Aufnahme, Erkennung von Tönen).
-- `WasapiEndpointProvider` listet Geräte und meldet Änderungen (`IMMNotificationClient`). „Windows-Standard“ folgt dem Standardgerät; ein fest gewähltes Gerät wird nie automatisch gewechselt.
-- Fehlt das Gerät oder fällt es aus (Fehler oder 500 ms ohne Periode), läuft `NullAudioEndpoint` weiter; neuer Versuch alle 2 s und bei jeder Geräteänderung.
-- `settings.json` (`%LOCALAPPDATA%\Orbivo`) speichert Gerät, Lautstärke und die Ton-Sperre, nicht Stumm (`AppSettings`, Core). Dazu Leerlauf-Ansicht und Aufzeichnung (M8) sowie Playlist, „Automatisch weiter“, „Wiederholen“ und Fade-Dauer (M9, siehe „Auslieferung“) und die Sprache (M11, siehe „Sprachen“).
+### Devices
+- `IAudioEndpoint` wraps a device: `WasapiAudioEndpoint` (shared mode, event-driven, 20 ms buffer, position through
+  `IAudioClock` with QPC timestamp), `NullAudioEndpoint` (silent stand-in with system clock) and
+  `SimulatedAudioEndpoint` (for tests: drift, latency, capture, tone detection).
+- `WasapiEndpointProvider` lists devices and reports changes (`IMMNotificationClient`). "Windows default" follows the
+  default device; a fixed device is never switched automatically.
+- If the device is missing or fails (error or 500 ms without a period), `NullAudioEndpoint` takes over; a new attempt
+  every 2 s and on every device change.
+- `settings.json` (`%LOCALAPPDATA%\Orbivo`) stores device, volume and the audio lock, not mute (`AppSettings`, Core).
+  Also idle view and recording (M8), playlist, "auto-advance", "loop" and fade duration (M9, see "Delivery") and the
+  language (M11, see "Languages").
 
-### Ton fest am Bild (M7)
-- **Wahl:** `StereoPlacement` (Core) = fest am Bild ja/nein und Breite (30–90°, Standard an, 75°), aus dem Sidecar (`audioFixedToPicture`, `stereoWidthDeg`). Der Player schickt sie beim Öffnen, nach jedem Neuöffnen des Ton-Decoders und bei jeder Änderung im Operatorfenster über `IAudioOutput.SetStereoPlacement` (lock-freie Befehlsqueue). Mono-Spuren bekommen immer „direkt“.
-- **Kopfrichtung:** `ListenerOrientation` (siehe Threads) = Kopf im Bildsystem, `OrientationOffset.ApplyToView(Kopf)`, dieselbe Rechnung wie für das Bild. Recenter (M8) muss dort mit eingehen.
-- **Lautsprecher:** `AudioCoordinates.StereoSpeakers(Breite, Kopf)` liefert die Richtungen der beiden Lautsprecher (Yaw ±Breite auf dem Horizont des Bilds) relativ zum Kopf: `normalize(conj(Kopf)·Richtung)`. Steam Audio nutzt dieselben Achsen wie OpenXR (+X rechts, +Y oben, −Z vorne), es gibt keine weitere Umrechnung.
-- **Verarbeitung:** `SpatialStage` (Orbivo.Audio, gehört dem Audio-Thread) arbeitet in Blöcken zu 256 Frames: Kopfrichtung lesen, `SteamStereoSpatializer` (je Kanal ein `iplBinauralEffect` mit eingebauter HRTF, bilinear, Ohrsignale addiert × 0,6). Die Stufe verzögert um genau einen Block; `AudioRenderer` liest den Ringpuffer um diesen Block voraus, damit das Gehörte zur Medienposition passt (Uhr und A/V unverändert). Nach Start, Seek, Flush und Umschalten füllt der Renderer die Verzögerungsleitung neu. Umschalten während der Wiedergabe läuft über die 5-ms-Transportrampe.
-- **Erzeugen:** Kontext, HRTF und Effekte legt der Audio-Thread beim Öffnen des Geräts an (zwischen den Perioden), passend zur Samplerate. Scheitert das (z. B. `phonon.dll` fehlt), bleibt es bei Stereo direkt, der Status meldet den Grund.
-- **Status:** `AudioOutputStatus.Spatial` (verfügbar, aktiv, Wahl, Spitzenlast je Block, Problem); das Operatorfenster zeigt den Modus in der Gruppe „Ton“ und die Last in „Tonausgabe“.
+### Sound fixed to the picture (M7)
+- **Choice:** `StereoPlacement` (Core) = fixed to the picture yes/no and width (30–90°, on by default, 75°), from the
+  sidecar (`audioFixedToPicture`, `stereoWidthDeg`). The player sends it on open, after every reopening of the sound
+  decoder and on every change in the operator window through `IAudioOutput.SetStereoPlacement` (lock-free command
+  queue). Mono tracks always get "direct".
+- **Head direction:** `ListenerOrientation` (see threads) = head in the picture frame,
+  `OrientationOffset.ApplyToView(head)`, the same computation as for the picture. Recenter (M8) must be included there.
+- **Speakers:** `AudioCoordinates.StereoSpeakers(width, head)` returns the directions of the two speakers (yaw ±width
+  on the horizon of the picture) relative to the head: `normalize(conj(head)·direction)`. Steam Audio uses the same
+  axes as OpenXR (+X right, +Y up, −Z forward); there is no further conversion.
+- **Processing:** `SpatialStage` (Orbivo.Audio, owned by the audio thread) works in blocks of 256 frames: read the
+  head direction, `SteamStereoSpatializer` (one `iplBinauralEffect` per channel with the built-in HRTF, bilinear, ear
+  signals added × 0.6). The stage delays by exactly one block; `AudioRenderer` reads the ring buffer one block ahead so
+  that what is heard matches the media position (clock and A/V unchanged). After start, seek, flush and switching, the
+  renderer refills the delay line. Switching during playback goes through the 5 ms transport ramp.
+- **Creation:** the audio thread creates context, HRTF and effects when it opens the device (between periods),
+  matching the sample rate. If that fails (e.g. `phonon.dll` missing), stereo stays direct and the status reports the
+  reason.
+- **Status:** `AudioOutputStatus.Spatial` (available, active, choice, peak load per block, problem); the operator
+  window shows the mode in the "Sound" group and the load in "Audio output".
 
 ### Ambisonics (M10)
-- **Erkennung:** `AudioModeResolver.Resolve(Layout, Wahl)` (Core): Sidecar `audioMode` vor Metadaten vor Kanalzahl. Metadaten = FFmpeg meldet `AV_CHANNEL_ORDER_AMBISONIC` (aus `SA3D` in MP4, Ordnung über `av_channel_layout_ambisonic_order`). Ohne Metadaten gelten 4, 9 oder 16 Kanäle ohne benannte Lautsprecher als AmbiX der Ordnung 1–3, alles andere als „Kanäle“. Ergebnis `ResolvedAudioMode` mit Quelle, automatischem Modus (für „Automatisch (…)“) und deutschem Hinweis (z. B. FuMa höherer Ordnung, zu wenige Kanäle).
-- **Umrechnung im Decoder-Thread:** `AmbisonicsFrames.ToAmbiX` kopiert die ersten (Ordnung+1)² Kanäle in den Ring, weitere Kanäle fallen weg. FuMa 1. Ordnung (W X Y Z, W −3 dB) wird zu AmbiX: W·√2, Reihenfolge W Y Z X. Wechselt die Wahl, öffnet der Player den Ton-Decoder an derselben Stelle neu (`RestartAudioDecoder`).
-- **Achsen:** AmbiX: X vorne, Y links, Z oben. Im Bildsystem (OpenXR) ist das X = −Z, Y = −X, Z = +Y (`AudioCoordinates`). Steam Audio liest ACN 1 = links, 2 = oben, 3 = vorne (gegen den eigenen Encoder geprüft, `SteamAmbisonicsSpatializerTests`), also dieselbe Reihenfolge wie AmbiX.
-- **Normierung:** Steam Audio erwartet orthonormierte Kanäle (N3D/√(4π)). `SteamAmbisonicsSpatializer` skaliert jeden AmbiX-Kanal mit √((2l+1)/4π) (l = Grad des Kanals) und gleicht die Lautheit je Ordnung aus (×2,5 / ×2,1 / ×1,8, gemessen mit Rauschen gegen Stereo direkt).
-- **Verarbeitung:** `AmbisonicsStage` (wie `SpatialStage` ein `BlockStage`, 256 Frames, ein Block Verzögerung, Vorauslesen im Renderer) gibt jeden Block an `iplAmbisonicsDecodeEffect` (Ordnung 3 angelegt, eingebaute HRTF, Stereo-Lautsprecher-Layout, binaural). Die Kopfrichtung geht als Hörer-Achsen (rechts, oben, vorne) im Bildsystem hinein (`AudioCoordinates.ListenerAxes`). „Ton fest am Bild“ aus = Hörer schaut immer nach vorne, das Feld dreht mit dem Kopf.
-- **Notbehelf:** Fehlt Steam Audio oder scheitert das Anlegen, spielt der Renderer zwei Nieren nach links und rechts, 0,5·(W ± Y), kopffest. Der Status nennt den Grund (`SpatialAudioStatus.AmbisonicsProblem`).
-- **Status:** `AudioConversionPlan.Mode` im Ton-Status, `VideoFormatStatus.AudioMode` für die Auswahl im Operatorfenster, `SpatialAudioStatus.FieldBinaural` für „binaural“.
+- **Detection:** `AudioModeResolver.Resolve(layout, choice)` (Core): sidecar `audioMode` before metadata before
+  channel count. Metadata = FFmpeg reports `AV_CHANNEL_ORDER_AMBISONIC` (from `SA3D` in MP4, order through
+  `av_channel_layout_ambisonic_order`). Without metadata, 4, 9 or 16 channels without named speakers count as AmbiX
+  of order 1–3, everything else as "channels". Result `ResolvedAudioMode` with source, automatic mode (for
+  "Automatic (…)") and a hint (e.g. higher-order FuMa, too few channels).
+- **Conversion in the decoder thread:** `AmbisonicsFrames.ToAmbiX` copies the first (order+1)² channels into the
+  ring; further channels are dropped. First-order FuMa (W X Y Z, W −3 dB) becomes AmbiX: W·√2, order W Y Z X. When
+  the choice changes, the player reopens the sound decoder at the same position (`RestartAudioDecoder`).
+- **Axes:** AmbiX: X forward, Y left, Z up. In the picture frame (OpenXR) this is X = −Z, Y = −X, Z = +Y
+  (`AudioCoordinates`). Steam Audio reads ACN 1 = left, 2 = up, 3 = forward (checked against its own encoder,
+  `SteamAmbisonicsSpatializerTests`), so the same order as AmbiX.
+- **Normalization:** Steam Audio expects orthonormalized channels (N3D/√(4π)). `SteamAmbisonicsSpatializer` scales
+  every AmbiX channel by √((2l+1)/4π) (l = degree of the channel) and evens out the loudness per order (×2.5 / ×2.1 /
+  ×1.8, measured with noise against stereo direct).
+- **Processing:** `AmbisonicsStage` (like `SpatialStage` a `BlockStage`, 256 frames, one block of delay, read-ahead
+  in the renderer) passes every block to `iplAmbisonicsDecodeEffect` (created for order 3, built-in HRTF, stereo
+  speaker layout, binaural). The head direction goes in as listener axes (right, up, forward) in the picture frame
+  (`AudioCoordinates.ListenerAxes`). "Sound fixed to the picture" off = the listener always looks forward, the field
+  turns with the head.
+- **Fallback:** if Steam Audio is missing or creation fails, the renderer plays two cardioids to the left and right,
+  0.5·(W ± Y), head-locked. The status names the reason (`SpatialAudioStatus.AmbisonicsProblem`).
+- **Status:** `AudioConversionPlan.Mode` in the sound status, `VideoFormatStatus.AudioMode` for the selection in the
+  operator window, `SpatialAudioStatus.FieldBinaural` for "binaural".
 
-### Später (geplant)
-- **Surround:** virtuelle Lautsprecher wie bei Stereo (Steam Audio `iplBinauralEffect` pro Kanal).
-- **Externe Audiodatei** (falls die Aufnahmen getrennt geliefert werden): Sidecar-Feld `externalAudio` mit `path` und `offsetMs`. Eigener Demux/Decoder für Audio, gleiche Clock.
+### Later (planned)
+- **Surround:** virtual speakers as with stereo (Steam Audio `iplBinauralEffect` per channel).
+- **External audio file** (if the recordings come with separate sound): sidecar field `externalAudio` with `path` and
+  `offsetMs`. Own demux/decoder for audio, same clock.
 
-## Recenter, Leerlauf-Ansicht und Aufzeichnung (M8)
-- **Recenter (F30/F31):** `RecenterControl` (Core) nimmt Anforderungen von jedem Thread an (`RequestRecenter`, `RequestReset`). Ausgeführt werden sie im Render-Thread mit der Kopfpose des nächsten Bilds (`Update`), daraus entsteht eine reine Yaw-Drehung `C = Ry(−Yaw)`. Sie wirkt als `C·Ansicht` vor Ausrichtungs-Offset und Projektion auf beide Augen, die Live-Ansicht und `ListenerOrientation`; Bild und Ton bleiben damit deckungsgleich. In der Vorschau dreht sie die Mausansicht. Der Wert gilt über Videowechsel und Wiederverbindung, er wird nicht gespeichert.
-- **Leerlauf-Ansicht (F7):** Liefert der Player kein Frame (kein Video, Bereit nach Stop), zeigt der Render-Thread `PanoramaSource.ForIdle(…)`: Schwarz, Standbild (mit eigenem Stereo-Layout, `StillImageTexture.PictureFormat`) oder See-through. See-through: Blend-Mode `ALPHA_BLEND` und `BlendTextureSourceAlphaBit` im Layer, die Augen werden mit `(0, 0, 0, 1 − Helligkeit)` gelöscht (vormultipliziertes Alpha), Schwarzbild und Fade decken das Kamerabild also ab. Bietet die Runtime `ALPHA_BLEND` nicht an (`xrEnumerateEnvironmentBlendModes`), bleibt es schwarz und der Status sagt es. Die Vorschau zeigt statt des Kamerabilds eine dunkle Fläche (`PanoramaRenderer.SeeThroughStandIn`).
-- **Aufzeichnung (F50–F52):** `SessionRecorder` (Core) besitzt einen eigenen Thread. Der Render-Thread gibt jedes Bild eine `HeadSample` an `HeadSampleGate` (lock-freie SPSC-Queue, 8192 Plätze, dünnt auf die gewählte Rate aus, allokiert nicht; voll = Zeile verloren und gezählt). Player-Control, App und `XrHost` (Verbindung, Sitzung, Fehler) melden Ereignisse an `ISessionEventLog` (`SessionEventQueue`, höchstens 10 000 wartend). Der Recorder schreibt alle 50 ms und flusht jede Sekunde. Zeiten: ein Anker (UTC und Stopwatch) je Dateipaar, jede Zeile = Anker + Stopwatch-Zeit, damit monoton; geschrieben wird sie als Ortszeit des PCs. In der Brille ist der Zeitpunkt einer Kopfzeile die vorhergesagte Anzeigezeit des Bilds.
-- **Nur bei laufendem Video:** Der Recorder ist eingeschaltet, öffnet aber keine Dateien. Der Player meldet Zustandswechsel typisiert (`ISessionEventLog.RecordState`, `SessionEvent.PlaybackState`). Wechselt der Zustand auf „Läuft“, beginnt ein Dateipaar, verankert am Play-Befehl davor (Ereignisse und Kopfproben der letzten 5 s werden dafür vorgehalten). Pause bleibt im Dateipaar; jeder andere Zustand (Öffnet, Bereit, Ende, Kein Video, Fehler) beendet es, Kopfproben nach diesem Ereignis gehören nicht mehr dazu. Läuft beim Einschalten schon ein Video (oder steht es auf Pause), beginnt das Dateipaar sofort (`RecordingOptions.PlaybackAtStart`).
-- **Dateien:** je Aufzeichnung `JJJJ-MM-TT_hhmmss[_Proband]_kopf.csv` und `…_ereignisse.csv` (mit „Nur bei laufendem Video“ je Video `…[_Proband]_Videoname_kopf.csv`) im gewählten Ordner (Standard `Dokumente\Orbivo\Aufzeichnungen`), Semikolon, Dezimalkomma, UTF-8 mit BOM. Kopf-CSV: `Uhrzeit;Sekunden;Video;Videozeit_s;Status;Inhalt;Helligkeit;Tracking;Kopf_qw…qz;Kopf_Yaw/Pitch/Roll_Grad;Blick_Video_Yaw/Pitch_Grad;Recenter_Yaw_Grad`. Ereignis-CSV: `Uhrzeit;Sekunden;Ereignis;Video;Videozeit_s;Details`. Kann der Recorder nicht schreiben, beendet er die Aufzeichnung und meldet den Grund im Operatorfenster.
+## Recenter, idle view and recording (M8)
+- **Recenter (F30/F31):** `RecenterControl` (Core) accepts requests from any thread (`RequestRecenter`,
+  `RequestReset`). They are carried out in the render thread with the head pose of the next frame (`Update`), which
+  yields a pure yaw rotation `C = Ry(−yaw)`. It applies as `C·view` before orientation offset and projection to both
+  eyes, the live view and `ListenerOrientation`; picture and sound thus stay aligned. In the preview it turns the
+  mouse view. The value applies across video changes and reconnects; it is not saved.
+- **Idle view (F7):** if the player delivers no frame (no video, ready after stop), the render thread shows
+  `PanoramaSource.ForIdle(…)`: black, still image (with its own stereo layout, `StillImageTexture.PictureFormat`) or
+  see-through. See-through: blend mode `ALPHA_BLEND` and `BlendTextureSourceAlphaBit` in the layer; the eyes are
+  cleared with `(0, 0, 0, 1 − brightness)` (premultiplied alpha), so blackout and fade cover the camera picture. If
+  the runtime does not offer `ALPHA_BLEND` (`xrEnumerateEnvironmentBlendModes`), it stays black and the status says
+  so. Instead of the camera picture the preview shows a dark area (`PanoramaRenderer.SeeThroughStandIn`).
+- **Recording (F50–F52):** `SessionRecorder` (Core) owns a thread of its own. Every frame the render thread passes a
+  `HeadSample` to `HeadSampleGate` (lock-free SPSC queue, 8192 slots, thins out to the chosen rate, does not allocate;
+  full = row lost and counted). Player control, app and `XrHost` (connection, session, errors) report events to
+  `ISessionEventLog` (`SessionEventQueue`, at most 10 000 waiting). The recorder writes every 50 ms and flushes every
+  second. Times: one anchor (UTC and stopwatch) per file pair, every row = anchor + stopwatch time, hence monotonic;
+  written as the local time of the PC. In the headset the time of a head row is the predicted display time of the
+  frame.
+- **Only while a video runs:** the recorder is switched on but opens no files. The player reports state changes typed
+  (`ISessionEventLog.RecordState`, `SessionEvent.PlaybackState`). When the state changes to "playing", a file pair
+  begins, anchored at the Play command before it (events and head samples of the last 5 s are kept for this). Pause
+  stays in the file pair; every other state (opening, ready, end, no video, error) ends it; head samples after this
+  event no longer belong to it. If a video is already playing (or paused) when recording is switched on, the file pair
+  starts at once (`RecordingOptions.PlaybackAtStart`).
+- **Files:** per recording `YYYY-MM-DD_hhmmss[_session]_kopf.csv` and `…_ereignisse.csv` (with "Nur bei laufendem
+  Video" per video `…[_session]_videoname_kopf.csv`) in the chosen folder (default `Dokumente\Orbivo\Aufzeichnungen`),
+  semicolon, decimal comma, UTF-8 with BOM. Head CSV:
+  `Uhrzeit;Sekunden;Video;Videozeit_s;Status;Inhalt;Helligkeit;Tracking;Kopf_qw…qz;Kopf_Yaw/Pitch/Roll_Grad;Blick_Video_Yaw/Pitch_Grad;Recenter_Yaw_Grad`.
+  Event CSV: `Uhrzeit;Sekunden;Ereignis;Video;Videozeit_s;Details`. If the recorder cannot write, it ends the
+  recording and reports the reason in the operator window.
 
-## Sprachen (M11)
-- **Texte:** Englisch ist die neutrale Sprache, Deutsch der Satellit `de\*.resources.dll`. `Orbivo.Core/Localization/CoreText.resx` (+ `.de.resx`) hält die Texte der unteren Schichten (Format- und Sidecar-Hinweise, Fehler von Player und Decodern, Tonausgabe, native Bibliotheken), `Orbivo.App/Localization/UiText.resx` (+ `.de.resx`) die des Fensters. Die Klassen `CoreText` und `UiText` erzeugt der Build (`StronglyTyped…` im csproj). Für `UiText` erzeugt `Orbivo.App.csproj` sie vor dem XAML-Schritt, weil WPF eine temporäre Assembly (`*_wpftmp.csproj`) übersetzt, bevor die Ressourcen sonst entstehen. Im XAML: `{x:Static loc:UiText.Schlüssel}`.
-- **Sprache wählen:** `AppSettings.Language` (`"en"`/`"de"`). Fehlt `settings.json`, gilt Englisch; fehlt nur das Feld (Datei von vor M11), gilt Deutsch. `--lang` übersteuert für eine Sitzung. `App.OnStartup` lädt die Einstellungen zuerst und setzt mit `Loc.Apply` Culture und UI-Culture für alle Threads, bevor Fenster, Prüfungen der nativen Bibliotheken oder Threads entstehen, dazu `FrameworkElement.Language` (Zahlen in Bindings).
-- **Umschalten:** Menü Optionen → Sprache (`ChooseLanguageCommand`); `MainViewModel.SelectedLanguage` speichert die Wahl und meldet `LanguageChangeRequested`; `App` fragt in beiden Sprachen nach einem Neustart, startet `Orbivo.exe` mit denselben Argumenten (ohne `--lang`) plus `--wait-for-pid <eigene Id>` und beendet sich. Die neue Instanz wartet höchstens 30 s, bis die alte Brille, Tongerät und `settings.json` freigegeben hat. Kein Umschalten zur Laufzeit: Statuszeilen, Auswahllisten und Fehlertexte entstehen an vielen Stellen schon beim Start.
-- **Aufzeichnung bleibt deutsch:** Ereignistexte (`SessionEvents`, `XrEventText`, Befehle im `VideoPlayer`, `App.DescribeIdleView`) sind fest deutsch, Zahlen mit `Loc.RecordingCulture`. Texte, die der Operator sieht **und** das Ereignis-Log bekommt (Fehler beim Öffnen, Dekodieren, Software-Grund), sind `OperatorText` (Ressourcen-Name plus Argumente): `ToString()` in der UI-Sprache, `ForRecording()` deutsch, `ForLog()` englisch.
-- **Tests:** `tests/xunit.runner.json` legt die Culture aller Testläufe auf `de-DE` fest, unabhängig von der Windows-Sprache. `LocalizationTests` prüft jedes `.resx`-Paar (gleiche Schlüssel, gleiche Platzhalter, nicht leer) und `OperatorText` in allen drei Sprachen.
+## Languages (M11)
+- **Texts:** English is the neutral language, German the satellite `de\*.resources.dll`.
+  `Orbivo.Core/Localization/CoreText.resx` (+ `.de.resx`) holds the texts of the lower layers (format and sidecar
+  hints, errors of player and decoders, audio output, native libraries), `Orbivo.App/Localization/UiText.resx`
+  (+ `.de.resx`) those of the window. The build generates the classes `CoreText` and `UiText` (`StronglyTyped…` in
+  the csproj). For `UiText`, `Orbivo.App.csproj` generates it before the XAML step, because WPF compiles a temporary
+  assembly (`*_wpftmp.csproj`) before the resources would otherwise exist. In XAML: `{x:Static loc:UiText.Key}`.
+- **Choosing the language:** `AppSettings.Language` (`"en"`/`"de"`). Without `settings.json` English applies; if only
+  the field is missing (file from before M11), German applies. `--lang` overrides for one session. `App.OnStartup`
+  loads the settings first and sets culture and UI culture for all threads with `Loc.Apply`, before windows, checks of
+  the native libraries or threads are created, plus `FrameworkElement.Language` (numbers in bindings).
+- **Switching:** menu Options → Language (`ChooseLanguageCommand`); `MainViewModel.SelectedLanguage` saves the choice
+  and raises `LanguageChangeRequested`; `App` asks in both languages for a restart, starts `Orbivo.exe` with the same
+  arguments (without `--lang`) plus `--wait-for-pid <own id>` and exits. The new instance waits at most 30 s until the
+  old one has released the headset, the sound device and `settings.json`. No switching at runtime: status lines,
+  selection lists and error texts are created in many places already at startup.
+- **Recording stays German:** event texts (`SessionEvents`, `XrEventText`, commands in `VideoPlayer`,
+  `App.DescribeIdleView`) are fixed German, numbers with `Loc.RecordingCulture`. Texts the operator sees **and** the
+  event log gets (errors when opening, decoding, software reason) are `OperatorText` (resource name plus arguments):
+  `ToString()` in the UI language, `ForRecording()` German, `ForLog()` English.
+- **Tests:** `tests/xunit.runner.json` fixes the culture of all test runs to `de-DE`, independent of the Windows
+  language. `LocalizationTests` checks every `.resx` pair (same keys, same placeholders, not empty) and `OperatorText`
+  in all three languages.
 
-## Auslieferung (M9)
-- **Paket:** `release.ps1` veröffentlicht `Orbivo.App` self-contained für win-x64 (`dotnet publish -c Release --self-contained`, `-p:OrbivoRelease=true`) und legt `licenses\` und `build/THIRD-PARTY-NOTICES.txt` dazu. Die nativen DLLs kommen über `build/Native.targets` (`CopyToPublishDirectory`), die Anleitung über `Orbivo.App.csproj`. Ablauf, Prüfungen und Paketinhalt: `docs/RELEASE.md`.
-- **Version:** `<Version>` in `Directory.Build.props`. Ohne `OrbivoRelease=true` wird die `InformationalVersion` zu `X.Y.Z-dev`; das SDK hängt den Commit an (`+<sha>`). Die App zeigt die Version ohne Commit in der Titelleiste, Log und Aufzeichnung bekommen sie ganz.
-- **`--check`:** Die App prüft wie bei jedem Start FFmpeg, Steam Audio und den OpenXR-Loader, dazu beide Anleitungen, schreibt das Ergebnis ins Log und beendet sich ohne Fenster (Exit-Code 0 oder 1). Das Release-Skript prüft damit das fertige Paket.
-- **Anleitung:** `docs/Anleitung.html` und die englische Fassung `docs/Manual.html` (je eine Datei ohne externe Abhängigkeiten, gegenseitig verlinkt) werden bei jedem Build neben die exe kopiert; F1 öffnet die der eingestellten Sprache. Hilfe → Anleitung bzw. F1 öffnet sie über die Shell im Standardbrowser (`App.OpenManual`); fehlt sie, sagt ein Hinweisfenster wo sie liegen müsste.
-- **Playlist beim Start:** `MainViewModel` legt die gespeicherten Pfade wieder an (fehlende weglassen, im Status „Playlist“ nennen) und wählt das zuletzt geladene Video aus, ohne es zu laden. Jede Änderung an Playlist, „Automatisch weiter“, „Wiederholen“ und Fade-Dauer speichert die Einstellungen. Mit `--video` bleibt die gespeicherte Playlist unberührt.
+## Delivery (M9)
+- **Package:** `release.ps1` publishes `Orbivo.App` self-contained for win-x64 (`dotnet publish -c Release
+  --self-contained`, `-p:OrbivoRelease=true`) and adds `licenses\`, `LICENSE.txt`, `NOTICE.txt` and
+  `build/THIRD-PARTY-NOTICES.txt`. The native DLLs come through `build/Native.targets` (`CopyToPublishDirectory`), the
+  manuals through `Orbivo.App.csproj`. Procedure, checks and package contents: `docs/RELEASE.md`.
+- **Version:** `<Version>` in `Directory.Build.props`. Without `OrbivoRelease=true` the `InformationalVersion` becomes
+  `X.Y.Z-dev`; the SDK appends the commit (`+<sha>`). The app shows the version without the commit in the title bar;
+  log and recording get it in full.
+- **`--check`:** like at every start, the app checks FFmpeg, Steam Audio and the OpenXR loader, plus both manuals,
+  writes the result to the log and exits without a window (exit code 0 or 1). The release script checks the finished
+  package with it.
+- **Manual:** `docs/Anleitung.html` and the English version `docs/Manual.html` (one file each without external
+  dependencies, linked to each other) are copied next to the exe in every build; F1 opens the one of the selected
+  language. Help → Manual or F1 opens it through the shell in the default browser (`App.OpenManual`); if it is
+  missing, a message box says where it should be.
+- **Playlist at startup:** `MainViewModel` restores the saved paths (missing ones are left out and named in the
+  "Playlist" status) and selects the last loaded video without loading it. Every change to playlist, "auto-advance",
+  "loop" and fade duration saves the settings. With `--video` the saved playlist stays untouched.
 
-## Synchronisation
-- **Medienzeit** ist für Bild und Ton gleich: Ticks ab dem Beginn des Videostreams (`MediaDemuxer.OriginTicks`). Im Ringpuffer: Frame = Ticks × Samplerate / 10⁷.
-- **Audio-Clock (Master, Regel 4):** Die Frames, die an das Gerät gehen, sind ab dem Start des Streams nummeriert („Stream-Frames“). Ein Segment ordnet einem Stream-Frame eine Medienzeit zu (Play, Seek). Das Gerät meldet, welcher Stream-Frame zu welchem QPC-Zeitpunkt gehört wird. `AudioClockTracker` folgt dieser Position mit einem PI-Regler und lernt dabei die Drift des Geräts gegen QPC; Fehler über 30 ms setzen die Uhr neu. Vor dem ersten gehörten Frame eines Segments steht die Uhr am Anfang, nach dem Ende (Pause) am Ende.
-- Der Audio-Thread publiziert einen `ClockSnapshot` über `AudioPlaybackClock` (lock-frei). Jeder Thread rechnet daraus die Medienzeit zu einem beliebigen QPC-Zeitstempel, ohne auf den Audio-Thread zu warten. Ein Halt (Seek, Stop) vom Control-Thread gilt sofort, bis der Audio-Thread ihn mit seiner Sequenznummer bestätigt.
-- `TransportClock` (Media) gibt Transportbefehle an Systemuhr und Tonausgabe und liest die Ton-Uhr, solange das Video Ton hat; sonst die Systemuhr (`SystemPlaybackClock`, Stopwatch/QPC).
-- Der Render-Thread wählt das jüngste Frame mit `pts ≤ Uhr(Anzeigezeitpunkt)`. Die vorhergesagte Anzeigezeit der Brille wird mit `XR_KHR_win32_convert_performance_counter_time` in einen QPC-Zeitstempel umgerechnet; die Vorschau nimmt „jetzt“. Ältere Frames werden verworfen und gezählt.
-- **A/V-Messung** (`AvSyncMeter`): bei der ersten Anzeige jedes Frames `Uhr(Anzeigezeit) − pts`, solange die Uhr läuft. Status „A/V“ und Log alle 10 s; Grenze ±20 ms.
-- **Start und Seek:** Die Uhr steht am Ziel. Der Demuxer springt auf den Keyframe davor (`av_seek_frame`, `AVSEEK_FLAG_BACKWARD`) und legt eine Seek-Marke in beide Queues. Der Video-Decoder beginnt eine neue Frame-Generation, leert den Decoder und dekodiert vorwärts; Frames, die vor dem Ziel enden (1 ms Toleranz), werden ohne Kopie verworfen. Der Ton-Decoder leert den Ringpuffer (nach dem Ausblenden) und verwirft Ton vor dem Ziel samplegenau. Sind 4 Frames und genug Ton bereit (der Ton höchstens 2 s nach dem Bild), setzt der Player die Uhr auf `max(Ziel, erstes Frame)` und lässt sie bei „Läuft“ weiterlaufen; der Ton blendet in 5 ms ein. Während des Seeks hält die Brille das letzte Bild. Weitere Seeks ersetzen den laufenden.
-- **Loop:** Am Ende Seek auf 0 im Zustand „Läuft“.
-- **Pause:** Der Ton blendet in 5 ms aus, die Uhr steht am Ende der Rampe. Die Brille rendert weiter das aktuelle Frame mit Kopf-Tracking.
-- **Fade und Schwarzbild** wirken auf Bild und Ton (`OutputFader`), jeweils zu dem Zeitpunkt, an dem es gesehen bzw. gehört wird.
+## Synchronization
+- **Media time** is the same for picture and sound: ticks from the start of the video stream
+  (`MediaDemuxer.OriginTicks`). In the ring buffer: frame = ticks × sample rate / 10⁷.
+- **Audio clock (master, rule 4):** the frames that go to the device are numbered from the start of the stream
+  ("stream frames"). A segment maps a stream frame to a media time (play, seek). The device reports which stream frame
+  is heard at which QPC time. `AudioClockTracker` follows this position with a PI controller and learns the drift of
+  the device against QPC; errors above 30 ms reset the clock. Before the first heard frame of a segment the clock
+  stands at its beginning, after its end (pause) at its end.
+- The audio thread publishes a `ClockSnapshot` through `AudioPlaybackClock` (lock-free). Every thread computes the
+  media time for any QPC timestamp from it without waiting for the audio thread. A hold (seek, stop) from the control
+  thread applies at once, until the audio thread confirms it with its sequence number.
+- `TransportClock` (Media) passes transport commands to the system clock and the audio output and reads the audio
+  clock as long as the video has sound; otherwise the system clock (`SystemPlaybackClock`, stopwatch/QPC).
+- The render thread picks the newest frame with `pts ≤ clock(display time)`. The predicted display time of the
+  headset is converted into a QPC timestamp with `XR_KHR_win32_convert_performance_counter_time`; the preview takes
+  "now". Older frames are dropped and counted.
+- **A/V measurement** (`AvSyncMeter`): at the first display of every frame `clock(display time) − pts`, as long as the
+  clock runs. Status "A/V" and log every 10 s; limit ±20 ms.
+- **Start and seek:** the clock stands at the target. The demuxer jumps to the keyframe before it (`av_seek_frame`,
+  `AVSEEK_FLAG_BACKWARD`) and puts a seek marker into both queues. The video decoder starts a new frame generation,
+  flushes the decoder and decodes forward; frames that end before the target (1 ms tolerance) are dropped without a
+  copy. The sound decoder flushes the ring buffer (after fading out) and drops sound before the target sample-exactly.
+  Once 4 frames and enough sound are ready (the sound at most 2 s after the picture), the player sets the clock to
+  `max(target, first frame)` and lets it run when "playing"; the sound fades in over 5 ms. During the seek the headset
+  holds the last picture. Further seeks replace the running one.
+- **Loop:** at the end a seek to 0 in the "playing" state.
+- **Pause:** the sound fades out over 5 ms, the clock stands at the end of the ramp. The headset keeps rendering the
+  current frame with head tracking.
+- **Fade and blackout** apply to picture and sound (`OutputFader`), each at the time it is seen or heard.
 
-## OpenXR-Lebenszyklus
-- Loader (`openxr_loader.dll`, Khronos) → Instance mit `XR_KHR_D3D11_enable` → System (HMD) → Grafik-Anforderungen (Adapter-LUID) → D3D11-Device auf diesem Adapter (einmal je App-Lauf) → Session (D3D11-Binding) → Reference Space `LOCAL` → Swapchain je Auge (sRGB, empfohlene Größe).
-- Session-State-Events laufen durch `XrSessionLifecycle` (`READY` → Begin, `STOPPING` → End, `LOSS_PENDING`/`EXITING` → Aufräumen und nach 2 s neu verbinden). Beim Beenden der App: `xrRequestExitSession`, höchstens 2 s warten.
-- Fehlt das Runtime (`XR_ERROR_RUNTIME_UNAVAILABLE`) oder die Brille (`XR_ERROR_FORM_FACTOR_UNAVAILABLE`): Status melden, alle 2 s erneut versuchen, die App läuft weiter. Ohne Brille wird nur `xrGetSystem` wiederholt, die Instance bleibt.
-- Wiederverbindung (N3): Device, Standbild, Live-Ansicht, Recenter und Leerlauf-Ansicht gehören dem `XrHost`, nicht der Session; sie gelten nach dem Neuverbinden weiter. Video und Ton laufen weiter, während die Brille fehlt. War schon einmal eine Brille verbunden, meldet der Status „Brille getrennt seit …“ bzw. „Varjo Base läuft nicht mehr“. Verbindungs- und Sitzungswechsel und `XrEventDataReferenceSpaceChangePending` (z. B. Recenter in Varjo Base) stehen im Log und im Ereignis-Log.
-- Pro Frame: `xrWaitFrame` → `xrBeginFrame` → `xrLocateViews` → je Auge Bild holen, rendern, freigeben → `xrEndFrame` mit einem Projection-Layer. Gerendert wird nur mit der Orientierung, im Layer steht die gemessene Pose.
+## OpenXR lifecycle
+- Loader (`openxr_loader.dll`, Khronos) → instance with `XR_KHR_D3D11_enable` → system (HMD) → graphics requirements
+  (adapter LUID) → D3D11 device on this adapter (once per app run) → session (D3D11 binding) → reference space `LOCAL`
+  → one swapchain per eye (sRGB, recommended size).
+- Session state events run through `XrSessionLifecycle` (`READY` → begin, `STOPPING` → end,
+  `LOSS_PENDING`/`EXITING` → clean up and reconnect after 2 s). When the app exits: `xrRequestExitSession`, wait at
+  most 2 s.
+- If the runtime is missing (`XR_ERROR_RUNTIME_UNAVAILABLE`) or the headset (`XR_ERROR_FORM_FACTOR_UNAVAILABLE`):
+  report the status, retry every 2 s, the app keeps running. Without a headset only `xrGetSystem` is retried, the
+  instance stays.
+- Reconnecting (N3): device, still image, live view, recenter and idle view belong to the `XrHost`, not to the
+  session; they still apply after reconnecting. Video and sound keep running while the headset is missing. If a
+  headset was connected before, the status reports "headset disconnected since …" or "Varjo Base is no longer
+  running". Connection and session changes and `XrEventDataReferenceSpaceChangePending` (e.g. recenter in Varjo Base)
+  appear in the log and the event log.
+- Per frame: `xrWaitFrame` → `xrBeginFrame` → `xrLocateViews` → per eye acquire the image, render, release →
+  `xrEndFrame` with one projection layer. Rendering uses only the orientation; the layer carries the measured pose.
 
-## `--no-xr` Debug-Modus
-- Statt OpenXR wird ein Auge in ein eigenes Vorschaufenster gerendert (Win32, eigener Render-Thread, Flip-Model-Swapchain mit Frame-Latency-Handle). Das Fenster hat keinen Schließen-Knopf und schließt mit dem Operatorfenster.
-- Maus: Ziehen greift das Bild (Ziehen nach rechts = Blick nach links), Mausrad = vertikales Sichtfeld 30–120° (Start 75°), Pos1 = zurücksetzen.
-- Standbild per `--image <Pfad>` (M1: Equirect 360 Mono). Dekodiert wird mit WIC über WPF in `Orbivo.App`, die Textur entsteht auf einem Worker-Thread und wird dem Render-Thread übergeben.
-- Gleiche Shader und Pipeline (`PanoramaRenderer`), nur andere View/Projection-Quelle: im Vorschaufenster `MouseViewSource` (`IViewSource`), in der Brille liefert `xrLocateViews` die Ansichten direkt im Frame-Loop (sie hängen an der vorhergesagten Anzeigezeit).
-- Video per `--video <Pfad>` (M3), in Vorschau und Brille. Das Format kommt aus Metadaten und Sidecar (Formatpfad, M6); `--stereo mono|tb|sbs` legt das Stereo-Layout für die Sitzung fest. Die Vorschau zeigt das linke Auge.
-- Damit lassen sich Decoding, Formate, Sync und UI ohne Brille entwickeln.
+## `--no-xr` debug mode
+- Instead of OpenXR one eye is rendered into an own preview window (Win32, own render thread, flip model swapchain
+  with frame latency handle). The window has no close button and closes with the operator window.
+- Mouse: dragging grabs the picture (drag to the right = look to the left), mouse wheel = vertical field of view
+  30–120° (start 75°), Home = reset.
+- Still image via `--image <path>` (M1: equirect 360 mono). Decoded with WIC through WPF in `Orbivo.App`; the texture
+  is created on a worker thread and handed to the render thread.
+- Same shaders and pipeline (`PanoramaRenderer`), only another view/projection source: in the preview window
+  `MouseViewSource` (`IViewSource`); in the headset `xrLocateViews` delivers the views directly in the frame loop
+  (they depend on the predicted display time).
+- Video via `--video <path>` (M3), in preview and headset. The format comes from metadata and sidecar (format path,
+  M6); `--stereo mono|tb|sbs` sets the stereo layout for the session. The preview shows the left eye.
+- This allows developing decoding, formats, sync and UI without a headset.
 
-## Sidecar-Format (`<Dateiname mit Endung>.orbivo.json`, z. B. `clip.mp4.orbivo.json`)
-Vorzeichen von `orientationOffsetDeg`: wie überall Rechte-Hand-Regel, Yaw positiv = Drehung nach links. Das Bild dreht sich: Yaw +30° legt die bisherige Bildmitte 30° nach links, Pitch + hebt sie an, Roll + kippt das Bild gegen den Uhrzeigersinn (vom Betrachter aus).
+## Sidecar format (`<file name with extension>.orbivo.json`, e.g. `clip.mp4.orbivo.json`)
+Sign of `orientationOffsetDeg`: right-hand rule as everywhere, yaw positive = turn to the left. The picture turns: yaw
++30° moves the former picture center 30° to the left, pitch + raises it, roll + tilts the picture counterclockwise (as
+seen by the viewer).
 ```json
 {
   "version": 1,
@@ -208,13 +417,19 @@ Vorzeichen von `orientationOffsetDeg`: wie überall Rechte-Hand-Regel, Yaw posit
   "audioMode": "AmbiX"
 }
 ```
-- **`null` oder fehlend = automatisch** (Metadaten, sonst Schätzung). Geschrieben werden immer alle Formatfelder.
-- `projection`: `Equirect360`, `Equirect180`, `Cubemap`, `Eac`, `Fisheye`. `stereoLayout`: `Mono`, `TopBottom`, `SideBySide`. Groß-/Kleinschreibung egal.
-- `cubemapLayout`: Name einer Vorgabe (`3x2`, `6x1`, `1x6`, `eac`) oder ein Objekt `{ "columns": 3, "rows": 2, "faceOrder": "rludfb", "faceRotation": "000000", "padding": 0 }`.
-- `fisheye`: `{ "fovDeg": 180, "centerX": 0.5, "centerY": 0.5, "radius": 0.5 }` (fehlende Felder: diese Standardwerte).
-- `orientationOffsetDeg`: je Achse höchstens ±360°; `null` = keine Drehung.
-- `audioFixedToPicture` (M7): `true`/`false`, `null` = an (Ton fest am Bild). `stereoWidthDeg`: 30–90, `null` = 75.
-- `audioMode` (M10): `Channels` (Mono, Stereo, Mehrkanal auf Stereo), `AmbiX` (Ordnung aus der Kanalzahl), `FuMa` (nur 1. Ordnung); `null` = automatisch (Metadaten, sonst Kanalzahl).
-- Das geplante Feld `externalAudio` und alle unbekannten Felder bleiben beim Speichern erhalten.
-- Speichern: bei jeder Änderung im Operatorfenster, über eine `.tmp`-Datei. Ist nichts mehr eingestellt und gibt es keine fremden Felder, wird die Datei gelöscht.
-- Ungültige Felder werden mit Hinweis ignoriert. Eine Datei, die kein JSON ist, wird gemeldet, ignoriert und vor dem ersten Überschreiben als `.orbivo.json.bak` gesichert. Eine Datei mit `version` > 1 wird gelesen, aber nie überschrieben.
+- **`null` or missing = automatic** (metadata, otherwise a guess). All format fields are always written.
+- `projection`: `Equirect360`, `Equirect180`, `Cubemap`, `Eac`, `Fisheye`. `stereoLayout`: `Mono`, `TopBottom`,
+  `SideBySide`. Case does not matter.
+- `cubemapLayout`: name of a preset (`3x2`, `6x1`, `1x6`, `eac`) or an object
+  `{ "columns": 3, "rows": 2, "faceOrder": "rludfb", "faceRotation": "000000", "padding": 0 }`.
+- `fisheye`: `{ "fovDeg": 180, "centerX": 0.5, "centerY": 0.5, "radius": 0.5 }` (missing fields: these defaults).
+- `orientationOffsetDeg`: at most ±360° per axis; `null` = no rotation.
+- `audioFixedToPicture` (M7): `true`/`false`, `null` = on (sound fixed to the picture). `stereoWidthDeg`: 30–90,
+  `null` = 75.
+- `audioMode` (M10): `Channels` (mono, stereo, multichannel mixed to stereo), `AmbiX` (order from the channel count),
+  `FuMa` (first order only); `null` = automatic (metadata, otherwise channel count).
+- The planned field `externalAudio` and all unknown fields are kept when saving.
+- Saving: on every change in the operator window, through a `.tmp` file. If nothing is set any more and there are no
+  foreign fields, the file is deleted.
+- Invalid fields are ignored with a hint. A file that is not JSON is reported, ignored and backed up as
+  `.orbivo.json.bak` before it is first overwritten. A file with `version` > 1 is read but never overwritten.
