@@ -4,6 +4,12 @@ name: FFmpeg for Orbivo
 on:
   workflow_dispatch:
   push:
+    # Only development: release pushes to main and tags carry no new build script.
+    branches: [development]
+    paths:
+      - 'build/ffmpeg/**'
+      - '.github/workflows/ffmpeg.yml'
+  pull_request:
     paths:
       - 'build/ffmpeg/**'
       - '.github/workflows/ffmpeg.yml'
