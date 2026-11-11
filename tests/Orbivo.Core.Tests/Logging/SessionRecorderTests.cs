@@ -85,6 +85,7 @@ public sealed class SessionRecorderTests : IDisposable
         string path = recorder.Status.HeadFilePath!;
         recorder.Dispose();
 
+        double first = double.NaN;
         double previous = double.MinValue;
         DateTime previousTime = DateTime.MinValue;
         foreach (string line in File.ReadAllLines(path).Skip(1))
@@ -97,11 +98,14 @@ public sealed class SessionRecorderTests : IDisposable
             Assert.True(Math.Abs((time - DateTime.Now).TotalMinutes) < 1, $"{time} is not the local time of this PC"); // not UTC
             Assert.Equal(string.Empty, fields[2]); // no video
             Assert.Equal(string.Empty, fields[3]);
+            first = double.IsNaN(first) ? seconds : first;
             previous = seconds;
             previousTime = time;
         }
 
-        Assert.Equal(2.9, previous, 0.05);
+        // Measured from the first row: the anchor of the file pair is set a moment before the first sample,
+        // and on a busy machine (CI) that moment can be longer than any fixed tolerance.
+        Assert.Equal(2.9, previous - first, 0.002);
     }
 
     [Fact]
