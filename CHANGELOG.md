@@ -7,6 +7,8 @@ Was sich von Version zu Version für Operatoren und Auswertung ändert. Neue Ein
 
 ## Unveröffentlicht
 
+## 1.2.1 – 2026-11-11
+
 - Wartungsversion ohne Änderung an Bedienung oder Aufzeichnung: Logging-Bibliothek auf 10.0.15 aktualisiert
 - Für Entwickler: stabilere automatische Tests auf GitHub, Testmedien-Skript mit Pillow 13.0.0
 

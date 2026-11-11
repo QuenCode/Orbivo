@@ -28,7 +28,7 @@
     <Authors>QuenCode</Authors>
     <Copyright>Copyright 2026 QuenCode. Licensed under the Apache License 2.0.</Copyright>
     <!-- Version of the last release. Only release.ps1 changes it (docs/RELEASE.md). -->
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
     <!-- Builds outside release.ps1 are marked "-dev" in the title bar, the log and the recordings. -->
     <InformationalVersion Condition="'$(OrbivoRelease)' != 'true'">$(Version)-dev</InformationalVersion>
     <NeutralLanguage>en</NeutralLanguage>
