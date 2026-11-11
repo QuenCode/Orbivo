@@ -1,0 +1,25 @@
+name: Feature request / Wunsch
+description: An idea for something Orbivo should do.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        English or German is fine. Please check docs/SPEC.md ("Bewusst nicht im Umfang") first: interaction in VR,
+        streaming and 6DoF video are out of scope on purpose.
+  - type: textarea
+    id: need
+    attributes:
+      label: What do you need, and in which situation?
+      description: Describe the task in a study or session, not only the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could Orbivo do it?
+  - type: textarea
+    id: material
+    attributes:
+      label: Example material
+      description: Video or sound format the feature is about, if any.

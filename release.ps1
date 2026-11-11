@@ -55,6 +55,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $root = $PSScriptRoot
 $propsPath = Join-Path $root 'Directory.Build.props'
+$citationPath = Join-Path $root 'CITATION.cff'
 $changelogPath = Join-Path $root 'CHANGELOG.md'
 $appProject = Join-Path $root 'src\Orbivo.App\Orbivo.App.csproj'
 $nativeDir = Join-Path $root 'native\win-x64'
@@ -124,6 +125,12 @@ function Set-ProjectVersion([string] $newVersion) {
     $text = Read-Text $propsPath
     $updated = [regex]::Replace($text, '<Version>[^<]+</Version>', "<Version>$newVersion</Version>")
     Write-Text $propsPath $updated
+
+    # CITATION.cff names the version and date researchers cite.
+    $citation = Read-Text $citationPath
+    $citation = [regex]::Replace($citation, '(?m)^version: .*$', "version: $newVersion")
+    $citation = [regex]::Replace($citation, '(?m)^date-released: .*$', "date-released: $(Get-Date -Format 'yyyy-MM-dd')")
+    Write-Text $citationPath $citation
 }
 
 # The lines under "## Unveröffentlicht" up to the next "## " heading.
@@ -310,12 +317,12 @@ function New-LocalRelease([string] $newVersion, [string] $tag) {
     }
     catch {
         Write-Host 'Building the package failed; the version change is taken back.' -ForegroundColor Yellow
-        Invoke-Native 'git' @('checkout', '--', $propsPath, $changelogPath)
+        Invoke-Native 'git' @('checkout', '--', $propsPath, $changelogPath, $citationPath)
         throw
     }
 
     Write-Step "Committing and tagging $tag"
-    Invoke-Native 'git' @('add', '--', $propsPath, $changelogPath)
+    Invoke-Native 'git' @('add', '--', $propsPath, $changelogPath, $citationPath)
     Invoke-Native 'git' @('commit', '--quiet', '-m', "Release $newVersion")
     Invoke-Native 'git' @('tag', '-a', $tag, '-m', "Orbivo $newVersion")
     return $zip

@@ -1,0 +1,58 @@
+name: Bug report / Fehlermeldung
+description: Something does not work as described in the manual.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you! English or German is fine. **Security issues do not belong here**, see SECURITY.md.
+        Danke! Englisch oder Deutsch ist gleich gut. **Sicherheitslücken gehören nicht hierher**, siehe SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Orbivo version
+      description: Title bar of the operator window or Help → About Orbivo.
+      placeholder: "1.1.0"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open video …
+        2. Press Play …
+  - type: textarea
+    id: media
+    attributes:
+      label: Video / sound format
+      description: Resolution, codec, frame rate, projection, stereo layout, sound channels. The Tonanalyse kit or `ffprobe` output helps.
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: Windows version, graphics card, headset and Varjo Base version, or `--no-xr`.
+      placeholder: "Windows 11 24H2, RTX 4080 Laptop, Varjo XR-3 / Varjo Base 4.x"
+  - type: textarea
+    id: log
+    attributes:
+      label: Diagnostic log
+      description: From the `Logs` folder next to Orbivo.exe (path in the status panel). Drag the file in here. Logs contain file paths; remove anything private.
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it happen?
+      multiple: true
+      options:
+        - Headset (picture)
+        - Sound
+        - Operator window
+        - Recording (CSV)
+        - Start / installation
+        - Other

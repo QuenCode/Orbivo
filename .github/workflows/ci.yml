@@ -1,0 +1,45 @@
+# Builds Orbivo and runs the tests on every push and pull request.
+# Without a GPU, headset, sound device and test media the tests that need them skip themselves.
+name: CI
+
+on:
+  push:
+    branches: [development, main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache native downloads
+        uses: actions/cache@v4
+        with:
+          path: native/_downloads
+          key: native-${{ hashFiles('native/fetch-native.ps1') }}
+
+      - name: Fetch native libraries
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./native/fetch-native.ps1
+
+      - name: Build
+        run: dotnet build Orbivo.sln -c Debug
+
+      - name: Test
+        run: dotnet test -c Debug --no-build --max-parallel-test-modules 1

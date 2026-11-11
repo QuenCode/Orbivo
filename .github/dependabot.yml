@@ -1,0 +1,21 @@
+# Weekly update pull requests against development. New packages still need a discussion first (CONTRIBUTING.md).
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    target-branch: development
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # FFmpeg.AutoGen must match the major versions of the shipped FFmpeg DLLs (native/README.md).
+      - dependency-name: FFmpeg.AutoGen
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: development
+    schedule:
+      interval: weekly

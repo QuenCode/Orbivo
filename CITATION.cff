@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use Orbivo in research, please cite it as below."
+type: software
+title: "Orbivo: 360° and 180° video player with spatial sound for the Varjo XR-3"
+abstract: >-
+  Windows player for 360° and 180° videos (up to 8K, mono and stereo) on a Varjo XR-3, controlled by an operator
+  at the desktop. Spatial sound (stereo and Ambisonics) is rendered binaurally in the player and follows head
+  rotation; head movement and operator events can be recorded as CSV.
+authors:
+  - name: QuenCode
+version: 1.1.0
+date-released: 2026-11-09
+license: Apache-2.0
+repository-code: "https://github.com/QuenCode/Orbivo"
+keywords:
+  - 360-degree video
+  - virtual reality
+  - OpenXR
+  - Varjo XR-3
+  - Ambisonics
+  - binaural audio
+  - head tracking

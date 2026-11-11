@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security issue / Sicherheitslücke
+    url: https://github.com/QuenCode/Orbivo/security/advisories/new
+    about: Report security issues privately, never in a public issue.

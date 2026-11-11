@@ -7,7 +7,7 @@ Gebaut wird es lokal mit `release.ps1`, weil die Tests eine echte GPU brauchen u
 ## Versionen
 - **Semantic Versioning** `MAJOR.MINOR.PATCH`: 1.0.**1** = Fehlerbehebung, 1.**1**.0 = neue Funktion, **2**.0.0 = bricht
   bestehende Abläufe oder Dateiformate (z. B. andere Spalten in der Kopf-CSV, anderes Sidecar-Format).
-- Die Version steht nur in `Directory.Build.props` (`<Version>`), und nur `release.ps1` ändert sie.
+- Die Version steht nur in `Directory.Build.props` (`<Version>`), und nur `release.ps1` ändert sie (dazu Version und Datum in `CITATION.cff`).
 - Jedes Release hat ein Git-Tag `vX.Y.Z` und einen Abschnitt in `CHANGELOG.md`.
 - Builds außerhalb von `release.ps1` heißen `X.Y.Z-dev` (Titelleiste, Log, Start-Ereignis der Aufzeichnung). So sieht man
   in Aufzeichnungen, ob ein Entwicklungsstand im Einsatz war.
@@ -42,11 +42,11 @@ gh auth login                                                                 # 
 | Prüft die nativen DLLs und Lizenztexte in `native/win-x64` | etwas fehlt |
 | Prüft, dass die neue Version größer ist und unter „Unveröffentlicht“ etwas steht | nicht |
 | `dotnet test` (Debug, ein Testprojekt nach dem anderen) | ein Test scheitert |
-| Setzt die Version, macht aus „Unveröffentlicht“ den Abschnitt `## X.Y.Z – Datum` | – |
+| Setzt die Version (auch in `CITATION.cff`), macht aus „Unveröffentlicht“ den Abschnitt `## X.Y.Z – Datum` | – |
 | `dotnet publish` self-contained win-x64 (Release) nach `artifacts\release\Orbivo-X.Y.Z\`, dazu `licenses\` und `THIRD-PARTY-NOTICES.txt` | der Build scheitert (Version und Changelog werden zurückgesetzt) |
 | Prüft das Paket: Pflichtdateien da, `ffmpeg.exe` & Co. nicht da, `Orbivo.exe --check` lädt FFmpeg, Steam Audio und den OpenXR-Loader und findet beide Anleitungen | etwas fehlt |
 | ZIP mit Ordner `Orbivo-X.Y.Z` darin, SHA256-Datei | – |
-| Commit „Release X.Y.Z“ (nur `Directory.Build.props` und `CHANGELOG.md`), annotiertes Tag `vX.Y.Z` | – |
+| Commit „Release X.Y.Z“ (nur `Directory.Build.props`, `CHANGELOG.md` und `CITATION.cff`), annotiertes Tag `vX.Y.Z` | – |
 | Nur `-Publish`: `git push` von `development` und Tag, `main` vorwärts auf das Release (`git push origin development:main`), `gh release create` | `main` hat Commits, die `development` fehlen; `gh` fehlt |
 
 Weitere Schalter:
