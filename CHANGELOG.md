@@ -7,6 +7,9 @@ Was sich von Version zu Version für Operatoren und Auswertung ändert. Neue Ein
 
 ## Unveröffentlicht
 
+- Wartungsversion ohne Änderung an Bedienung oder Aufzeichnung: Logging-Bibliothek auf 10.0.15 aktualisiert
+- Für Entwickler: stabilere automatische Tests auf GitHub, Testmedien-Skript mit Pillow 13.0.0
+
 ## 1.2.0 – 2026-11-11
 
 - Neue Menüleiste oben im Operatorfenster: Datei (Videos hinzufügen, Playlist leeren, Beenden), Wiedergabe (automatisch weiter, wiederholen), Optionen (Sprache, Tonausgabe und Lautstärke sperren), Hilfe (Anleitung, Über Orbivo). „Automatisch weiter“, „Wiederholen (Loop)“, die Ton-Sperre und der Link zur Anleitung sind dorthin umgezogen
