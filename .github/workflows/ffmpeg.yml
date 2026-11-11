@@ -34,7 +34,7 @@ jobs:
           WORK: ${{ runner.temp }}/ffmpeg
         run: bash build/ffmpeg/build-ffmpeg.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: orbivo-ffmpeg
           path: ${{ runner.temp }}/ffmpeg/out/*
